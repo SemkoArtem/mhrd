@@ -1,8 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- RDP-клієнту потрібна мережа і в релізній збірці (шаблон дає дозвіл лише в debug). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Системний бекап Android вимкнено: ключі Keystore не переносяться, тож скопійовані
+         секрети flutter_secure_storage на новому пристрої не розшифруються.
+         Між пристроями MHRD переносить дані лише своїм зашифрованим бекапом (SPEC). -->
     <application
-        android:label="mhrd"
+        android:label="MHRD"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
