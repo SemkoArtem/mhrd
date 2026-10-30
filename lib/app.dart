@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'backup/auto_backup.dart';
 import 'sessions/session_manager.dart';
 import 'storage/repository.dart';
 import 'theme/mhrd_theme.dart';
@@ -7,10 +8,17 @@ import 'ui/home_screen.dart';
 
 /// Доступ до сервісів з будь-якого віджета: `AppScope.of(context).repo`.
 class AppScope extends InheritedWidget {
-  const AppScope({super.key, required this.repo, required this.sessions, required super.child});
+  const AppScope({
+    super.key,
+    required this.repo,
+    required this.sessions,
+    required this.autoBackup,
+    required super.child,
+  });
 
   final Repository repo;
   final SessionManager sessions;
+  final AutoBackup autoBackup;
 
   static AppScope of(BuildContext context) {
     final s = context.getInheritedWidgetOfExactType<AppScope>();
@@ -19,20 +27,23 @@ class AppScope extends InheritedWidget {
   }
 
   @override
-  bool updateShouldNotify(AppScope oldWidget) => repo != oldWidget.repo || sessions != oldWidget.sessions;
+  bool updateShouldNotify(AppScope oldWidget) =>
+      repo != oldWidget.repo || sessions != oldWidget.sessions || autoBackup != oldWidget.autoBackup;
 }
 
 class MhrdApp extends StatelessWidget {
-  const MhrdApp({super.key, required this.repo, required this.sessions});
+  const MhrdApp({super.key, required this.repo, required this.sessions, required this.autoBackup});
 
   final Repository repo;
   final SessionManager sessions;
+  final AutoBackup autoBackup;
 
   @override
   Widget build(BuildContext context) {
     return AppScope(
       repo: repo,
       sessions: sessions,
+      autoBackup: autoBackup,
       child: ListenableBuilder(
         listenable: repo,
         builder: (context, _) {

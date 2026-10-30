@@ -2,6 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../theme/mhrd_theme.dart';
 
+/// Дата й час для людей: 30.10.2026 20:45 (місцевий час).
+String formatDateTime(DateTime d) {
+  final l = d.toLocal();
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(l.day)}.${two(l.month)}.${l.year} ${two(l.hour)}:${two(l.minute)}';
+}
+
 void toast(BuildContext context, String text, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
+import 'backup/auto_backup.dart';
 import 'sessions/session_manager.dart';
 import 'storage/database.dart';
 import 'storage/repository.dart';
@@ -15,7 +16,7 @@ Future<void> main() async {
   final dir = await getApplicationSupportDirectory();
   final db = MhrdDatabase.open(dir);
   final repo = Repository(db, SystemSecretStore());
-  runApp(MhrdApp(repo: repo, sessions: SessionManager(repo)));
+  runApp(MhrdApp(repo: repo, sessions: SessionManager(repo), autoBackup: AutoBackup(repo)));
 }
 
 /// Ліцензії OFL вбудованих шрифтів — щоб вони були разом зі шрифтами, як вимагає OFL.

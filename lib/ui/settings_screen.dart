@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../app.dart';
+import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
@@ -481,6 +482,22 @@ class _BackupTab extends StatelessWidget {
     }
   }
 
+  Future<void> _enableAuto(BuildContext context, AutoBackup auto) async {
+    final dir = await pickFolder();
+    if (dir == null || !context.mounted) return;
+    final pw = await promptNewPassword(context, title: 'Пароль автобекапу');
+    if (pw == null || !context.mounted) return;
+    toast(context, 'Роблю першу копію…');
+    final path = await auto.enable(dir, pw);
+    if (context.mounted) toast(context, path != null ? 'Автобекап увімкнено. Перша копія: $path' : auto.lastError!);
+  }
+
+  Future<void> _autoNow(BuildContext context, AutoBackup auto) async {
+    toast(context, 'Роблю копію…');
+    final path = await auto.runNow();
+    if (context.mounted) toast(context, path != null ? 'Копію збережено: $path' : (auto.lastError ?? 'Копія вже робиться.'));
+  }
+
   Future<void> _exportShare(BuildContext context) async {
     final json = const JsonEncoder.withIndent('  ').convert(BackupService(repo).exportShare(repo.connections.values));
     final path = await saveBytes(Uint8List.fromList(utf8.encode(json)), 'mhrd-pcs-$_stamp.json', shareTypes);
@@ -504,13 +521,14 @@ class _BackupTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.mhrd;
     final last = repo.settings.lastBackupAt;
+    final auto = AppScope.of(context).autoBackup;
     return _pane([
       _caption(context, 'Повний бекап'),
       Text('Усі ПК, облікові записи з паролями, шлюзи, тунелі з ключами, групи, теми й налаштування. '
           'Файл шифрується вашим паролем (Argon2id + AES-256-GCM) і відкривається на будь-якій ОС.',
           style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 6),
-      Text(last == null ? 'Бекап ще не робили.' : 'Останній бекап: ${last.toLocal()}',
+      Text(last == null ? 'Бекап ще не робили.' : 'Останній бекап: ${formatDateTime(last)}',
           style: TextStyle(color: last == null ? t.warn : t.textMuted, fontSize: 13)),
       const SizedBox(height: 12),
       Wrap(spacing: 10, runSpacing: 10, children: [
@@ -519,6 +537,47 @@ class _BackupTab extends StatelessWidget {
         OutlinedButton.icon(
             icon: const Icon(Icons.restore), label: const Text('Відновити з бекапу'), onPressed: () => _import(context)),
       ]),
+      _caption(context, 'Автобекап'),
+      ListenableBuilder(
+        listenable: auto,
+        builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Після змін, не частіше разу на годину — у вибрану теку, наприклад синхронізовану з хмарою. '
+              'Зберігаються останні 10 копій. Пароль автобекапу лежить у системному сховищі цього пристрою.',
+              style: TextStyle(color: t.textMuted)),
+          const SizedBox(height: 6),
+          if (!auto.enabled)
+            Text('Вимкнено.', style: TextStyle(color: t.textMuted, fontSize: 13))
+          else ...[
+            Text(auto.dir!, style: t.mono),
+            const SizedBox(height: 2),
+            Text(
+              auto.lastAt == null ? 'Копій ще не було.' : 'Остання копія: ${formatDateTime(auto.lastAt!)}',
+              style: TextStyle(color: t.textMuted, fontSize: 13),
+            ),
+            if (auto.lastError != null) Text(auto.lastError!, style: TextStyle(color: t.error, fontSize: 13)),
+          ],
+          const SizedBox(height: 12),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            if (!auto.enabled)
+              OutlinedButton.icon(
+                  icon: const Icon(Icons.schedule),
+                  label: const Text('Увімкнути…'),
+                  onPressed: () => _enableAuto(context, auto))
+            else ...[
+              OutlinedButton.icon(
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Зробити копію зараз'),
+                  onPressed: () => _autoNow(context, auto)),
+              OutlinedButton.icon(
+                  icon: const Icon(Icons.folder_open_outlined),
+                  label: const Text('Змінити теку й пароль'),
+                  onPressed: () => _enableAuto(context, auto)),
+              TextButton.icon(
+                  icon: const Icon(Icons.close), label: const Text('Вимкнути'), onPressed: auto.disable),
+            ],
+          ]),
+        ]),
+      ),
       _caption(context, 'Поділитися списком ПК'),
       Text('Файл без жодного пароля чи ключа — щоб передати список колезі.', style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 12),
