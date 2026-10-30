@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,6 +10,7 @@ import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
 import '../util/rdp_file.dart';
+import '../util/wake_on_lan.dart';
 import 'dialogs.dart';
 import 'edit_connection_screen.dart';
 import 'file_actions.dart';
@@ -125,6 +128,19 @@ class _HomeScreenState extends State<HomeScreen> {
     toast(context, errors.isEmpty ? 'Імпортовано ПК: $ok' : 'Імпортовано: $ok. Помилки: ${errors.join('; ')}');
   }
 
+  Future<void> _wake(Connection c) async {
+    final w = c.wakeOnLan;
+    if (w == null) return;
+    try {
+      await sendWakeOnLan(w);
+      if (mounted) toast(context, 'Сигнал пробудження надіслано на ${w.mac}. ПК зазвичай вмикається за 10–60 с.');
+    } on FormatException catch (e) {
+      if (mounted) toast(context, e.message);
+    } on SocketException catch (e) {
+      if (mounted) toast(context, 'Не вдалося надіслати сигнал: ${e.message}');
+    }
+  }
+
   void _openSettings() =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 
@@ -134,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
         duplicate: (c) => repo.duplicateConnection(c),
         exportRdp: _exportRdp,
         moveToGroup: _move,
+        wake: _wake,
         delete: _delete,
       );
 

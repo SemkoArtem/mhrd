@@ -13,6 +13,7 @@ class PcActions {
     required this.duplicate,
     required this.exportRdp,
     required this.moveToGroup,
+    required this.wake,
     required this.delete,
   });
 
@@ -21,6 +22,7 @@ class PcActions {
   final void Function(Connection c) duplicate;
   final void Function(Connection c) exportRdp;
   final void Function(Connection c) moveToGroup;
+  final void Function(Connection c) wake;
   final void Function(Connection c) delete;
 }
 
@@ -164,7 +166,7 @@ class PcRow extends StatelessWidget {
   }
 }
 
-/// Меню «⋯» ПК: підключитись як…, редагувати, дублювати, експорт .rdp, перемістити, видалити.
+/// Меню «⋯» ПК: підключитись як…, редагувати, дублювати, експорт .rdp, перемістити, розбудити, видалити.
 class PcMenu extends StatelessWidget {
   const PcMenu({super.key, required this.connection, required this.repo, required this.actions});
 
@@ -194,6 +196,8 @@ class PcMenu extends StatelessWidget {
               actions.exportRdp(c);
             case 'move':
               actions.moveToGroup(c);
+            case 'wake':
+              actions.wake(c);
             case 'delete':
               actions.delete(c);
           }
@@ -208,6 +212,7 @@ class PcMenu extends StatelessWidget {
         const PopupMenuItem(value: 'dup', child: Text('Дублювати')),
         const PopupMenuItem(value: 'rdp', child: Text('Експортувати .rdp')),
         const PopupMenuItem(value: 'move', child: Text('Перемістити в групу')),
+        if (c.wakeOnLan != null) const PopupMenuItem(value: 'wake', child: Text('Розбудити (Wake-on-LAN)')),
         const PopupMenuDivider(),
         const PopupMenuItem(value: 'delete', child: Text('Видалити')),
       ],

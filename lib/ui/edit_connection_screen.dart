@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -6,6 +8,7 @@ import '../models/entities.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
+import '../util/wake_on_lan.dart';
 import 'credential_dialog.dart';
 import 'dialogs.dart';
 import 'file_actions.dart';
@@ -29,6 +32,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   late final TextEditingController _name;
   late final TextEditingController _tags;
   late final TextEditingController _mac;
+  late final TextEditingController _broadcast;
   String? _addressError;
 
   @override
@@ -41,7 +45,11 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     _name = TextEditingController(text: _c.name);
     _tags = TextEditingController(text: _c.tags.join(', '));
     _mac = TextEditingController(text: _c.wakeOnLan?.mac ?? '');
+    final bc = _c.wakeOnLan?.broadcast;
+    _broadcast = TextEditingController(text: bc == null || bc == _defaultBroadcast ? '' : bc);
   }
+
+  static const _defaultBroadcast = '255.255.255.255';
 
   @override
   void dispose() {
@@ -49,6 +57,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     _name.dispose();
     _tags.dispose();
     _mac.dispose();
+    _broadcast.dispose();
     super.dispose();
   }
 
@@ -62,9 +71,16 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       setState(() => _addressError = 'Вкажіть адресу: 10.0.0.5, srv.local:3390 або [fd00::5]:3389');
       return;
     }
-    final mac = _mac.text.trim();
-    if (mac.isNotEmpty && !RegExp(r'^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$').hasMatch(mac)) {
+    final macText = _mac.text.trim();
+    final mac = macText.isEmpty ? null : parseMac(macText);
+    if (macText.isNotEmpty && mac == null) {
       toast(context, 'MAC-адреса має вигляд AA:BB:CC:DD:EE:FF');
+      return;
+    }
+    final bcText = _broadcast.text.trim();
+    final bc = bcText.isEmpty ? _defaultBroadcast : bcText;
+    if (mac != null && InternetAddress.tryParse(bc)?.type != InternetAddressType.IPv4) {
+      toast(context, 'Широкомовна адреса — це IPv4, наприклад 192.168.1.255');
       return;
     }
     repo.saveConnection(_c.copyWith(
@@ -72,7 +88,9 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       port: addr.port,
       name: _name.text.trim(),
       tags: _tags.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-      wakeOnLan: () => mac.isEmpty ? null : WakeOnLan(mac: mac.toUpperCase().replaceAll('-', ':')),
+      wakeOnLan: () => mac == null
+          ? null
+          : WakeOnLan(mac: formatMac(mac), broadcast: bc, port: _c.wakeOnLan?.port ?? 9),
     ));
     Navigator.pop(context);
   }
@@ -441,6 +459,16 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           labelText: 'MAC-адреса для Wake-on-LAN',
           hintText: 'AA:BB:CC:DD:EE:FF',
           helperText: 'Щоб будити ПК із меню «Розбудити»',
+        ),
+      ),
+      const SizedBox(height: 14),
+      TextField(
+        controller: _broadcast,
+        style: TextStyle(fontFamily: t.fontMono),
+        decoration: const InputDecoration(
+          labelText: 'Широкомовна адреса для Wake-on-LAN (необов\'язково)',
+          hintText: _defaultBroadcast,
+          helperText: 'Якщо ПК в іншій підмережі — її broadcast, наприклад 192.168.1.255',
         ),
       ),
       if (_c.certPin != null) ...[
