@@ -378,9 +378,9 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_uint32(s, FreeRDP_DesktopHeight, (UINT32)jint(j, "height", 800)) &&
 	     freerdp_settings_set_uint32(s, FreeRDP_ColorDepth, (UINT32)jint(j, "colorDepth", 32)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_ConsoleSession, jbool(j, "adminSession", FALSE)) &&
-	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE)) &&
-	     /* Довіру сертифікатам пам'ятає застосунок (certPin), не сховище FreeRDP. */
-	     freerdp_settings_set_bool(s, FreeRDP_CertificateUseKnownHosts, FALSE);
+	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE));
+	/* Довіру сертифікатам пам'ятає застосунок (certPin): колбек повертає 2 («лише цей сеанс»),
+	 * тож власне сховище відомих сертифікатів FreeRDP ніколи не заповнюється. */
 	free(user);
 	free(domain);
 

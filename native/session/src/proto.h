@@ -45,6 +45,10 @@ enum
 	DISC_OTHER = 11,
 };
 
+#ifdef _MSC_VER
+#pragma warning(disable : 4200) /* гнучкий масив у кінці структури — стандартний C99 */
+#endif
+
 typedef struct ProtoMsg
 {
 	struct ProtoMsg* next;

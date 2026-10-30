@@ -67,6 +67,25 @@ jobs:
           if [ ! -d "${{ matrix.platform }}" ]; then
             flutter create --project-name mhrd --org ua.mhrd --platforms=${{ matrix.platform }} .
           fi
+      # Модуль сеансу mhrd-session (FreeRDP через vcpkg). Кеш бінарних пакетів vcpkg —
+      # щоб FreeRDP і OpenSSL (~30 хв) збирались лише при зміні native/session/vcpkg.json.
+      - if: matrix.platform == 'windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('native/session/vcpkg.json') }}
+      - if: matrix.platform == 'windows'
+        name: Build mhrd-session
+        shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+        run: |
+          New-Item -ItemType Directory -Force "${{ github.workspace }}\vcpkg-cache" | Out-Null
+          # Повний клон: builtin-baseline з vcpkg.json має бути в його історії.
+          git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          $env:VCPKG_ROOT = "$env:RUNNER_TEMP\vcpkg"
+          ./native/session/build.ps1 -Config Release
       - run: flutter pub get
       - run: ${{ matrix.build }}
       - uses: actions/upload-artifact@v4

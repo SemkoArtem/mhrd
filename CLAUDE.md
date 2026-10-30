@@ -60,6 +60,17 @@ docs/SPEC.md                   специфікація (джерело прав
   `flutter_secure_storage_windows`). `sdkmanager` у новому SDK замінено утилітою `android`:
   пакети ставимо `android --no-metrics sdk install ndk/<версія>` (через `/`, не `;`).
 
+## Модуль сеансу `mhrd-session` (етап 2)
+
+- Код: `native/session/src` (C, FreeRDP 3 через vcpkg, статично — один .exe ~8 МБ).
+  Залежності — `native/session/vcpkg.json` (з `builtin-baseline`).
+- Збірка: `powershell -ExecutionPolicy Bypass -File native\session\build.ps1` → `native/session/out/mhrd-session.exe`.
+  vcpkg — у `C:\src\vcpkg` (або `$env:VCPKG_ROOT`); перша збірка FreeRDP+OpenSSL ~30 хв, далі з кешу.
+  `windows/CMakeLists.txt` кладе exe поруч із `mhrd.exe`; без нього «Підключитись» пояснює, що модуля немає.
+- Після зміни C-коду: build.ps1, потім `flutter build windows` (закрийте запущений MHRD — інакше файли зайняті).
+- Протокол змінюється одночасно в `proto.h` і `lib/sessions/session_protocol.dart` + тест у `test/session_test.dart`.
+- `test/engine_smoke_test.dart` запускає справжній exe (без сервера RDP); пропускається, якщо exe немає.
+
 ## Відкриті задачі етапу 1
 
 - [x] `LICENSE` — повний текст GNU AGPLv3 (https://www.gnu.org/licenses/agpl-3.0.txt).

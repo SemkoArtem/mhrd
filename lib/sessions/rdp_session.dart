@@ -61,6 +61,9 @@ class ProcessChannel implements SessionChannel {
 
   @override
   void kill() => _p.kill();
+
+  /// Закриває stdin — так процес сеансу дізнається, що застосунок пішов.
+  void closeInput() => _p.stdin.close();
 }
 
 class _Tail {
