@@ -1,0 +1,357 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../app.dart';
+import '../l10n/l10n.dart';
+import '../sessions/scancodes.dart';
+import '../sessions/session_manager.dart';
+import '../sessions/session_protocol.dart';
+import '../theme/mhrd_theme.dart';
+
+/// Екран одного сеансу: картинка віддаленого ПК, клавіатура й миша, діалог сертифіката,
+/// пояснення причини відключення. Вкладки й повний екран — етап 3.
+class SessionScreen extends StatefulWidget {
+  const SessionScreen({super.key, required this.session, this.onRetry});
+
+  final RdpSession session;
+
+  /// «Підключитись знову» — головний екран заново проходить підключення (з паролем, якщо треба).
+  final VoidCallback? onRetry;
+
+  @override
+  State<SessionScreen> createState() => _SessionScreenState();
+}
+
+class _SessionScreenState extends State<SessionScreen> {
+  final _focus = FocusNode(debugLabel: 'rdp-session');
+  final _pressed = <int>{};
+  int _buttons = 0;
+  double _wheelRest = 0;
+  bool _certDialogOpen = false;
+
+  late final SessionManager _manager = AppScope.of(context).sessions;
+
+  RdpSession get s => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    s.addListener(_onSession);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _manager; // запам'ятати, поки контекст живий: у dispose звертатись до AppScope не можна
+  }
+
+  @override
+  void dispose() {
+    s.removeListener(_onSession);
+    _releaseKeys();
+    _manager.close(s);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _onSession() {
+    if (!mounted) return;
+    setState(() {});
+    final cert = s.pendingCertificate;
+    if (cert != null && !_certDialogOpen) _askCertificate(cert);
+  }
+
+  Future<void> _askCertificate(CertificateEvent cert) async {
+    _certDialogOpen = true;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => _CertificateDialog(cert: cert),
+    );
+    _certDialogOpen = false;
+    if (!mounted) return;
+    if (ok == true) _manager.trustCertificate(s, cert.fingerprint);
+    s.answerCertificate(ok == true);
+    _focus.requestFocus();
+  }
+
+  // ── Клавіатура ────────────────────────────────────────────────
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    final code = rdpScancode(e.physicalKey.usbHidUsage);
+    if (code == null) return KeyEventResult.ignored;
+    final down = e is! KeyUpEvent;
+    if (down) {
+      _pressed.add(code);
+    } else {
+      _pressed.remove(code);
+    }
+    s.sendKey(code, down);
+    return KeyEventResult.handled;
+  }
+
+  /// Вікно втратило фокус — відпускаємо все, що натиснуто, щоб на ПК не «залип» Ctrl чи Alt.
+  void _releaseKeys() {
+    for (final code in _pressed) {
+      s.sendKey(code, false);
+    }
+    _pressed.clear();
+  }
+
+  // ── Миша ──────────────────────────────────────────────────────
+
+  (int, int) _pos(Offset p) =>
+      (p.dx.round().clamp(0, s.width > 0 ? s.width - 1 : 0), p.dy.round().clamp(0, s.height > 0 ? s.height - 1 : 0));
+
+  void _onPointer(PointerEvent e) {
+    final (x, y) = _pos(e.localPosition);
+    if (e is PointerDownEvent) _focus.requestFocus();
+    final changed = e.buttons ^ _buttons;
+    if (changed == 0) {
+      if (e is PointerHoverEvent || e is PointerMoveEvent) s.sendMouseMove(x, y);
+      return;
+    }
+    for (final (bit, b) in const [
+      (kPrimaryMouseButton, RemoteButton.left),
+      (kSecondaryMouseButton, RemoteButton.right),
+      (kMiddleMouseButton, RemoteButton.middle),
+    ]) {
+      if (changed & bit != 0) s.sendMouseButton(b, e.buttons & bit != 0, x, y);
+    }
+    _buttons = e.buttons;
+  }
+
+  void _onSignal(PointerSignalEvent e) {
+    if (e is! PointerScrollEvent) return;
+    final (x, y) = _pos(e.localPosition);
+    // Flutter дає пікселі (≈50 на крок коліщатка), RDP — 120 на крок; знак протилежний.
+    _wheelRest += -e.scrollDelta.dy * 2.4;
+    final delta = _wheelRest.truncate().clamp(-255, 255);
+    _wheelRest -= delta;
+    s.sendWheel(delta, x: x, y: y);
+    if (e.scrollDelta.dx != 0) {
+      s.sendWheel((e.scrollDelta.dx * 2.4).round().clamp(-255, 255), horizontal: true, x: x, y: y);
+    }
+  }
+
+  // ── Розмітка ──────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(children: [
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
+            child: Row(children: [
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                icon: const Icon(Icons.arrow_back, size: 18),
+                onPressed: () => Navigator.maybePop(context),
+              ),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: switch (s.state) {
+                    SessionState.connected => t.ok,
+                    SessionState.failed => t.error,
+                    _ => t.warn,
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(s.connection.displayName,
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
+              ),
+              if (s.isActive)
+                TextButton.icon(
+                  icon: const Icon(Icons.power_settings_new, size: 18),
+                  label: Text(l.disconnectAction),
+                  onPressed: s.disconnect,
+                ),
+            ]),
+          ),
+          Expanded(child: _body(context)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final ended = s.ended;
+    if (ended != null && ended.reason != DisconnectReason.userRequest) {
+      return _Message(
+        icon: Icons.error_outline,
+        color: t.error,
+        title: l.disconnectReason(ended.reason),
+        details: ended.details.isEmpty && ended.code == 0
+            ? null
+            : l.sessionDetails(ended.details.isEmpty ? '—' : ended.details, '0x${ended.code.toRadixString(16)}'),
+        actions: [
+          if (widget.onRetry != null) FilledButton(onPressed: widget.onRetry, child: Text(l.retry)),
+          OutlinedButton(onPressed: () => Navigator.maybePop(context), child: Text(l.close)),
+        ],
+      );
+    }
+    if (ended != null) {
+      return _Message(
+        icon: Icons.link_off,
+        color: t.textMuted,
+        title: l.reasonUserRequest,
+        actions: [
+          if (widget.onRetry != null) FilledButton(onPressed: widget.onRetry, child: Text(l.retry)),
+          OutlinedButton(onPressed: () => Navigator.maybePop(context), child: Text(l.close)),
+        ],
+      );
+    }
+    final img = s.image;
+    if (img == null || s.state != SessionState.connected) {
+      return _Message(
+        progress: true,
+        color: t.textMuted,
+        title: s.state == SessionState.negotiating ? l.sessionNegotiating : l.sessionConnecting(s.connection.displayName),
+      );
+    }
+    return Focus(
+      focusNode: _focus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      onFocusChange: (has) {
+        if (!has) _releaseKeys();
+      },
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.basic,
+            child: Listener(
+              onPointerHover: _onPointer,
+              onPointerMove: _onPointer,
+              onPointerDown: _onPointer,
+              onPointerUp: _onPointer,
+              onPointerSignal: _onSignal,
+              child: SizedBox(
+                width: s.width.toDouble(),
+                height: s.height.toDouble(),
+                child: RawImage(image: img, filterQuality: FilterQuality.medium),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  const _Message({
+    this.icon,
+    this.progress = false,
+    required this.color,
+    required this.title,
+    this.details,
+    this.actions = const [],
+  });
+
+  final IconData? icon;
+  final bool progress;
+  final Color color;
+  final String title;
+  final String? details;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.mhrd;
+    return ColoredBox(
+      color: t.background,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (progress)
+              const SizedBox(width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3))
+            else if (icon != null)
+              Icon(icon, size: 44, color: color),
+            const SizedBox(height: 16),
+            Text(title, textAlign: TextAlign.center, style: TextStyle(color: t.text, fontSize: 16)),
+            if (details != null) ...[
+              const SizedBox(height: 10),
+              SelectableText(details!, textAlign: TextAlign.center, style: t.mono),
+            ],
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center, children: actions),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// «Довіряти сертифікату?» — для зміненого сертифіката червоне попередження й без тихої згоди.
+class _CertificateDialog extends StatelessWidget {
+  const _CertificateDialog({required this.cert});
+  final CertificateEvent cert;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(color: t.textMuted, fontSize: 12)),
+            SelectableText(value.isEmpty ? '—' : value, style: t.mono.copyWith(color: t.text)),
+          ]),
+        );
+    final host = cert.port == 3389 || cert.port == 0 ? cert.host : '${cert.host}:${cert.port}';
+    return AlertDialog(
+      icon: Icon(cert.changed ? Icons.gpp_bad_outlined : Icons.verified_user_outlined,
+          color: cert.changed ? t.error : t.accent),
+      title: Text(cert.changed ? l.certChangedTitle : l.certTitle),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (cert.changed)
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: t.error.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(t.radius * 0.6),
+                  border: Border.all(color: t.error),
+                ),
+                child: Text(l.certChangedWarning, style: TextStyle(color: t.error)),
+              ),
+            Text(l.certIntro(host)),
+            row(l.certSubject, cert.subject),
+            row(l.certIssuer, cert.issuer),
+            row(l.certFingerprint, cert.fingerprint),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.certReject)),
+        FilledButton(
+          style: cert.changed ? FilledButton.styleFrom(backgroundColor: t.error, foregroundColor: t.background) : null,
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(l.certAccept),
+        ),
+      ],
+    );
+  }
+}

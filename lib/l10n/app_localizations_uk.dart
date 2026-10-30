@@ -257,9 +257,114 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String engineMissing(String name) {
-    return 'RDP-ядро ще не підключене — це етап 2. Профіль «$name» збережено, усе інше вже працює.';
+  String get engineMissing =>
+      'Не знайдено модуль підключення mhrd-session. Перевстановіть MHRD.';
+
+  @override
+  String sessionConnecting(String name) {
+    return 'З\'єднання з $name…';
   }
+
+  @override
+  String get sessionNegotiating => 'Перевірка сертифіката…';
+
+  @override
+  String get disconnectAction => 'Відключитись';
+
+  @override
+  String get close => 'Закрити';
+
+  @override
+  String get retry => 'Підключитись знову';
+
+  @override
+  String sessionDetails(String details, String code) {
+    return 'Деталі: $details (код $code)';
+  }
+
+  @override
+  String get reasonUserRequest => 'Відключено.';
+
+  @override
+  String get reasonNetwork =>
+      'ПК недоступний. Перевірте адресу, мережу і чи ввімкнено на ПК віддалений робочий стіл.';
+
+  @override
+  String get reasonAuthFailed => 'Невірний логін або пароль.';
+
+  @override
+  String get reasonNoCredentials => 'Для входу потрібні логін і пароль.';
+
+  @override
+  String get reasonAccountLocked =>
+      'Обліковий запис заблоковано, вимкнено або йому заборонено вхід.';
+
+  @override
+  String get reasonPasswordExpired =>
+      'Термін дії пароля минув. Змініть пароль на ПК або в домені.';
+
+  @override
+  String get reasonCertRejected =>
+      'Підключення скасовано: сертифікату ПК не довірили.';
+
+  @override
+  String get reasonTls => 'Не вдалося встановити захищене з\'єднання (TLS).';
+
+  @override
+  String get reasonServerLogoff => 'Сеанс завершено на віддаленому ПК.';
+
+  @override
+  String get reasonOtherConnection =>
+      'Сеанс перехопило інше підключення до цього ПК.';
+
+  @override
+  String get reasonServerDenied => 'ПК відхилив підключення.';
+
+  @override
+  String get reasonOther => 'З\'єднання розірвано.';
+
+  @override
+  String get reasonCrashed =>
+      'Модуль сеансу несподівано завершився. MHRD працює далі — спробуйте підключитись знову.';
+
+  @override
+  String get certTitle => 'Довіряти сертифікату ПК?';
+
+  @override
+  String get certChangedTitle => 'Сертифікат ПК змінився!';
+
+  @override
+  String certIntro(String host) {
+    return 'Перевірте, що підключаєтесь саме до $host. Якщо відбиток збігається з тим, що повідомив адміністратор ПК, — довіряйте.';
+  }
+
+  @override
+  String get certChangedWarning =>
+      'Раніше цей ПК мав інший сертифікат. Так буває після перевстановлення системи, але це може бути й атака. Не довіряйте, якщо не впевнені.';
+
+  @override
+  String get certSubject => 'Кому видано';
+
+  @override
+  String get certIssuer => 'Ким видано';
+
+  @override
+  String get certFingerprint => 'Відбиток';
+
+  @override
+  String get certReject => 'Не довіряти';
+
+  @override
+  String get certAccept => 'Довіряти й підключитись';
+
+  @override
+  String credPromptTitle(String name) {
+    return 'Вхід на $name';
+  }
+
+  @override
+  String get credPromptHint =>
+      'Дані використовуються лише для цього підключення.';
 
   @override
   String get allPcs => 'Усі ПК';

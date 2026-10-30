@@ -1,62 +1,113 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/connection.dart';
+import '../models/entities.dart';
 import '../storage/repository.dart';
+import 'rdp_session.dart';
 
-/// Стани сеансу (SPEC.md → «Підключення й сеанс» → «Стани сесії»).
-enum SessionState {
-  resolving,
-  tunneling,
-  connecting,
-  negotiating,
-  authenticating,
-  connected,
-  reconnecting,
-  disconnected,
-  failed,
+export 'rdp_session.dart' show RdpSession, SessionState;
+
+/// Облікові дані для одного підключення. password == null — UI має спитати.
+class ConnectCredentials {
+  const ConnectCredentials({this.username, this.password});
+  final String? username;
+  final String? password;
+
+  bool get complete => (username ?? '').isNotEmpty && (password ?? '').isNotEmpty;
 }
 
-/// Чому підключення зараз неможливе (текст складає UI).
-enum ConnectBlock { engineMissing }
+typedef ChannelFactory = Future<SessionChannel> Function(String executable);
 
-class Session {
-  Session({required this.id, required this.connectionId, required this.title});
-  final String id;
-  final String connectionId;
-  final String title;
-  SessionState state = SessionState.resolving;
-  String? message;
-}
-
-/// Керує активними сеансами. Етап 1: каркас без RDP-ядра.
-/// Етап 2 підключить сюди нативний міст до FreeRDP (native/rdp_bridge, dart:ffi):
-/// connect → routes.open → native.start; події native → зміна [Session.state].
+/// Керує активними сеансами. Кожен сеанс — окремий процес `mhrd-session` (SPEC → «Архітектура»).
 class SessionManager extends ChangeNotifier {
-  SessionManager(this.repo);
+  SessionManager(this.repo, {String? enginePath, ChannelFactory? channelFactory})
+      : enginePath = enginePath ?? _defaultEnginePath(),
+        _channelFactory = channelFactory ?? ProcessChannel.start;
 
   final Repository repo;
-  final List<Session> sessions = [];
 
-  /// Чи вже є RDP-ядро. Поки false — UI показує пояснення замість підключення.
-  bool get engineAvailable => false;
+  /// Шлях до `mhrd-session`; null — модуля підключення немає (наприклад, ще не зібрано).
+  final String? enginePath;
+  final ChannelFactory _channelFactory;
+  final List<RdpSession> sessions = [];
 
-  Session? forConnection(String connectionId) {
+  bool get engineAvailable => enginePath != null;
+
+  /// `mhrd-session.exe` лежить поруч із головною програмою (його кладе туди збірка Windows).
+  static String? _defaultEnginePath() {
+    if (!Platform.isWindows) return null;
+    final path = p.join(p.dirname(Platform.resolvedExecutable), 'mhrd-session.exe');
+    return File(path).existsSync() ? path : null;
+  }
+
+  /// Акаунт для підключення: вибраний у «Підключитись як…» або перший у ПК.
+  /// Пароль читається із системного сховища, якщо акаунт його зберігає.
+  Future<ConnectCredentials> credentialsFor(Connection c, {String? credentialId}) async {
+    final id = credentialId ?? (c.credentialIds.isEmpty ? null : c.credentialIds.first);
+    final cred = id == null ? null : repo.credentials[id];
+    if (cred == null) return const ConnectCredentials();
+    final pw = cred.authMode == AuthMode.savedPassword ? await repo.secrets.read(cred.secretKey) : null;
+    return ConnectCredentials(username: cred.username, password: pw);
+  }
+
+  /// Запускає сеанс. [width]/[height] — бажана роздільність віддаленого екрана.
+  Future<RdpSession> start(
+    Connection c, {
+    required String username,
+    required String password,
+    required int width,
+    required int height,
+  }) async {
+    final exe = enginePath;
+    if (exe == null) throw StateError('mhrd-session not found');
+    if (repo.connections.containsKey(c.id)) repo.markUsed(c.id);
+    final channel = await _channelFactory(exe);
+    final s = RdpSession(
+      id: '${c.id}#${DateTime.now().microsecondsSinceEpoch}',
+      connection: c,
+      channel: channel,
+      swapMouseButtons: c.swapMouseButtons,
+    );
+    sessions.add(s);
+    s.start({
+      'host': c.host,
+      'port': c.port,
+      'username': username,
+      'password': password,
+      'width': width,
+      'height': height,
+      'colorDepth': c.display.colorDepth,
+      'adminSession': c.adminSession,
+      'reconnect': c.reconnectOnDrop,
+      'certPin': c.certPin,
+    });
+    notifyListeners();
+    return s;
+  }
+
+  /// Користувач довіряє сертифікату: запам'ятовуємо відбиток у ПК (для швидкого
+  /// підключення, якого немає в списку, просто продовжуємо).
+  void trustCertificate(RdpSession s, String fingerprint) {
+    final c = repo.connections[s.connection.id];
+    if (c != null) repo.saveConnection(c.copyWith(certPin: () => fingerprint));
+  }
+
+  RdpSession? forConnection(String connectionId) {
     for (final s in sessions) {
-      if (s.connectionId == connectionId) return s;
+      if (s.connection.id == connectionId && s.isActive) return s;
     }
     return null;
   }
 
-  /// Повертає причину, якщо підключення поки неможливе; null — підключення почалося.
-  ConnectBlock? connect(Connection c, {String? credentialId}) {
-    repo.markUsed(c.id);
-    if (!engineAvailable) return ConnectBlock.engineMissing;
-    // TODO(етап 2): створити Session, відкрити маршрут, запустити FreeRDP.
-    return null;
-  }
-
-  void close(String sessionId) {
-    sessions.removeWhere((s) => s.id == sessionId);
+  /// Прибирає сеанс зі списку (після відключення чи закриття екрана). Звільняє його,
+  /// лише коли процес справді завершився — інакше не спрацює примусове закриття за 5 с.
+  void close(RdpSession s) {
+    if (!sessions.remove(s)) return;
+    s.disconnect();
+    s.done.then((_) => s.dispose());
     notifyListeners();
   }
 }

@@ -5,6 +5,63 @@ import '../models/entities.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 
+/// Логін і пароль для одного підключення (акаунт «Питати щоразу» чи ПК без акаунта).
+/// Повертає (користувач, пароль) або null, якщо скасовано.
+Future<(String, String)?> askCredentials(BuildContext context, {required String target, String? username}) {
+  final l = context.l10n;
+  final user = TextEditingController(text: username ?? '');
+  final pass = TextEditingController();
+  var show = false;
+  String? err;
+  return showDialog<(String, String)>(
+    context: context,
+    builder: (c) => StatefulBuilder(builder: (c, set) {
+      void submit() {
+        if (user.text.trim().isEmpty) {
+          set(() => err = l.credUserRequired);
+          return;
+        }
+        Navigator.pop(c, (user.text.trim(), pass.text));
+      }
+
+      return AlertDialog(
+        title: Text(l.credPromptTitle(target)),
+        content: SizedBox(
+          width: 400,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+              controller: user,
+              autofocus: (username ?? '').isEmpty,
+              decoration: InputDecoration(labelText: l.credUser, helperText: l.credUserHelper, errorText: err),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pass,
+              autofocus: (username ?? '').isNotEmpty,
+              obscureText: !show,
+              onSubmitted: (_) => submit(),
+              decoration: InputDecoration(
+                labelText: l.password,
+                suffixIcon: IconButton(
+                  tooltip: show ? l.hidePassword : l.showPassword,
+                  icon: Icon(show ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => set(() => show = !show),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(l.credPromptHint, style: TextStyle(color: c.mhrd.textMuted, fontSize: 12)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(l.cancel)),
+          FilledButton(onPressed: submit, child: Text(l.connect)),
+        ],
+      );
+    }),
+  );
+}
+
 /// Створення або редагування облікового запису. Повертає збережений запис або null.
 Future<Credential?> editCredential(BuildContext context, Repository repo, {Credential? existing}) async {
   final l = context.l10n;

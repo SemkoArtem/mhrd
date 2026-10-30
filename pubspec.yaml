@@ -26,6 +26,8 @@ dependencies:
   cryptography: ^2.7.0
   # Діалоги відкриття/збереження файлів
   file_selector: ^1.0.3
+  # Рядки для dart:ffi (спільна пам'ять сеансу, lib/sessions/frame_buffer.dart)
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:

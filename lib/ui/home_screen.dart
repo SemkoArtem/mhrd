@@ -8,14 +8,17 @@ import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
 import '../sessions/session_manager.dart';
+import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
 import '../util/rdp_file.dart';
 import '../util/wake_on_lan.dart';
+import 'credential_dialog.dart';
 import 'dialogs.dart';
 import 'edit_connection_screen.dart';
 import 'file_actions.dart';
+import 'session_screen.dart';
 import 'settings_screen.dart';
 import 'widgets/pc_card.dart';
 
@@ -48,14 +51,50 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Дії ─────────────────────────────────────────────────────────
 
-  String? _blockText(ConnectBlock? b, Connection c) => switch (b) {
-        ConnectBlock.engineMissing => context.l10n.engineMissing(c.displayName),
-        null => null,
-      };
+  /// Підключення: акаунт ПК (пароль зі сховища) або діалог входу, далі — екран сеансу.
+  /// [askPassword] — спитати навіть за збереженого пароля (після «невірний пароль»).
+  Future<void> _connect(Connection c, {String? credentialId, bool askPassword = false}) async {
+    final l = context.l10n;
+    final sessions = AppScope.of(context).sessions;
+    if (!sessions.engineAvailable) {
+      toast(context, l.engineMissing);
+      return;
+    }
+    final running = credentialId == null ? sessions.forConnection(c.id) : null;
+    if (running != null) {
+      _openSession(running, c);
+      return;
+    }
+    final creds = await sessions.credentialsFor(c, credentialId: credentialId);
+    var user = creds.username, password = creds.password;
+    if (askPassword || !creds.complete) {
+      if (!mounted) return;
+      final r = await askCredentials(context, target: c.displayName, username: user);
+      if (r == null) return;
+      (user, password) = r;
+    }
+    if (!mounted) return;
+    // Етап 2: роздільність = розмір вікна (зміна розміру на льоту — етап 3).
+    final size = MediaQuery.sizeOf(context);
+    int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 4) * 4;
+    final s = await sessions.start(c,
+        username: user!, password: password ?? '', width: even(size.width, 640, 8192), height: even(size.height - 40, 480, 8192));
+    if (mounted) _openSession(s, c, credentialId: credentialId);
+  }
 
-  void _connect(Connection c, {String? credentialId}) {
-    final msg = _blockText(AppScope.of(context).sessions.connect(c, credentialId: credentialId), c);
-    if (msg != null) toast(context, msg);
+  void _openSession(RdpSession s, Connection c, {String? credentialId}) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (route) => SessionScreen(
+        session: s,
+        onRetry: () {
+          Navigator.of(route).pop();
+          final reason = s.ended?.reason;
+          _connect(c,
+              credentialId: credentialId,
+              askPassword: reason == DisconnectReason.authFailed || reason == DisconnectReason.noCredentials);
+        },
+      ),
+    ));
   }
 
   void _quickConnect() {
@@ -67,12 +106,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final now = DateTime.now();
     final temp = Connection(id: newId(), name: '', host: addr.host, port: addr.port, createdAt: now, updatedAt: now);
-    final msg = _blockText(AppScope.of(context).sessions.connect(temp), temp);
-    toast(
-      context,
-      msg ?? l.connectingTo(temp.address),
-      action: SnackBarAction(label: l.saveThisPc, onPressed: () => _edit(temp, isNew: true)),
-    );
+    toast(context, l.connectingTo(temp.address),
+        action: SnackBarAction(label: l.saveThisPc, onPressed: () => _edit(temp, isNew: true)));
+    _connect(temp);
   }
 
   Future<void> _edit(Connection? c, {bool isNew = false}) async {

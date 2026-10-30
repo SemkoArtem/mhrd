@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
+import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/wake_on_lan.dart';
@@ -53,6 +54,22 @@ extension L10nMessages on AppLocalizations {
 
   /// «ПК 1, ПК 2, шлюз gw.example.com».
   String inUseUsers(InUse e) => [...e.pcs, ...e.gateways.map(gatewayUser)].join(', ');
+
+  String disconnectReason(DisconnectReason r) => switch (r) {
+        DisconnectReason.userRequest => reasonUserRequest,
+        DisconnectReason.network => reasonNetwork,
+        DisconnectReason.authFailed => reasonAuthFailed,
+        DisconnectReason.noCredentials => reasonNoCredentials,
+        DisconnectReason.accountLocked => reasonAccountLocked,
+        DisconnectReason.passwordExpired => reasonPasswordExpired,
+        DisconnectReason.certRejected => reasonCertRejected,
+        DisconnectReason.tls => reasonTls,
+        DisconnectReason.serverLogoff => reasonServerLogoff,
+        DisconnectReason.otherConnection => reasonOtherConnection,
+        DisconnectReason.serverDenied => reasonServerDenied,
+        DisconnectReason.other => reasonOther,
+        DisconnectReason.crashed => reasonCrashed,
+      };
 
   /// Назва теми: вбудовані — перекладені, власні — як назвав користувач.
   String themeName(MhrdTokens t) => switch (t.id) {

@@ -255,9 +255,115 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String engineMissing(String name) {
-    return 'The RDP engine is not connected yet — that\'s stage 2. The “$name” profile is saved; everything else already works.';
+  String get engineMissing =>
+      'The mhrd-session connection module was not found. Please reinstall MHRD.';
+
+  @override
+  String sessionConnecting(String name) {
+    return 'Connecting to $name…';
   }
+
+  @override
+  String get sessionNegotiating => 'Checking the certificate…';
+
+  @override
+  String get disconnectAction => 'Disconnect';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get retry => 'Connect again';
+
+  @override
+  String sessionDetails(String details, String code) {
+    return 'Details: $details (code $code)';
+  }
+
+  @override
+  String get reasonUserRequest => 'Disconnected.';
+
+  @override
+  String get reasonNetwork =>
+      'The PC can\'t be reached. Check the address, the network and whether Remote Desktop is enabled on the PC.';
+
+  @override
+  String get reasonAuthFailed => 'Wrong user name or password.';
+
+  @override
+  String get reasonNoCredentials =>
+      'A user name and password are required to sign in.';
+
+  @override
+  String get reasonAccountLocked =>
+      'The account is locked, disabled or not allowed to sign in.';
+
+  @override
+  String get reasonPasswordExpired =>
+      'The password has expired. Change it on the PC or in the domain.';
+
+  @override
+  String get reasonCertRejected =>
+      'Connection cancelled: the PC certificate was not trusted.';
+
+  @override
+  String get reasonTls => 'Could not establish a secure (TLS) connection.';
+
+  @override
+  String get reasonServerLogoff => 'The session was ended on the remote PC.';
+
+  @override
+  String get reasonOtherConnection =>
+      'Another connection to this PC took over the session.';
+
+  @override
+  String get reasonServerDenied => 'The PC refused the connection.';
+
+  @override
+  String get reasonOther => 'The connection was lost.';
+
+  @override
+  String get reasonCrashed =>
+      'The session module stopped unexpectedly. MHRD keeps running — try connecting again.';
+
+  @override
+  String get certTitle => 'Trust the PC certificate?';
+
+  @override
+  String get certChangedTitle => 'The PC certificate has changed!';
+
+  @override
+  String certIntro(String host) {
+    return 'Make sure you are connecting to $host. If the fingerprint matches the one the PC administrator gave you, trust it.';
+  }
+
+  @override
+  String get certChangedWarning =>
+      'This PC used to have a different certificate. That happens after a system reinstall, but it may also be an attack. Don\'t trust it unless you are sure.';
+
+  @override
+  String get certSubject => 'Issued to';
+
+  @override
+  String get certIssuer => 'Issued by';
+
+  @override
+  String get certFingerprint => 'Fingerprint';
+
+  @override
+  String get certReject => 'Don\'t trust';
+
+  @override
+  String get certAccept => 'Trust and connect';
+
+  @override
+  String credPromptTitle(String name) {
+    return 'Sign in to $name';
+  }
+
+  @override
+  String get credPromptHint =>
+      'These details are used for this connection only.';
 
   @override
   String get allPcs => 'All PCs';

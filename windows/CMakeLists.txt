@@ -87,6 +87,16 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# mhrd-session.exe — окремий процес сеансу RDP (native/session, збирається build.ps1).
+# Без нього MHRD працює, але кнопка «Підключитись» пояснює, що модуля немає.
+set(MHRD_SESSION_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../native/session/out/mhrd-session.exe")
+if(EXISTS "${MHRD_SESSION_EXE}")
+  install(FILES "${MHRD_SESSION_EXE}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "mhrd-session.exe не знайдено: запустіть native/session/build.ps1")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

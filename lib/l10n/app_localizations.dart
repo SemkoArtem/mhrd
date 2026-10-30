@@ -515,8 +515,188 @@ abstract class AppLocalizations {
   /// No description provided for @engineMissing.
   ///
   /// In uk, this message translates to:
-  /// **'RDP-ядро ще не підключене — це етап 2. Профіль «{name}» збережено, усе інше вже працює.'**
-  String engineMissing(String name);
+  /// **'Не знайдено модуль підключення mhrd-session. Перевстановіть MHRD.'**
+  String get engineMissing;
+
+  /// No description provided for @sessionConnecting.
+  ///
+  /// In uk, this message translates to:
+  /// **'З\'єднання з {name}…'**
+  String sessionConnecting(String name);
+
+  /// No description provided for @sessionNegotiating.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевірка сертифіката…'**
+  String get sessionNegotiating;
+
+  /// No description provided for @disconnectAction.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відключитись'**
+  String get disconnectAction;
+
+  /// No description provided for @close.
+  ///
+  /// In uk, this message translates to:
+  /// **'Закрити'**
+  String get close;
+
+  /// No description provided for @retry.
+  ///
+  /// In uk, this message translates to:
+  /// **'Підключитись знову'**
+  String get retry;
+
+  /// No description provided for @sessionDetails.
+  ///
+  /// In uk, this message translates to:
+  /// **'Деталі: {details} (код {code})'**
+  String sessionDetails(String details, String code);
+
+  /// No description provided for @reasonUserRequest.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відключено.'**
+  String get reasonUserRequest;
+
+  /// No description provided for @reasonNetwork.
+  ///
+  /// In uk, this message translates to:
+  /// **'ПК недоступний. Перевірте адресу, мережу і чи ввімкнено на ПК віддалений робочий стіл.'**
+  String get reasonNetwork;
+
+  /// No description provided for @reasonAuthFailed.
+  ///
+  /// In uk, this message translates to:
+  /// **'Невірний логін або пароль.'**
+  String get reasonAuthFailed;
+
+  /// No description provided for @reasonNoCredentials.
+  ///
+  /// In uk, this message translates to:
+  /// **'Для входу потрібні логін і пароль.'**
+  String get reasonNoCredentials;
+
+  /// No description provided for @reasonAccountLocked.
+  ///
+  /// In uk, this message translates to:
+  /// **'Обліковий запис заблоковано, вимкнено або йому заборонено вхід.'**
+  String get reasonAccountLocked;
+
+  /// No description provided for @reasonPasswordExpired.
+  ///
+  /// In uk, this message translates to:
+  /// **'Термін дії пароля минув. Змініть пароль на ПК або в домені.'**
+  String get reasonPasswordExpired;
+
+  /// No description provided for @reasonCertRejected.
+  ///
+  /// In uk, this message translates to:
+  /// **'Підключення скасовано: сертифікату ПК не довірили.'**
+  String get reasonCertRejected;
+
+  /// No description provided for @reasonTls.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося встановити захищене з\'єднання (TLS).'**
+  String get reasonTls;
+
+  /// No description provided for @reasonServerLogoff.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сеанс завершено на віддаленому ПК.'**
+  String get reasonServerLogoff;
+
+  /// No description provided for @reasonOtherConnection.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сеанс перехопило інше підключення до цього ПК.'**
+  String get reasonOtherConnection;
+
+  /// No description provided for @reasonServerDenied.
+  ///
+  /// In uk, this message translates to:
+  /// **'ПК відхилив підключення.'**
+  String get reasonServerDenied;
+
+  /// No description provided for @reasonOther.
+  ///
+  /// In uk, this message translates to:
+  /// **'З\'єднання розірвано.'**
+  String get reasonOther;
+
+  /// No description provided for @reasonCrashed.
+  ///
+  /// In uk, this message translates to:
+  /// **'Модуль сеансу несподівано завершився. MHRD працює далі — спробуйте підключитись знову.'**
+  String get reasonCrashed;
+
+  /// No description provided for @certTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Довіряти сертифікату ПК?'**
+  String get certTitle;
+
+  /// No description provided for @certChangedTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сертифікат ПК змінився!'**
+  String get certChangedTitle;
+
+  /// No description provided for @certIntro.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевірте, що підключаєтесь саме до {host}. Якщо відбиток збігається з тим, що повідомив адміністратор ПК, — довіряйте.'**
+  String certIntro(String host);
+
+  /// No description provided for @certChangedWarning.
+  ///
+  /// In uk, this message translates to:
+  /// **'Раніше цей ПК мав інший сертифікат. Так буває після перевстановлення системи, але це може бути й атака. Не довіряйте, якщо не впевнені.'**
+  String get certChangedWarning;
+
+  /// No description provided for @certSubject.
+  ///
+  /// In uk, this message translates to:
+  /// **'Кому видано'**
+  String get certSubject;
+
+  /// No description provided for @certIssuer.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ким видано'**
+  String get certIssuer;
+
+  /// No description provided for @certFingerprint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відбиток'**
+  String get certFingerprint;
+
+  /// No description provided for @certReject.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не довіряти'**
+  String get certReject;
+
+  /// No description provided for @certAccept.
+  ///
+  /// In uk, this message translates to:
+  /// **'Довіряти й підключитись'**
+  String get certAccept;
+
+  /// No description provided for @credPromptTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вхід на {name}'**
+  String credPromptTitle(String name);
+
+  /// No description provided for @credPromptHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Дані використовуються лише для цього підключення.'**
+  String get credPromptHint;
 
   /// No description provided for @allPcs.
   ///
