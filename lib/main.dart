@@ -24,6 +24,7 @@ Stream<LicenseEntry> _fontLicenses() async* {
     'IBM Plex Sans': 'IBMPlexSans-OFL.txt',
     'IBM Plex Mono': 'IBMPlexMono-OFL.txt',
     'Manrope': 'Manrope-OFL.txt',
+    'Exo 2': 'Exo2-OFL.txt',
     'JetBrains Mono': 'JetBrainsMono-OFL.txt',
   };
   for (final e in files.entries) {

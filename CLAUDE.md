@@ -21,7 +21,7 @@ MHRD (MacroHard Remote Desktop, робоча назва) — безкоштов�
 - **Секрети** (паролі, ключі) — тільки в системному сховищі (`SecretStore`), у бекапі
   (зашифрованому паролем) і ніде більше: не в SQLite, не в журналах, не в експорті для передачі.
 - **Теми:** жодних кольорів чи розмірів у віджетах напряму — лише `context.mhrd.*`
-  (`lib/theme/mhrd_theme.dart`). Типова тема «Графіт»; є «Світлий інструмент», «Нічний бурштин»,
+  (`lib/theme/mhrd_theme.dart`). Типова тема «Графіт»; є «Світлий інструмент», «Нічний бурштин» (шрифт Exo 2),
   «Як у системі» і власні теми (`.mhrd-theme`).
 - **Тексти інтерфейсу** — українською (пізніше винесемо в ARB і додамо англійську).
 
@@ -57,9 +57,9 @@ docs/SPEC.md                   специфікація (джерело прав
 ## Відкриті задачі етапу 1
 
 - [x] `LICENSE` — повний текст GNU AGPLv3 (https://www.gnu.org/licenses/agpl-3.0.txt).
-- [x] Шрифти IBM Plex Sans/Mono, Manrope, JetBrains Mono (OFL, статичні 400/500/600) у
+- [x] Шрифти IBM Plex Sans/Mono, Manrope, Exo 2, JetBrains Mono (OFL, статичні 400/500/600) у
       `assets/fonts/`, ліцензії в `assets/fonts/licenses/` і в `LicenseRegistry` (`main.dart`).
-- [ ] Space Grotesk (тема «Нічний бурштин») **не має кирилиці** — потрібна заміна, вирішує власник.
+      Будь-який новий шрифт — лише з кирилицею (Space Grotesk замінено на Exo 2 саме через це).
 - [ ] macOS: у `macos/Runner/*.entitlements` додати `com.apple.security.network.client`
       (вихідні з'єднання) і доступ до Keychain для `flutter_secure_storage`.
 - [ ] Android: `minSdk` не нижче 23, дозвіл `INTERNET`; збереження файлів через SAF

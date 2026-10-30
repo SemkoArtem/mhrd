@@ -125,7 +125,7 @@ class MhrdTokens extends ThemeExtension<MhrdTokens> {
     ok: Color(0xFF7BD88F),
     warn: Color(0xFFF5A524),
     error: Color(0xFFFF8F80),
-    fontSans: 'Space Grotesk',
+    fontSans: 'Exo 2',
     fontMono: 'JetBrains Mono',
     radius: 12,
   );
@@ -177,7 +177,7 @@ class MhrdTokens extends ThemeExtension<MhrdTokens> {
 
   /// Шрифти, які можна задати в темі (лише з вбудованого набору — без шляхів і посилань).
   static const allowedFonts = [
-    'IBM Plex Sans', 'IBM Plex Mono', 'Manrope', 'Space Grotesk', 'JetBrains Mono', 'system',
+    'IBM Plex Sans', 'IBM Plex Mono', 'Manrope', 'Exo 2', 'JetBrains Mono', 'system',
   ];
 
   Map<String, dynamic> toJson() => {
