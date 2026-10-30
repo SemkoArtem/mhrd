@@ -254,7 +254,7 @@ class AppSettings {
     this.lastBackupAt,
   });
 
-  /// id вбудованої теми або власної (custom:<uuid>), або 'system'.
+  /// id вбудованої теми або власної (`custom:<uuid>`), або 'system'.
   final String themeId;
   final PcListView listView;
   final bool showPreviews;

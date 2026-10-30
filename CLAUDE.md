@@ -62,8 +62,9 @@ docs/SPEC.md                   специфікація (джерело прав
       Будь-який новий шрифт — лише з кирилицею (Space Grotesk замінено на Exo 2 саме через це).
 - [ ] macOS: у `macos/Runner/*.entitlements` додати `com.apple.security.network.client`
       (вихідні з'єднання) і доступ до Keychain для `flutter_secure_storage`.
-- [ ] Android: `minSdk` не нижче 23, дозвіл `INTERNET`; збереження файлів через SAF
-      (зараз на Android файли падають у теку документів застосунку).
+- [ ] Android: збереження файлів через SAF (зараз на Android файли падають у теку документів
+      застосунку). Уже зроблено: `INTERNET` у основному маніфесті, системний бекап вимкнено;
+      `minSdk` = 24 (вимога Flutter і flutter_secure_storage 11).
 - [ ] Linux: у README згадати залежність `libsecret-1-0` (сховище паролів).
 - [ ] Іконка застосунку (своя, без символіки Microsoft).
 - [x] Автобекап у вибрану теку (`lib/backup/auto_backup.dart`). Налаштування — у meta `autoBackup`

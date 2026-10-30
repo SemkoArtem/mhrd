@@ -11,8 +11,9 @@ abstract class SecretStore {
 
 class SystemSecretStore implements SecretStore {
   SystemSecretStore()
+      // Android: типові AndroidOptions — ключ у Keystore, дані шифруються AES-GCM
+      // (EncryptedSharedPreferences прибрано з flutter_secure_storage 11).
       : _s = const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
           mOptions: MacOsOptions(accessibility: KeychainAccessibility.first_unlock),
         );
 
