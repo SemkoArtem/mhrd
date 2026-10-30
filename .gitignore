@@ -1,0 +1,12 @@
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+.idea/
+coverage/
+# Секрети підпису Android ніколи не комітимо
+*.jks
+*.keystore
+key.properties

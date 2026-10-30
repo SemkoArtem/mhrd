@@ -1,0 +1,310 @@
+import 'json_util.dart';
+
+/// Обліковий запис. Пароль лежить у системному сховищі під ключем [secretKey].
+enum AuthMode { savedPassword, askPassword }
+
+class Credential {
+  const Credential({
+    required this.id,
+    required this.name,
+    required this.username,
+    this.authMode = AuthMode.savedPassword,
+  });
+
+  final String id;
+
+  /// Зрозуміла назва, наприклад «Робочий адмін». Може бути порожньою.
+  final String name;
+
+  /// user, DOMAIN\user або user@domain.
+  final String username;
+  final AuthMode authMode;
+
+  String get secretKey => 'mhrd.cred.$id';
+  String get label => name.trim().isEmpty ? username : '${name.trim()} ($username)';
+
+  Credential copyWith({String? name, String? username, AuthMode? authMode}) => Credential(
+        id: id,
+        name: name ?? this.name,
+        username: username ?? this.username,
+        authMode: authMode ?? this.authMode,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'username': username, 'authMode': authMode.name};
+
+  factory Credential.fromJson(Map<String, dynamic> j) => Credential(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        username: strOr(j['username'], ''),
+        authMode: enumByName(AuthMode.values, j['authMode'], AuthMode.savedPassword),
+      );
+}
+
+class Group {
+  const Group({required this.id, required this.name, this.parentId, this.sortOrder = 0});
+
+  final String id;
+  final String name;
+
+  /// Вкладені групи. Цикли блокує репозиторій.
+  final String? parentId;
+  final int sortOrder;
+
+  Group copyWith({String? name, String? Function()? parentId, int? sortOrder}) => Group(
+        id: id,
+        name: name ?? this.name,
+        parentId: parentId != null ? parentId() : this.parentId,
+        sortOrder: sortOrder ?? this.sortOrder,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'parentId': parentId, 'sortOrder': sortOrder};
+
+  factory Group.fromJson(Map<String, dynamic> j) => Group(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        parentId: strOrNull(j['parentId']),
+        sortOrder: intOr(j['sortOrder'], 0),
+      );
+}
+
+/// Облікові дані для RD Gateway: такі самі, як для ПК, або окремий акаунт.
+enum GatewayCredentialMode { sameAsPc, own }
+
+class Gateway {
+  const Gateway({
+    required this.id,
+    required this.name,
+    required this.host,
+    this.port = 443,
+    this.credentialMode = GatewayCredentialMode.sameAsPc,
+    this.credentialId,
+  });
+
+  final String id;
+  final String name;
+  final String host;
+  final int port;
+  final GatewayCredentialMode credentialMode;
+  final String? credentialId;
+
+  String get label => name.trim().isEmpty ? host : name.trim();
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'host': host,
+        'port': port,
+        'credentialMode': credentialMode.name,
+        'credentialId': credentialId,
+      };
+
+  factory Gateway.fromJson(Map<String, dynamic> j) => Gateway(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        host: strOr(j['host'], ''),
+        port: intOr(j['port'], 443),
+        credentialMode: enumByName(
+            GatewayCredentialMode.values, j['credentialMode'], GatewayCredentialMode.sameAsPc),
+        credentialId: strOrNull(j['credentialId']),
+      );
+}
+
+enum TunnelType { wireguard, openvpn, tailscale, openconnect }
+
+/// Профіль вбудованого тунелю. [config] — лише несекретні поля;
+/// секрети (приватний ключ, PSK, паролі) — у сховищі під [secretKey].
+class TunnelProfile {
+  const TunnelProfile({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.config = const {},
+    this.secretFields = const [],
+  });
+
+  final String id;
+  final String name;
+  final TunnelType type;
+
+  /// WireGuard: addresses, dns, mtu, peerPublicKey, endpoint, allowedIps, keepalive.
+  final Map<String, dynamic> config;
+
+  /// Назви секретних полів, що лежать у сховищі (наприклад privateKey, presharedKey).
+  final List<String> secretFields;
+
+  String secretKey(String field) => 'mhrd.tunnel.$id.$field';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'type': type.name,
+        'config': config,
+        'secretFields': secretFields,
+      };
+
+  factory TunnelProfile.fromJson(Map<String, dynamic> j) => TunnelProfile(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        type: enumByName(TunnelType.values, j['type'], TunnelType.wireguard),
+        config: mapOr(j['config']),
+        secretFields: stringList(j['secretFields']),
+      );
+}
+
+enum ProxyType { socks5, http }
+
+class ProxyProfile {
+  const ProxyProfile({
+    required this.id,
+    required this.name,
+    this.type = ProxyType.socks5,
+    required this.host,
+    required this.port,
+    this.username = '',
+  });
+
+  final String id;
+  final String name;
+  final ProxyType type;
+  final String host;
+  final int port;
+  final String username;
+
+  String get secretKey => 'mhrd.proxy.$id';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'type': type.name,
+        'host': host,
+        'port': port,
+        'username': username,
+      };
+
+  factory ProxyProfile.fromJson(Map<String, dynamic> j) => ProxyProfile(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        type: enumByName(ProxyType.values, j['type'], ProxyType.socks5),
+        host: strOr(j['host'], ''),
+        port: intOr(j['port'], 1080),
+        username: strOr(j['username'], ''),
+      );
+}
+
+enum SshAuthKind { password, privateKey }
+
+class SshProfile {
+  const SshProfile({
+    required this.id,
+    required this.name,
+    required this.host,
+    this.port = 22,
+    required this.username,
+    this.authKind = SshAuthKind.privateKey,
+    this.hostKeyPin,
+  });
+
+  final String id;
+  final String name;
+  final String host;
+  final int port;
+  final String username;
+  final SshAuthKind authKind;
+  final String? hostKeyPin;
+
+  String get secretKey => 'mhrd.ssh.$id';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'host': host,
+        'port': port,
+        'username': username,
+        'authKind': authKind.name,
+        'hostKeyPin': hostKeyPin,
+      };
+
+  factory SshProfile.fromJson(Map<String, dynamic> j) => SshProfile(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        host: strOr(j['host'], ''),
+        port: intOr(j['port'], 22),
+        username: strOr(j['username'], ''),
+        authKind: enumByName(SshAuthKind.values, j['authKind'], SshAuthKind.privateKey),
+        hostKeyPin: strOrNull(j['hostKeyPin']),
+      );
+}
+
+enum PcListView { tiles, list }
+
+/// Куди йдуть Win, Alt+Tab тощо.
+enum KeyboardCapture { fullscreenOnly, always, never }
+
+class AppSettings {
+  const AppSettings({
+    this.themeId = 'graphite',
+    this.listView = PcListView.tiles,
+    this.showPreviews = true,
+    this.startFullscreen = false,
+    this.newWindowPerSession = false,
+    this.keepScreenAwake = true,
+    this.keyboardCapture = KeyboardCapture.fullscreenOnly,
+    this.lastBackupAt,
+  });
+
+  /// id вбудованої теми або власної (custom:<uuid>), або 'system'.
+  final String themeId;
+  final PcListView listView;
+  final bool showPreviews;
+  final bool startFullscreen;
+  final bool newWindowPerSession;
+  final bool keepScreenAwake;
+  final KeyboardCapture keyboardCapture;
+  final DateTime? lastBackupAt;
+
+  AppSettings copyWith({
+    String? themeId,
+    PcListView? listView,
+    bool? showPreviews,
+    bool? startFullscreen,
+    bool? newWindowPerSession,
+    bool? keepScreenAwake,
+    KeyboardCapture? keyboardCapture,
+    DateTime? lastBackupAt,
+  }) =>
+      AppSettings(
+        themeId: themeId ?? this.themeId,
+        listView: listView ?? this.listView,
+        showPreviews: showPreviews ?? this.showPreviews,
+        startFullscreen: startFullscreen ?? this.startFullscreen,
+        newWindowPerSession: newWindowPerSession ?? this.newWindowPerSession,
+        keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
+        keyboardCapture: keyboardCapture ?? this.keyboardCapture,
+        lastBackupAt: lastBackupAt ?? this.lastBackupAt,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'themeId': themeId,
+        'listView': listView.name,
+        'showPreviews': showPreviews,
+        'startFullscreen': startFullscreen,
+        'newWindowPerSession': newWindowPerSession,
+        'keepScreenAwake': keepScreenAwake,
+        'keyboardCapture': keyboardCapture.name,
+        'lastBackupAt': lastBackupAt?.toIso8601String(),
+      };
+
+  factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
+        themeId: strOr(j['themeId'], 'graphite'),
+        listView: enumByName(PcListView.values, j['listView'], PcListView.tiles),
+        showPreviews: boolOr(j['showPreviews'], true),
+        startFullscreen: boolOr(j['startFullscreen'], false),
+        newWindowPerSession: boolOr(j['newWindowPerSession'], false),
+        keepScreenAwake: boolOr(j['keepScreenAwake'], true),
+        keyboardCapture:
+            enumByName(KeyboardCapture.values, j['keyboardCapture'], KeyboardCapture.fullscreenOnly),
+        lastBackupAt: dateOrNull(j['lastBackupAt']),
+      );
+}
