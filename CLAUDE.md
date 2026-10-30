@@ -42,29 +42,24 @@ docs/SPEC.md                   специфікація (джерело прав
 .github/workflows/build.yml    тести + збірка під 4 ОС у GitHub Actions
 ```
 
-## Стан: етап 1 написано БЕЗ компілятора
+## Стан і пріоритети
 
-Код першого етапу написано в середовищі, де Flutter недоступний, тому він **ще жодного разу
-не компілювався**. Перша задача — довести його до чистої збірки:
-
-1. `flutter --version` (потрібен Flutter ≥ 3.35 stable).
-2. `flutter create --project-name mhrd --org ua.mhrd --platforms=windows,linux,macos,android .`
-   — створює платформні теки, `lib/` і `test/` не чіпає. Видали `test/widget_test.dart`,
-   якщо `flutter create` його додав (він посилається на неіснуючий `MyApp`).
-3. `flutter pub get`, потім `flutter analyze` — виправ усі помилки й попередження.
-   Можливі місця: `DropdownButtonFormField(initialValue:)` (на старішому Flutter це `value:`),
-   API пакетів `cryptography`, `file_selector`, `sqlite3`, якщо їхні версії змінилися.
-4. `flutter test`. Тести з SQLite пропускаються, якщо в системі немає бібліотеки SQLite
-   (на Windows — `sqlite3.dll`); на CI вона ставиться через apt.
-5. `flutter run -d windows` (або linux/macos) — перевір вручну: додати ПК, акаунти, групи,
-   пошук, плитки/список, імпорт `.rdp`, імпорт WireGuard `.conf`, бекап туди й назад, теми.
-6. Закоміть платформні теки разом із виправленнями.
+- Етап 1 компілюється: `flutter analyze` чистий, `flutter test` проходить, збірки
+  `flutter build windows` і `flutter build apk` працюють, вручну перевірено на Windows.
+- **Порядок платформ:** спершу все робимо й перевіряємо на **Windows**, потім переносимо на
+  **Android**. Mac у власника немає: Linux і macOS збирає лише GitHub Actions
+  (теки `linux/`, `macos/` у репозиторії не тримаємо — CI створює їх сам).
+- Середовище розробки (Windows): Flutter у `C:\src\flutter`, JDK 17 (Temurin), Android SDK у
+  `%LOCALAPPDATA%\Android\Sdk`, VS Build Tools 2022 з C++ і **ATL** (без ATL не збирається
+  `flutter_secure_storage_windows`). `sdkmanager` у новому SDK замінено утилітою `android`:
+  пакети ставимо `android --no-metrics sdk install ndk/<версія>` (через `/`, не `;`).
 
 ## Відкриті задачі етапу 1
 
-- [ ] `LICENSE` — повний текст GNU AGPLv3 (https://www.gnu.org/licenses/agpl-3.0.txt).
-- [ ] Шрифти IBM Plex Sans/Mono, Manrope, Space Grotesk, JetBrains Mono (усі OFL) у
-      `assets/fonts/` + секція `fonts:` у `pubspec.yaml` (назви сімейств — як у `MhrdTokens`).
+- [x] `LICENSE` — повний текст GNU AGPLv3 (https://www.gnu.org/licenses/agpl-3.0.txt).
+- [x] Шрифти IBM Plex Sans/Mono, Manrope, JetBrains Mono (OFL, статичні 400/500/600) у
+      `assets/fonts/`, ліцензії в `assets/fonts/licenses/` і в `LicenseRegistry` (`main.dart`).
+- [ ] Space Grotesk (тема «Нічний бурштин») **не має кирилиці** — потрібна заміна, вирішує власник.
 - [ ] macOS: у `macos/Runner/*.entitlements` додати `com.apple.security.network.client`
       (вихідні з'єднання) і доступ до Keychain для `flutter_secure_storage`.
 - [ ] Android: `minSdk` не нижче 23, дозвіл `INTERNET`; збереження файлів через SAF
