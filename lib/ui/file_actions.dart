@@ -5,14 +5,17 @@ import 'package:file_selector/file_selector.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../l10n/l10n.dart';
+
 /// Обгортки над діалогами файлів. На платформах без діалогу збереження (Android)
 /// файл кладеться в теку документів застосунку, а шлях повертається для показу.
 
-const backupTypes = [XTypeGroup(label: 'Бекап MHRD', extensions: ['rdpbackup'])];
-const shareTypes = [XTypeGroup(label: 'Експорт MHRD', extensions: ['json'])];
-const rdpTypes = [XTypeGroup(label: 'Файли RDP', extensions: ['rdp'])];
-const wgTypes = [XTypeGroup(label: 'Конфігурація WireGuard', extensions: ['conf'])];
-const themeTypes = [XTypeGroup(label: 'Тема MHRD', extensions: ['mhrd-theme', 'json'])];
+List<XTypeGroup> backupTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeBackup, extensions: const ['rdpbackup'])];
+List<XTypeGroup> shareTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeShare, extensions: const ['json'])];
+List<XTypeGroup> rdpTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeRdp, extensions: const ['rdp'])];
+List<XTypeGroup> wgTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeWireGuard, extensions: const ['conf'])];
+List<XTypeGroup> themeTypes(AppLocalizations l) =>
+    [XTypeGroup(label: l.fileTypeTheme, extensions: const ['mhrd-theme', 'json'])];
 
 /// Зберігає байти у файл, який обере користувач. Повертає шлях або null, якщо скасовано.
 Future<String?> saveBytes(Uint8List bytes, String suggestedName, List<XTypeGroup> types) async {

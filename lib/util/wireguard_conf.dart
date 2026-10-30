@@ -1,3 +1,11 @@
+enum WireGuardConfError { noPrivateKey, noPeer }
+
+/// Помилка розбору .conf; текст для людей складає UI за [error].
+class WireGuardConfException extends FormatException {
+  WireGuardConfException(this.error) : super('wireguard: ${error.name}');
+  final WireGuardConfError error;
+}
+
 /// Розбір стандартного файлу конфігурації WireGuard (.conf).
 /// Повертає несекретну частину окремо від секретів, щоб секрети пішли в сховище.
 class WireGuardConf {
@@ -37,10 +45,10 @@ WireGuardConf parseWireGuardConf(String text) {
 
   final privateKey = iface['privatekey'];
   if (privateKey == null || privateKey.isEmpty) {
-    throw const FormatException('У файлі немає PrivateKey у секції [Interface].');
+    throw WireGuardConfException(WireGuardConfError.noPrivateKey);
   }
   if (peer['publickey'] == null || peer['endpoint'] == null) {
-    throw const FormatException('У файлі немає секції [Peer] з PublicKey і Endpoint.');
+    throw WireGuardConfException(WireGuardConfError.noPeer);
   }
 
   List<String> list(String? v) =>

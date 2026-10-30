@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
 import '../../models/connection.dart';
 import '../../models/entities.dart';
 import '../../storage/repository.dart';
@@ -26,22 +27,22 @@ class PcActions {
   final void Function(Connection c) delete;
 }
 
-String routeLabel(Repository repo, Connection c) {
+String routeLabel(AppLocalizations l, Repository repo, Connection c) {
   final base = switch (c.route) {
-    RouteKind.direct => 'Напряму',
-    RouteKind.tunnel => repo.tunnels[c.routeRefId]?.name ?? 'Тунель (не знайдено)',
-    RouteKind.proxy => repo.proxies[c.routeRefId]?.name ?? 'Проксі (не знайдено)',
-    RouteKind.ssh => repo.ssh[c.routeRefId]?.name ?? 'SSH (не знайдено)',
+    RouteKind.direct => l.routeDirect,
+    RouteKind.tunnel => repo.tunnels[c.routeRefId]?.name ?? l.routeTunnelMissing,
+    RouteKind.proxy => repo.proxies[c.routeRefId]?.name ?? l.routeProxyMissing,
+    RouteKind.ssh => repo.ssh[c.routeRefId]?.name ?? l.routeSshMissing,
   };
   final gw = repo.gateways[c.gatewayId];
-  return gw == null ? base : (c.route == RouteKind.direct ? 'RD Gateway · ${gw.label}' : '$base + шлюз');
+  return gw == null ? base : (c.route == RouteKind.direct ? l.routeGateway(gw.label) : l.routeWithGateway(base));
 }
 
-String accountLabel(Repository repo, Connection c) {
+String accountLabel(AppLocalizations l, Repository repo, Connection c) {
   final creds = c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
-  if (creds.isEmpty) return 'Питати щоразу';
+  if (creds.isEmpty) return l.credAskEveryTime;
   if (creds.length == 1) return creds.first.username;
-  return '${creds.length} акаунти';
+  return l.accountsCount(creds.length);
 }
 
 /// Плитка ПК (вигляд «Плитки»).
@@ -62,6 +63,7 @@ class _PcTileState extends State<PcTile> {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final c = widget.connection;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -86,7 +88,7 @@ class _PcTileState extends State<PcTile> {
                 color: t.surfaceRaised.withValues(alpha: 0.6),
                 child: Stack(children: [
                   Center(child: Icon(Icons.desktop_windows_outlined, size: 40, color: t.textMuted)),
-                  Positioned(left: 10, top: 10, child: _StatusChip(label: 'Не підключено', color: t.textMuted)),
+                  Positioned(left: 10, top: 10, child: _StatusChip(label: l.statusNotConnected, color: t.textMuted)),
                 ]),
               ),
               Padding(
@@ -108,8 +110,8 @@ class _PcTileState extends State<PcTile> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
                 child: Wrap(spacing: 6, runSpacing: 6, children: [
-                  Tag(text: routeLabel(widget.repo, c)),
-                  Tag(text: accountLabel(widget.repo, c)),
+                  Tag(text: routeLabel(l, widget.repo, c)),
+                  Tag(text: accountLabel(l, widget.repo, c)),
                 ]),
               ),
             ],
@@ -131,6 +133,7 @@ class PcRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final c = connection;
     return Material(
       color: t.surface,
@@ -152,10 +155,10 @@ class PcRow extends StatelessWidget {
                 Text(c.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.mono),
               ]),
             ),
-            Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: Tag(text: routeLabel(repo, c)))),
+            Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: Tag(text: routeLabel(l, repo, c)))),
             Expanded(
               flex: 2,
-              child: Text(accountLabel(repo, c),
+              child: Text(accountLabel(l, repo, c),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.textMuted, fontSize: 13)),
             ),
             PcMenu(connection: c, repo: repo, actions: actions),
@@ -176,10 +179,11 @@ class PcMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final c = connection;
     final creds = c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
     return PopupMenuButton<String>(
-      tooltip: 'Більше дій',
+      tooltip: l.moreActions,
       icon: Icon(Icons.more_horiz, color: context.mhrd.textMuted),
       onSelected: (v) {
         if (v.startsWith('as:')) {
@@ -204,17 +208,17 @@ class PcMenu extends StatelessWidget {
         }
       },
       itemBuilder: (_) => [
-        const PopupMenuItem(value: 'connect', child: Text('Підключитись')),
+        PopupMenuItem(value: 'connect', child: Text(l.connect)),
         for (final cr in creds.length > 1 ? creds : const <Credential>[])
-          PopupMenuItem(value: 'as:${cr.id}', child: Text('Підключитись як ${cr.label}')),
+          PopupMenuItem(value: 'as:${cr.id}', child: Text(l.connectAs(cr.label))),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'edit', child: Text('Редагувати')),
-        const PopupMenuItem(value: 'dup', child: Text('Дублювати')),
-        const PopupMenuItem(value: 'rdp', child: Text('Експортувати .rdp')),
-        const PopupMenuItem(value: 'move', child: Text('Перемістити в групу')),
-        if (c.wakeOnLan != null) const PopupMenuItem(value: 'wake', child: Text('Розбудити (Wake-on-LAN)')),
+        PopupMenuItem(value: 'edit', child: Text(l.edit)),
+        PopupMenuItem(value: 'dup', child: Text(l.duplicate)),
+        PopupMenuItem(value: 'rdp', child: Text(l.exportRdp)),
+        PopupMenuItem(value: 'move', child: Text(l.moveToGroup)),
+        if (c.wakeOnLan != null) PopupMenuItem(value: 'wake', child: Text(l.wakeOnLan)),
         const PopupMenuDivider(),
-        const PopupMenuItem(value: 'delete', child: Text('Видалити')),
+        PopupMenuItem(value: 'delete', child: Text(l.delete)),
       ],
     );
   }

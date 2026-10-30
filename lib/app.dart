@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'backup/auto_backup.dart';
+import 'l10n/l10n.dart';
 import 'sessions/session_manager.dart';
 import 'storage/repository.dart';
 import 'theme/mhrd_theme.dart';
@@ -49,10 +50,14 @@ class MhrdApp extends StatelessWidget {
         builder: (context, _) {
           final platform = MediaQuery.platformBrightnessOf(context);
           final tokens = repo.themeFor(platform);
+          final lang = repo.settings.language;
           return MaterialApp(
             title: 'MHRD',
             debugShowCheckedModeBanner: false,
             theme: tokens.toThemeData(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: supportedLocales,
+            locale: lang == 'system' ? null : Locale(lang),
             builder: (context, child) => MediaQuery(
               data: MediaQuery.of(context).copyWith(
                 textScaler: TextScaler.linear(tokens.textScale),

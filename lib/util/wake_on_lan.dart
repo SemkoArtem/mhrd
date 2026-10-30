@@ -7,6 +7,15 @@ import '../models/connection.dart';
 /// по UDP на широкомовну адресу. Працює в тій самій локальній мережі або через роутер,
 /// що пропускає спрямований broadcast (наприклад, 192.168.1.255); через тунелі — ні.
 
+enum WakeOnLanError { invalidMac, invalidBroadcast }
+
+/// Некоректні дані Wake-on-LAN; текст для людей складає UI за [error] і [value].
+class WakeOnLanException extends FormatException {
+  WakeOnLanException(this.error, this.value) : super('wake-on-lan: ${error.name}: $value');
+  final WakeOnLanError error;
+  final String value;
+}
+
 final _macSeparated = RegExp(r'^[0-9a-f]{2}([:-])(?:[0-9a-f]{2}\1){4}[0-9a-f]{2}$', caseSensitive: false);
 final _macPlain = RegExp(r'^[0-9a-f]{12}$', caseSensitive: false);
 
@@ -31,13 +40,13 @@ Uint8List magicPacket(List<int> mac) {
 }
 
 /// Надсилає магічний пакет кілька разів (UDP може загубитися).
-/// Кидає [FormatException] з людським текстом або [SocketException], якщо мережі немає.
+/// Кидає [WakeOnLanException] або [SocketException], якщо мережі немає.
 Future<void> sendWakeOnLan(WakeOnLan w, {int repeat = 3}) async {
   final mac = parseMac(w.mac);
-  if (mac == null) throw FormatException('Некоректна MAC-адреса: ${w.mac}');
+  if (mac == null) throw WakeOnLanException(WakeOnLanError.invalidMac, w.mac);
   final target = InternetAddress.tryParse(w.broadcast);
   if (target == null || target.type != InternetAddressType.IPv4) {
-    throw FormatException('Некоректна широкомовна адреса: ${w.broadcast}');
+    throw WakeOnLanException(WakeOnLanError.invalidBroadcast, w.broadcast);
   }
   final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
   try {

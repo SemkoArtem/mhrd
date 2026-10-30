@@ -1,0 +1,997 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get yes => 'Yes';
+
+  @override
+  String get no => 'No';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get add => 'Add';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get open => 'Open';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get export => 'Export';
+
+  @override
+  String get import => 'Import';
+
+  @override
+  String get always => 'Always';
+
+  @override
+  String get never => 'Never';
+
+  @override
+  String get disabled => 'Off.';
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get nameOptional => 'Name (optional)';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get showPassword => 'Show password';
+
+  @override
+  String get hidePassword => 'Hide password';
+
+  @override
+  String get settings => 'Settings';
+
+  @override
+  String get groups => 'Groups';
+
+  @override
+  String get accounts => 'Accounts';
+
+  @override
+  String get savedPcs => 'Saved PCs';
+
+  @override
+  String get invalidAddress => 'Invalid address';
+
+  @override
+  String savedTo(String path) {
+    return 'Saved: $path';
+  }
+
+  @override
+  String pcCount(int count) {
+    return 'PCs: $count';
+  }
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get languageSystem => 'System default';
+
+  @override
+  String get backupPasswordLabel => 'Backup password';
+
+  @override
+  String get repeatPassword => 'Repeat password';
+
+  @override
+  String get backupPasswordWarning =>
+      'The backup cannot be opened without this password. It cannot be recovered.';
+
+  @override
+  String get passwordTooShort => 'At least 8 characters';
+
+  @override
+  String get passwordsDontMatch => 'Passwords don\'t match';
+
+  @override
+  String get credNewTitle => 'New account';
+
+  @override
+  String get credTitle => 'Account';
+
+  @override
+  String get credUser => 'User name';
+
+  @override
+  String get credUserHelper => 'user, DOMAIN\\user or user@domain';
+
+  @override
+  String get credUserRequired => 'Enter a user name';
+
+  @override
+  String get credSavePassword => 'Save password';
+
+  @override
+  String get credAskEveryTime => 'Ask every time';
+
+  @override
+  String get credNewPassword => 'New password (empty = keep current)';
+
+  @override
+  String get credStoredNote =>
+      'The password is kept in this device\'s system credential store.';
+
+  @override
+  String get routeDirect => 'Direct';
+
+  @override
+  String get routeTunnelMissing => 'Tunnel (not found)';
+
+  @override
+  String get routeProxyMissing => 'Proxy (not found)';
+
+  @override
+  String get routeSshMissing => 'SSH (not found)';
+
+  @override
+  String routeGateway(String name) {
+    return 'RD Gateway · $name';
+  }
+
+  @override
+  String routeWithGateway(String route) {
+    return '$route + gateway';
+  }
+
+  @override
+  String accountsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count accounts',
+      one: '$count account',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get statusNotConnected => 'Not connected';
+
+  @override
+  String get moreActions => 'More actions';
+
+  @override
+  String get connect => 'Connect';
+
+  @override
+  String connectAs(String name) {
+    return 'Connect as $name';
+  }
+
+  @override
+  String get duplicate => 'Duplicate';
+
+  @override
+  String get exportRdp => 'Export .rdp';
+
+  @override
+  String get moveToGroup => 'Move to group';
+
+  @override
+  String get wakeOnLan => 'Wake up (Wake-on-LAN)';
+
+  @override
+  String copyOf(String name) {
+    return '$name (copy)';
+  }
+
+  @override
+  String get invalidAddressExamples =>
+      'Invalid address. Examples: 10.0.0.5, srv.local:3390, [fd00::5]:3389';
+
+  @override
+  String connectingTo(String address) {
+    return 'Connecting to $address…';
+  }
+
+  @override
+  String get saveThisPc => 'Save this PC';
+
+  @override
+  String deletePcTitle(String name) {
+    return 'Delete “$name”?';
+  }
+
+  @override
+  String importedPcs(int count) {
+    return 'PCs imported: $count';
+  }
+
+  @override
+  String importedWithErrors(int count, String errors) {
+    return 'Imported: $count. Errors: $errors';
+  }
+
+  @override
+  String get rdpNoAddress => 'the file has no valid address (full address)';
+
+  @override
+  String wakeSent(String mac) {
+    return 'Wake-up signal sent to $mac. A PC usually starts within 10–60 s.';
+  }
+
+  @override
+  String wakeFailed(String error) {
+    return 'Could not send the signal: $error';
+  }
+
+  @override
+  String invalidMac(String value) {
+    return 'Invalid MAC address: $value';
+  }
+
+  @override
+  String invalidBroadcast(String value) {
+    return 'Invalid broadcast address: $value';
+  }
+
+  @override
+  String engineMissing(String name) {
+    return 'The RDP engine is not connected yet — that\'s stage 2. The “$name” profile is saved; everything else already works.';
+  }
+
+  @override
+  String get allPcs => 'All PCs';
+
+  @override
+  String get recent => 'Recent';
+
+  @override
+  String get quickConnectHint => 'Quick connect: PC address';
+
+  @override
+  String get addPc => 'Add PC';
+
+  @override
+  String get importRdpFiles => 'Import .rdp files';
+
+  @override
+  String get computers => 'Computers';
+
+  @override
+  String get activeTunnels => 'Active tunnels';
+
+  @override
+  String get noTunnelsYet => 'None. Tunnels arrive in stage 4.';
+
+  @override
+  String get searchHint => 'Name, address, tag';
+
+  @override
+  String get viewTiles => 'Tiles';
+
+  @override
+  String get viewList => 'List';
+
+  @override
+  String get nothingFound => 'Nothing found';
+
+  @override
+  String get nothingFoundHint => 'Try a different name, address or tag.';
+
+  @override
+  String get emptyTitle => 'Nothing here yet';
+
+  @override
+  String get emptyHint =>
+      'Add your first PC, import .rdp files or restore a backup in Settings.';
+
+  @override
+  String get editPcTitle => 'Edit PC';
+
+  @override
+  String get addressRequired =>
+      'Enter an address: 10.0.0.5, srv.local:3390 or [fd00::5]:3389';
+
+  @override
+  String get macFormat => 'A MAC address looks like AA:BB:CC:DD:EE:FF';
+
+  @override
+  String get broadcastFormat =>
+      'The broadcast address must be IPv4, e.g. 192.168.1.255';
+
+  @override
+  String get tabGeneral => 'General';
+
+  @override
+  String get tabDisplay => 'Display';
+
+  @override
+  String get tabDevices => 'Devices';
+
+  @override
+  String get tabAdvanced => 'Advanced';
+
+  @override
+  String get tabTheme => 'Theme';
+
+  @override
+  String get tabRoutes => 'Routes';
+
+  @override
+  String get tabBackup => 'Backup';
+
+  @override
+  String get pcAddress => 'PC address';
+
+  @override
+  String get pcAddressHint => 'Name, IP or name:port';
+
+  @override
+  String get nameHelper => 'If empty, the address is shown';
+
+  @override
+  String get group => 'Group';
+
+  @override
+  String get noAccountsHint =>
+      'Ask for user name and password on every connection.';
+
+  @override
+  String get defaultAccount => 'Default';
+
+  @override
+  String get availableInConnectAs => 'Available in “Connect as…”';
+
+  @override
+  String get removeFromPc => 'Remove from this PC';
+
+  @override
+  String get addSavedAccount => 'Add saved account';
+
+  @override
+  String get route => 'Route';
+
+  @override
+  String get routeHow => 'How to connect';
+
+  @override
+  String get routeViaTunnel =>
+      'Through a built-in tunnel (WireGuard, OpenVPN…)';
+
+  @override
+  String get routeViaProxy => 'Through a proxy';
+
+  @override
+  String get routeViaSsh => 'Through an SSH tunnel';
+
+  @override
+  String get noRouteProfiles =>
+      'No profiles yet. Add one in Settings → Routes.';
+
+  @override
+  String get profile => 'Profile';
+
+  @override
+  String get noGateway => 'No gateway';
+
+  @override
+  String get bypassGatewayLocal => 'Bypass the gateway for local addresses';
+
+  @override
+  String get sectionConnection => 'Connection';
+
+  @override
+  String get reconnectOnDrop => 'Reconnect if the connection drops';
+
+  @override
+  String get adminSession => 'Administrative session';
+
+  @override
+  String get adminSessionHint => 'Connect to the server\'s console session';
+
+  @override
+  String get swapMouse => 'Swap mouse buttons';
+
+  @override
+  String get useAllMonitors => 'Use all monitors';
+
+  @override
+  String get startFullscreen => 'Start in full screen';
+
+  @override
+  String get asInGeneralSettings => 'As in general settings';
+
+  @override
+  String get onWindowResize => 'When the window is resized';
+
+  @override
+  String get resizeChangeResolution => 'Change resolution';
+
+  @override
+  String get resizeScale => 'Scale';
+
+  @override
+  String get resizeNone => 'Keep as is';
+
+  @override
+  String get colorDepth => 'Color depth';
+
+  @override
+  String get color32 => 'Highest (32 bit)';
+
+  @override
+  String get color24 => 'High (24 bit)';
+
+  @override
+  String get color16 => 'Medium (16 bit) — less traffic';
+
+  @override
+  String get color15 => 'Low (15 bit)';
+
+  @override
+  String get remoteScale => 'Scale of items on the remote PC';
+
+  @override
+  String get hiDpi => 'Full sharpness on Retina / HiDPI';
+
+  @override
+  String get hiDpiWarning => 'About four times more traffic';
+
+  @override
+  String get clipboard => 'Clipboard';
+
+  @override
+  String get clipboardHint => 'Text and images both ways';
+
+  @override
+  String get microphone => 'Microphone';
+
+  @override
+  String get sound => 'Sound';
+
+  @override
+  String get soundLocal => 'On this device';
+
+  @override
+  String get soundRemote => 'On the remote PC';
+
+  @override
+  String get soundOff => 'Don\'t play';
+
+  @override
+  String get folders => 'Folders';
+
+  @override
+  String get noFolders => 'No folders are shared with the remote PC.';
+
+  @override
+  String get readOnly => 'Read-only';
+
+  @override
+  String get removeFolder => 'Remove folder';
+
+  @override
+  String get addFolder => 'Add folder';
+
+  @override
+  String get tags => 'Tags';
+
+  @override
+  String get tagsHelper => 'Comma-separated: office, accounting, servers';
+
+  @override
+  String get wolMac => 'MAC address for Wake-on-LAN';
+
+  @override
+  String get wolMacHelper => 'To wake the PC from the “Wake up” menu item';
+
+  @override
+  String get wolBroadcast => 'Broadcast address for Wake-on-LAN (optional)';
+
+  @override
+  String get wolBroadcastHelper =>
+      'If the PC is on another subnet — its broadcast, e.g. 192.168.1.255';
+
+  @override
+  String get serverCertificate => 'Server certificate';
+
+  @override
+  String trustedFingerprint(String fingerprint) {
+    return 'Trusted fingerprint: $fingerprint';
+  }
+
+  @override
+  String get forgetCertificate => 'Forget certificate (ask again on connect)';
+
+  @override
+  String inUseTitle(String what) {
+    return '$what is in use';
+  }
+
+  @override
+  String inUseBody(String users) {
+    return 'Used by: $users.\nRemove it from there and delete?';
+  }
+
+  @override
+  String get inUseCredential => 'Account';
+
+  @override
+  String get inUseGateway => 'Gateway';
+
+  @override
+  String get inUseTunnel => 'Tunnel';
+
+  @override
+  String get inUseProxy => 'Proxy';
+
+  @override
+  String get inUseSsh => 'SSH profile';
+
+  @override
+  String gatewayUser(String name) {
+    return 'gateway $name';
+  }
+
+  @override
+  String get startSessionsFullscreen => 'Start sessions in full screen';
+
+  @override
+  String get sessionPerWindow => 'Each session in its own window';
+
+  @override
+  String get sessionPerWindowHint => 'Otherwise — tabs in the main window';
+
+  @override
+  String get keepScreenAwake => 'Keep the screen on during a session';
+
+  @override
+  String get showPreviews => 'PC thumbnails in the list';
+
+  @override
+  String get keyboardCapture =>
+      'Send Win, Alt+Tab and similar keys to the remote PC';
+
+  @override
+  String get captureFullscreenOnly => 'Only in full screen';
+
+  @override
+  String get accountsHint =>
+      'One account can be assigned to many PCs. A password change applies to all of them at once.';
+
+  @override
+  String get askPassword => 'Ask for password';
+
+  @override
+  String get passwordSaved => 'Password saved';
+
+  @override
+  String get addAccount => 'Add account';
+
+  @override
+  String get gatewayNew => 'New gateway';
+
+  @override
+  String get gatewayTitle => 'Gateway';
+
+  @override
+  String get gatewayAddress => 'Gateway address';
+
+  @override
+  String get gatewayAccount => 'Account for the gateway';
+
+  @override
+  String get gatewaySameAsPc => 'Same as for the PC';
+
+  @override
+  String get addGateway => 'Add gateway';
+
+  @override
+  String wgImported(String name) {
+    return 'Tunnel “$name” imported. Keys are saved in the system credential store.';
+  }
+
+  @override
+  String get wgImportedExtraPeers =>
+      'Imported. The file has several [Peer] sections — only the first is used for now.';
+
+  @override
+  String get wgNoPrivateKey =>
+      'The file has no PrivateKey in the [Interface] section.';
+
+  @override
+  String get wgNoPeer =>
+      'The file has no [Peer] section with PublicKey and Endpoint.';
+
+  @override
+  String get builtInTunnels => 'Built-in tunnels';
+
+  @override
+  String get tunnelsHint =>
+      'The tunnel runs inside MHRD: no administrator rights, and it doesn\'t interfere with another VPN. Connecting through tunnels arrives in stage 4.';
+
+  @override
+  String get importWireGuard => 'Import WireGuard .conf';
+
+  @override
+  String get proxyAndSsh => 'Proxy and SSH';
+
+  @override
+  String get comingInStage6 => 'Coming in stage 6.';
+
+  @override
+  String get groupNew => 'New group';
+
+  @override
+  String get groupRename => 'Rename group';
+
+  @override
+  String groupNestInto(String name) {
+    return 'Put “$name” into…';
+  }
+
+  @override
+  String get topLevel => 'Top level';
+
+  @override
+  String groupMoveContentsTo(String name) {
+    return 'Where should the contents of “$name” go?';
+  }
+
+  @override
+  String groupDeleteTitle(String name) {
+    return 'Delete group “$name”?';
+  }
+
+  @override
+  String defaultGroupInfo(int count) {
+    return 'Default group · PCs: $count';
+  }
+
+  @override
+  String get nestIntoOther => 'Put into another group';
+
+  @override
+  String get groupCycle => 'A group cannot be nested inside itself.';
+
+  @override
+  String get backupPasswordTitle => 'Backup password';
+
+  @override
+  String get encryptingBackup => 'Encrypting backup…';
+
+  @override
+  String backupSaved(String path) {
+    return 'Backup saved: $path';
+  }
+
+  @override
+  String get decrypting => 'Decrypting…';
+
+  @override
+  String get restoreHow => 'How to restore?';
+
+  @override
+  String get restoreMerge => 'Merge with current data';
+
+  @override
+  String get restoreReplace =>
+      'Replace everything (current data is saved to a safety copy first)';
+
+  @override
+  String get restoreConfirmTitle => 'Restore backup?';
+
+  @override
+  String restorePreview(int added, int updated, int removed) {
+    return 'PCs to add: $added, update: $updated, delete: $removed.';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get restored => 'Backup restored.';
+
+  @override
+  String savedWithoutPasswords(String path) {
+    return 'Saved without passwords: $path';
+  }
+
+  @override
+  String get shareImported => 'Imported. Enter passwords on first connection.';
+
+  @override
+  String get fullBackup => 'Full backup';
+
+  @override
+  String get fullBackupHint =>
+      'All PCs, accounts with passwords, gateways, tunnels with keys, groups, themes and settings. The file is encrypted with your password (Argon2id + AES-256-GCM) and opens on any OS.';
+
+  @override
+  String get backupNever => 'No backup has been made yet.';
+
+  @override
+  String backupLast(String date) {
+    return 'Last backup: $date';
+  }
+
+  @override
+  String get saveBackup => 'Save backup';
+
+  @override
+  String get restoreFromBackup => 'Restore from backup';
+
+  @override
+  String get sharePcList => 'Share PC list';
+
+  @override
+  String get sharePcListHint =>
+      'A file without any passwords or keys — to give the list to a colleague.';
+
+  @override
+  String get backupNotMhrdFile => 'This is not an MHRD backup file.';
+
+  @override
+  String get backupCorrupted => 'The backup file is damaged.';
+
+  @override
+  String get backupWrongPassword => 'Wrong password or the file is damaged.';
+
+  @override
+  String get backupFromNewer =>
+      'The backup was made by a newer MHRD version. Please update the app.';
+
+  @override
+  String get notShareFile => 'This is not an MHRD export file.';
+
+  @override
+  String get autoBackup => 'Automatic backup';
+
+  @override
+  String get autoBackupHint =>
+      'After changes, at most once an hour — to a folder of your choice, e.g. one synced to the cloud. The last 10 copies are kept. The automatic backup password is kept in this device\'s system credential store.';
+
+  @override
+  String get autoBackupPasswordTitle => 'Automatic backup password';
+
+  @override
+  String get autoBackupFirstCopy => 'Making the first copy…';
+
+  @override
+  String autoBackupEnabled(String path) {
+    return 'Automatic backup is on. First copy: $path';
+  }
+
+  @override
+  String get autoBackupMaking => 'Making a copy…';
+
+  @override
+  String autoBackupSaved(String path) {
+    return 'Copy saved: $path';
+  }
+
+  @override
+  String get autoBackupBusy => 'A copy is already being made.';
+
+  @override
+  String get autoBackupNone => 'No copies yet.';
+
+  @override
+  String autoBackupLast(String date) {
+    return 'Last copy: $date';
+  }
+
+  @override
+  String get enableEllipsis => 'Turn on…';
+
+  @override
+  String get autoBackupNow => 'Make a copy now';
+
+  @override
+  String get autoBackupChange => 'Change folder and password';
+
+  @override
+  String get disable => 'Turn off';
+
+  @override
+  String autoBackupWriteFailed(String path, String reason) {
+    return 'Could not write a copy to $path: $reason';
+  }
+
+  @override
+  String get autoBackupNoPassword =>
+      'The automatic backup password was not found in the system credential store. Turn automatic backup on again.';
+
+  @override
+  String autoBackupFailed(String error) {
+    return 'Automatic backup failed: $error';
+  }
+
+  @override
+  String get themeGraphite => 'Graphite';
+
+  @override
+  String get themeLight => 'Light Tool';
+
+  @override
+  String get themeAmber => 'Night Amber';
+
+  @override
+  String themeMine(String name) {
+    return '$name (mine)';
+  }
+
+  @override
+  String get contrastWarnTitle => 'Text may be hard to read';
+
+  @override
+  String contrastWarnBody(String problems) {
+    return '$problems\n\nSave anyway?';
+  }
+
+  @override
+  String themeSaved(String path) {
+    return 'Theme saved: $path';
+  }
+
+  @override
+  String get notThemeFile => 'This is not an MHRD theme file.';
+
+  @override
+  String themeAdded(String name) {
+    return 'Theme “$name” added.';
+  }
+
+  @override
+  String get createTheme => 'Create your own theme';
+
+  @override
+  String get importTheme => 'Import theme';
+
+  @override
+  String get exportCurrentTheme => 'Export current';
+
+  @override
+  String get editCurrentTheme => 'Edit current';
+
+  @override
+  String get deleteCurrentTheme => 'Delete current';
+
+  @override
+  String get themeNameLabel => 'Theme name';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
+  String get themeLightMode => 'Light';
+
+  @override
+  String get colorBackground => 'Background';
+
+  @override
+  String get colorSurface => 'Panels';
+
+  @override
+  String get colorSurfaceRaised => 'Fields and chips';
+
+  @override
+  String get colorBorder => 'Borders';
+
+  @override
+  String get colorText => 'Text';
+
+  @override
+  String get colorTextMuted => 'Secondary text';
+
+  @override
+  String get colorAccent => 'Accent';
+
+  @override
+  String get colorOnAccent => 'Text on accent';
+
+  @override
+  String get statusConnected => 'Connected';
+
+  @override
+  String get statusReconnecting => 'Reconnecting';
+
+  @override
+  String get statusError => 'Error';
+
+  @override
+  String get radius => 'Corner radius';
+
+  @override
+  String get textSize => 'Text size';
+
+  @override
+  String get densityCompact => 'Compact';
+
+  @override
+  String get densityNormal => 'Normal';
+
+  @override
+  String get densitySpacious => 'Spacious';
+
+  @override
+  String get motionFull => 'Animations';
+
+  @override
+  String get motionEssential => 'Minimal';
+
+  @override
+  String get motionOff => 'Off';
+
+  @override
+  String contrastBad(String problems) {
+    return 'Hard to read:\n$problems';
+  }
+
+  @override
+  String get contrastFine => 'Text contrast is fine.';
+
+  @override
+  String get saveAndApply => 'Save and apply';
+
+  @override
+  String get previewPcName => 'Office — Accounting';
+
+  @override
+  String get contrastTextOnBackground => 'Text on background';
+
+  @override
+  String get contrastTextOnSurface => 'Text on panel';
+
+  @override
+  String get contrastMutedOnSurface => 'Secondary text on panel';
+
+  @override
+  String get contrastOnAccent => 'Text on accent button';
+
+  @override
+  String get contrastStatusConnected => '“Connected” status';
+
+  @override
+  String get contrastStatusError => '“Error” status';
+
+  @override
+  String contrastIssue(String label, String ratio) {
+    return '$label: $ratio : 1 (needs 4.5)';
+  }
+
+  @override
+  String get fileTypeBackup => 'MHRD backup';
+
+  @override
+  String get fileTypeShare => 'MHRD export';
+
+  @override
+  String get fileTypeRdp => 'RDP files';
+
+  @override
+  String get fileTypeWireGuard => 'WireGuard configuration';
+
+  @override
+  String get fileTypeTheme => 'MHRD theme';
+}

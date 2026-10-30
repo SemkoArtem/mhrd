@@ -8,6 +8,15 @@ enum Density { compact, normal, spacious }
 
 enum MotionLevel { full, essential, off }
 
+/// Пари «текст на фоні», які перевіряє [MhrdTokens.contrastProblems].
+enum ContrastPair { textOnBackground, textOnSurface, mutedOnSurface, onAccent, statusConnected, statusError }
+
+class ContrastIssue {
+  const ContrastIssue(this.pair, this.ratio);
+  final ContrastPair pair;
+  final double ratio;
+}
+
 /// Токени теми MHRD. Усі кольори й розміри інтерфейсу беруться ЛИШЕ звідси
 /// (через `context.mhrd`), ніколи не вписуються в екрани напряму.
 /// Див. SPEC.md → «Теми й оформлення».
@@ -146,22 +155,20 @@ class MhrdTokens extends ThemeExtension<MhrdTokens> {
   }
 
   /// Пари «текст на фоні», що мають бути читабельними (≥ 4.5 : 1).
-  /// Повертає людські описи проблем; порожній список = усе гаразд.
-  List<String> contrastProblems() {
-    final pairs = <String, (Color, Color)>{
-      'Текст на фоні': (text, background),
-      'Текст на панелі': (text, surface),
-      'Другорядний текст на панелі': (textMuted, surface),
-      'Текст на кнопці акценту': (onAccent, accent),
-      'Статус «підключено»': (ok, surface),
-      'Статус «помилка»': (error, surface),
+  /// Порожній список = усе гаразд; текст проблем складає UI.
+  List<ContrastIssue> contrastProblems() {
+    final pairs = <ContrastPair, (Color, Color)>{
+      ContrastPair.textOnBackground: (text, background),
+      ContrastPair.textOnSurface: (text, surface),
+      ContrastPair.mutedOnSurface: (textMuted, surface),
+      ContrastPair.onAccent: (onAccent, accent),
+      ContrastPair.statusConnected: (ok, surface),
+      ContrastPair.statusError: (error, surface),
     };
-    final out = <String>[];
-    pairs.forEach((label, p) {
-      final r = contrast(p.$1, p.$2);
-      if (r < 4.5) out.add('$label: ${r.toStringAsFixed(1)} : 1 (треба 4.5)');
-    });
-    return out;
+    return [
+      for (final e in pairs.entries)
+        if (contrast(e.value.$1, e.value.$2) < 4.5) ContrastIssue(e.key, contrast(e.value.$1, e.value.$2)),
+    ];
   }
 
   // ── Серіалізація (.mhrd-theme) ──────────────────────────────────

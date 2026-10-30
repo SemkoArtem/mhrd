@@ -9,6 +9,16 @@ import '../models/json_util.dart';
 import '../storage/repository.dart';
 import 'backup_service.dart';
 
+enum AutoBackupFailureKind { writeFailed, noPassword, other }
+
+/// Чому остання спроба не вдалася; текст для людей складає UI (переклади).
+class AutoBackupFailure {
+  const AutoBackupFailure(this.kind, {this.path = '', this.detail = ''});
+  final AutoBackupFailureKind kind;
+  final String path;
+  final String detail;
+}
+
 /// Автобекап (SPEC → «Безпека, бекап і відновлення»): після змін, не частіше разу на годину,
 /// у вибрану теку (наприклад, синхронізовану з хмарою); зберігаються останні [keep] копій.
 ///
@@ -44,7 +54,7 @@ class AutoBackup extends ChangeNotifier {
   DateTime? _lastAt;
   DateTime? _lastAttemptAt;
   bool _pending = false;
-  String? _lastError;
+  AutoBackupFailure? _lastError;
   Timer? _timer;
   bool _running = false;
 
@@ -52,7 +62,7 @@ class AutoBackup extends ChangeNotifier {
   String? get dir => _dir;
   bool get enabled => _dir != null;
   DateTime? get lastAt => _lastAt;
-  String? get lastError => _lastError;
+  AutoBackupFailure? get lastError => _lastError;
 
   /// Є зміни, яких ще немає в жодній копії.
   bool get pending => _pending;
@@ -130,9 +140,7 @@ class AutoBackup extends ChangeNotifier {
     _lastAttemptAt = now;
     try {
       final pw = await repo.secrets.read(passwordKey);
-      if (pw == null || pw.isEmpty) {
-        throw StateError('Пароль автобекапу не знайдено в системному сховищі. Увімкніть автобекап заново.');
-      }
+      if (pw == null || pw.isEmpty) throw const _NoPassword();
       final bytes = await _service.exportEncrypted(pw);
       final file = File(p.join(dir, 'mhrd-auto-${_stamp(now)}.rdpbackup'));
       final tmp = File('${file.path}.tmp');
@@ -145,10 +153,12 @@ class AutoBackup extends ChangeNotifier {
     } catch (e) {
       _pending = true;
       _lastError = switch (e) {
-        FileSystemException(:final path, :final osError, :final message) =>
-          'Не вдалося записати копію в ${path ?? dir}: ${osError?.message ?? message}',
-        StateError(:final message) => message,
-        _ => 'Автобекап не вдався: $e',
+        FileSystemException(:final path, :final osError, :final message) => AutoBackupFailure(
+            AutoBackupFailureKind.writeFailed,
+            path: path ?? dir,
+            detail: osError?.message ?? message),
+        _NoPassword() => const AutoBackupFailure(AutoBackupFailureKind.noPassword),
+        _ => AutoBackupFailure(AutoBackupFailureKind.other, detail: '$e'),
       };
       return null;
     } finally {
@@ -187,4 +197,8 @@ class AutoBackup extends ChangeNotifier {
     repo.removeListener(_onRepoChanged);
     super.dispose();
   }
+}
+
+class _NoPassword implements Exception {
+  const _NoPassword();
 }

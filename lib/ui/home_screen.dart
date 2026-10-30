@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../sessions/session_manager.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -46,24 +48,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Дії ─────────────────────────────────────────────────────────
 
+  String? _blockText(ConnectBlock? b, Connection c) => switch (b) {
+        ConnectBlock.engineMissing => context.l10n.engineMissing(c.displayName),
+        null => null,
+      };
+
   void _connect(Connection c, {String? credentialId}) {
-    final msg = AppScope.of(context).sessions.connect(c, credentialId: credentialId);
+    final msg = _blockText(AppScope.of(context).sessions.connect(c, credentialId: credentialId), c);
     if (msg != null) toast(context, msg);
   }
 
   void _quickConnect() {
+    final l = context.l10n;
     final addr = parseAddress(_quick.text);
     if (addr == null) {
-      toast(context, 'Некоректна адреса. Приклади: 10.0.0.5, srv.local:3390, [fd00::5]:3389');
+      toast(context, l.invalidAddressExamples);
       return;
     }
     final now = DateTime.now();
     final temp = Connection(id: newId(), name: '', host: addr.host, port: addr.port, createdAt: now, updatedAt: now);
-    final msg = AppScope.of(context).sessions.connect(temp);
+    final msg = _blockText(AppScope.of(context).sessions.connect(temp), temp);
     toast(
       context,
-      msg ?? 'Підключення до ${temp.address}…',
-      action: SnackBarAction(label: 'Зберегти цей ПК', onPressed: () => _edit(temp, isNew: true)),
+      msg ?? l.connectingTo(temp.address),
+      action: SnackBarAction(label: l.saveThisPc, onPressed: () => _edit(temp, isNew: true)),
     );
   }
 
@@ -76,29 +84,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _delete(Connection c) async {
-    if (await confirm(context, title: 'Видалити «${c.displayName}»?', ok: 'Видалити', danger: true)) {
+    final l = context.l10n;
+    if (await confirm(context, title: l.deletePcTitle(c.displayName), ok: l.delete, danger: true)) {
       repo.deleteConnections([c.id]);
     }
   }
 
   Future<void> _move(Connection c) async {
+    final l = context.l10n;
     final groups = repo.groups.values.toList()..sort((a, b) => a.name.compareTo(b.name));
-    final i = await pickOne(context,
-        title: 'Перемістити в групу', options: ['Збережені ПК', ...groups.map((g) => g.name)]);
+    final i = await pickOne(context, title: l.moveToGroup, options: [l.savedPcs, ...groups.map((g) => g.name)]);
     if (i == null) return;
     repo.saveConnection(c.copyWith(groupId: () => i == 0 ? null : groups[i - 1].id));
   }
 
   Future<void> _exportRdp(Connection c) async {
+    final l = context.l10n;
     final cred = c.credentialIds.isEmpty ? null : repo.credentials[c.credentialIds.first];
     final text = buildRdpFile(c, username: cred?.username, gatewayHost: repo.gateways[c.gatewayId]?.host);
     final safe = c.displayName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final path = await saveBytes(Uint8List.fromList(encodeUtf16Le(text)), '$safe.rdp', rdpTypes);
-    if (path != null && mounted) toast(context, 'Збережено: $path');
+    final path = await saveBytes(Uint8List.fromList(encodeUtf16Le(text)), '$safe.rdp', rdpTypes(l));
+    if (path != null && mounted) toast(context, l.savedTo(path));
   }
 
   Future<void> _importRdp() async {
-    final files = await openManyBytes(rdpTypes);
+    final l = context.l10n;
+    final files = await openManyBytes(rdpTypes(l));
     var ok = 0;
     final errors = <String>[];
     for (final (name, bytes) in files) {
@@ -120,24 +131,26 @@ class _HomeScreenState extends State<HomeScreen> {
         final groupId = _filter.startsWith('__') ? null : _filter;
         repo.saveConnection(conn.copyWith(groupId: () => groupId));
         ok++;
-      } on FormatException catch (e) {
-        errors.add('$name: ${e.message}');
+      } on FormatException {
+        // parseRdpFile кидає лише одну помилку: немає коректної адреси.
+        errors.add('$name: ${l.rdpNoAddress}');
       }
     }
     if (!mounted || files.isEmpty) return;
-    toast(context, errors.isEmpty ? 'Імпортовано ПК: $ok' : 'Імпортовано: $ok. Помилки: ${errors.join('; ')}');
+    toast(context, errors.isEmpty ? l.importedPcs(ok) : l.importedWithErrors(ok, errors.join('; ')));
   }
 
   Future<void> _wake(Connection c) async {
+    final l = context.l10n;
     final w = c.wakeOnLan;
     if (w == null) return;
     try {
       await sendWakeOnLan(w);
-      if (mounted) toast(context, 'Сигнал пробудження надіслано на ${w.mac}. ПК зазвичай вмикається за 10–60 с.');
-    } on FormatException catch (e) {
-      if (mounted) toast(context, e.message);
+      if (mounted) toast(context, l.wakeSent(w.mac));
+    } on WakeOnLanException catch (e) {
+      if (mounted) toast(context, l.wakeOnLanError(e));
     } on SocketException catch (e) {
-      if (mounted) toast(context, 'Не вдалося надіслати сигнал: ${e.message}');
+      if (mounted) toast(context, l.wakeFailed(e.message));
     }
   }
 
@@ -147,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
   PcActions get _actions => PcActions(
         connect: _connect,
         edit: (c) => _edit(c),
-        duplicate: (c) => repo.duplicateConnection(c),
+        duplicate: (c) => repo.duplicateConnection(c, name: context.l10n.copyOf(c.displayName)),
         exportRdp: _exportRdp,
         moveToGroup: _move,
         wake: _wake,
@@ -198,11 +211,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return out;
   }
 
-  String get _title => switch (_filter) {
-        _all => 'Усі ПК',
-        _recent => 'Нещодавні',
-        _saved => 'Збережені ПК',
-        _ => repo.groups[_filter]?.name ?? 'Усі ПК',
+  String _title(AppLocalizations l) => switch (_filter) {
+        _all => l.allPcs,
+        _recent => l.recent,
+        _saved => l.savedPcs,
+        _ => repo.groups[_filter]?.name ?? l.allPcs,
       };
 
   // ── Розмітка ────────────────────────────────────────────────────
@@ -247,13 +260,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _header(BuildContext context, bool wide) {
     final t = context.mhrd;
+    final l = context.l10n;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
       child: Row(children: [
         if (!wide)
           Builder(builder: (c) => IconButton(
-                tooltip: 'Групи',
+                tooltip: l.groups,
                 icon: const Icon(Icons.menu),
                 onPressed: () => Scaffold.of(c).openDrawer(),
               )),
@@ -275,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: InputDecoration(
                 isDense: true,
                 prefixIcon: Icon(Icons.bolt, color: t.textMuted, size: 18),
-                hintText: 'Швидке підключення: адреса ПК',
+                hintText: l.quickConnectHint,
                 suffixText: wide ? 'Ctrl K' : null,
                 suffixStyle: TextStyle(fontFamily: t.fontMono, fontSize: 11, color: t.textMuted),
               ),
@@ -285,28 +299,29 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const SizedBox(width: 12),
         PopupMenuButton<String>(
-          tooltip: 'Додати',
+          tooltip: l.add,
           onSelected: (v) => v == 'pc' ? _edit(null) : _importRdp(),
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'pc', child: Text('Додати ПК')),
-            PopupMenuItem(value: 'rdp', child: Text('Імпортувати .rdp-файли')),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: 'pc', child: Text(l.addPc)),
+            PopupMenuItem(value: 'rdp', child: Text(l.importRdpFiles)),
           ],
           child: IgnorePointer(
             child: FilledButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.add, size: 18),
-              label: Text(wide ? 'Додати' : ''),
+              label: Text(wide ? l.add : ''),
             ),
           ),
         ),
         const SizedBox(width: 8),
-        IconButton.outlined(tooltip: 'Налаштування', onPressed: _openSettings, icon: const Icon(Icons.tune)),
+        IconButton.outlined(tooltip: l.settings, onPressed: _openSettings, icon: const Icon(Icons.tune)),
       ]),
     );
   }
 
   Widget _sidebar(BuildContext context, {bool inDrawer = false}) {
     final t = context.mhrd;
+    final l = context.l10n;
     Widget item(String id, String label, int count, {int depth = 0}) {
       final active = _filter == id;
       return Padding(
@@ -357,17 +372,16 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       decoration: BoxDecoration(color: t.surface, border: Border(right: BorderSide(color: t.border))),
       child: ListView(padding: const EdgeInsets.fromLTRB(10, 4, 10, 20), children: [
-        caption("Комп'ютери"),
-        item(_all, 'Усі ПК', repo.connections.length),
-        item(_recent, 'Нещодавні', repo.connections.values.where((c) => c.lastUsed != null).length),
-        item(_saved, 'Збережені ПК', repo.countInGroup(null)),
-        if (repo.groups.isNotEmpty) caption('Групи'),
+        caption(l.computers),
+        item(_all, l.allPcs, repo.connections.length),
+        item(_recent, l.recent, repo.connections.values.where((c) => c.lastUsed != null).length),
+        item(_saved, l.savedPcs, repo.countInGroup(null)),
+        if (repo.groups.isNotEmpty) caption(l.groups),
         ...tree(null, 0),
-        caption('Активні тунелі'),
+        caption(l.activeTunnels),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text('Немає. Тунелі запрацюють на етапі 4.',
-              style: TextStyle(color: t.textMuted, fontSize: 12.5)),
+          child: Text(l.noTunnelsYet, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
         ),
       ]),
     );
@@ -375,6 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _main(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final items = _visible();
     final tiles = repo.settings.listView == PcListView.tiles;
     return Padding(
@@ -386,7 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: WrapCrossAlignment.center,
           alignment: WrapAlignment.spaceBetween,
           children: [
-            Text(_title, style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w600)),
+            Text(_title(l), style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w600)),
             Row(mainAxisSize: MainAxisSize.min, children: [
               SizedBox(
                 width: 260,
@@ -394,7 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   focusNode: _searchFocus,
                   decoration: InputDecoration(
                     isDense: true,
-                    hintText: 'Назва, адреса, тег',
+                    hintText: l.searchHint,
                     prefixIcon: Icon(Icons.search, size: 18, color: t.textMuted),
                   ),
                   onChanged: (v) => setState(() => _query = v),
@@ -403,9 +418,9 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(width: 10),
               SegmentedButton<PcListView>(
                 showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(value: PcListView.tiles, icon: Icon(Icons.grid_view, size: 18), tooltip: 'Плитки'),
-                  ButtonSegment(value: PcListView.list, icon: Icon(Icons.view_list, size: 18), tooltip: 'Список'),
+                segments: [
+                  ButtonSegment(value: PcListView.tiles, icon: const Icon(Icons.grid_view, size: 18), tooltip: l.viewTiles),
+                  ButtonSegment(value: PcListView.list, icon: const Icon(Icons.view_list, size: 18), tooltip: l.viewList),
                 ],
                 selected: {repo.settings.listView},
                 onSelectionChanged: (s) => repo.updateSettings(repo.settings.copyWith(listView: s.first)),
@@ -442,6 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _empty(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final searching = _query.trim().isNotEmpty;
     return Center(
       child: ConstrainedBox(
@@ -449,19 +465,17 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.desktop_windows_outlined, size: 48, color: t.textMuted),
           const SizedBox(height: 14),
-          Text(searching ? 'Нічого не знайдено' : 'Тут поки порожньо',
+          Text(searching ? l.nothingFound : l.emptyTitle,
               style: TextStyle(color: t.text, fontSize: 17, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text(
-            searching
-                ? 'Спробуйте іншу назву, адресу або тег.'
-                : 'Додайте перший ПК, імпортуйте .rdp-файли або відновіть бекап у налаштуваннях.',
+            searching ? l.nothingFoundHint : l.emptyHint,
             textAlign: TextAlign.center,
             style: TextStyle(color: t.textMuted),
           ),
           if (!searching) ...[
             const SizedBox(height: 18),
-            FilledButton.icon(onPressed: () => _edit(null), icon: const Icon(Icons.add), label: const Text('Додати ПК')),
+            FilledButton.icon(onPressed: () => _edit(null), icon: const Icon(Icons.add), label: Text(l.addPc)),
           ],
         ]),
       ),

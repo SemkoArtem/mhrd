@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../theme/mhrd_theme.dart';
 
 /// Дата й час для людей: 30.10.2026 20:45 (місцевий час).
@@ -15,25 +16,27 @@ void toast(BuildContext context, String text, {SnackBarAction? action}) {
     ..showSnackBar(SnackBar(content: Text(text), action: action, behavior: SnackBarBehavior.floating));
 }
 
+/// [ok] за замовчуванням — «Так».
 Future<bool> confirm(
   BuildContext context, {
   required String title,
   String? body,
-  String ok = 'Так',
+  String? ok,
   bool danger = false,
 }) async {
   final t = context.mhrd;
+  final l = context.l10n;
   final r = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
       title: Text(title),
       content: body == null ? null : Text(body),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Скасувати')),
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
         FilledButton(
           style: danger ? FilledButton.styleFrom(backgroundColor: t.error, foregroundColor: t.background) : null,
           onPressed: () => Navigator.pop(c, true),
-          child: Text(ok),
+          child: Text(ok ?? l.yes),
         ),
       ],
     ),
@@ -41,15 +44,16 @@ Future<bool> confirm(
   return r ?? false;
 }
 
-/// Одне текстове поле. Повертає null, якщо скасовано.
+/// Одне текстове поле. Повертає null, якщо скасовано. [ok] за замовчуванням — «OK».
 Future<String?> promptText(
   BuildContext context, {
   required String title,
   String label = '',
   String initial = '',
   bool obscure = false,
-  String ok = 'OK',
+  String? ok,
 }) {
+  final l = context.l10n;
   final ctrl = TextEditingController(text: initial);
   return showDialog<String>(
     context: context,
@@ -66,8 +70,8 @@ Future<String?> promptText(
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Скасувати')),
-        FilledButton(onPressed: () => Navigator.pop(c, ctrl.text), child: Text(ok)),
+        TextButton(onPressed: () => Navigator.pop(c), child: Text(l.cancel)),
+        FilledButton(onPressed: () => Navigator.pop(c, ctrl.text), child: Text(ok ?? l.ok)),
       ],
     ),
   );
@@ -75,6 +79,7 @@ Future<String?> promptText(
 
 /// Новий пароль двічі (для бекапу). Повертає null, якщо скасовано.
 Future<String?> promptNewPassword(BuildContext context, {required String title}) {
+  final l = context.l10n;
   final a = TextEditingController(), b = TextEditingController();
   String? err;
   return showDialog<String>(
@@ -86,28 +91,27 @@ Future<String?> promptNewPassword(BuildContext context, {required String title})
           width: 380,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: a, obscureText: true, autofocus: true,
-                decoration: const InputDecoration(labelText: 'Пароль бекапу')),
+                decoration: InputDecoration(labelText: l.backupPasswordLabel)),
             const SizedBox(height: 12),
             TextField(controller: b, obscureText: true,
-                decoration: InputDecoration(labelText: 'Повторіть пароль', errorText: err)),
+                decoration: InputDecoration(labelText: l.repeatPassword, errorText: err)),
             const SizedBox(height: 12),
-            Text('Без цього пароля бекап не відкрити. Його неможливо відновити.',
-                style: TextStyle(color: c.mhrd.textMuted, fontSize: 12.5)),
+            Text(l.backupPasswordWarning, style: TextStyle(color: c.mhrd.textMuted, fontSize: 12.5)),
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Скасувати')),
+          TextButton(onPressed: () => Navigator.pop(c), child: Text(l.cancel)),
           FilledButton(
             onPressed: () {
               if (a.text.length < 8) {
-                set(() => err = 'Щонайменше 8 символів');
+                set(() => err = l.passwordTooShort);
               } else if (a.text != b.text) {
-                set(() => err = 'Паролі не збігаються');
+                set(() => err = l.passwordsDontMatch);
               } else {
                 Navigator.pop(c, a.text);
               }
             },
-            child: const Text('Зберегти'),
+            child: Text(l.save),
           ),
         ],
       ),

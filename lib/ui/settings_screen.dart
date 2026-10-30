@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../app.dart';
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
+import '../l10n/l10n.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
@@ -25,23 +26,24 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final repo = AppScope.of(context).repo;
     return DefaultTabController(
       length: 6,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: t.surface,
-          title: const Text('Налаштування'),
-          bottom: const TabBar(
+          title: Text(l.settings),
+          bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
             tabs: [
-              Tab(text: 'Загальні'),
-              Tab(text: 'Тема'),
-              Tab(text: 'Облікові записи'),
-              Tab(text: 'Маршрути'),
-              Tab(text: 'Групи'),
-              Tab(text: 'Бекап'),
+              Tab(text: l.tabGeneral),
+              Tab(text: l.tabTheme),
+              Tab(text: l.accounts),
+              Tab(text: l.tabRoutes),
+              Tab(text: l.groups),
+              Tab(text: l.tabBackup),
             ],
           ),
         ),
@@ -79,10 +81,11 @@ Future<void> _guardedDelete(BuildContext context, Future<void> Function(bool for
     await del(false);
   } on InUse catch (e) {
     if (!context.mounted) return;
+    final l = context.l10n;
     final ok = await confirm(context,
-        title: '${e.what} використовується',
-        body: 'Його використовують: ${e.users.join(', ')}.\nПрибрати його звідти й видалити?',
-        ok: 'Видалити',
+        title: l.inUseTitle(l.inUseKind(e.kind)),
+        body: l.inUseBody(l.inUseUsers(e)),
+        ok: l.delete,
         danger: true);
     if (ok) await del(true);
   }
@@ -96,28 +99,44 @@ class _GeneralTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final s = repo.settings;
     void set(AppSettings x) => repo.updateSettings(x);
     return _pane([
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: DropdownButtonFormField<String>(
+          initialValue: s.language,
+          decoration: InputDecoration(labelText: l.language),
+          // Назви мов — кожна своєю мовою, щоб знайти свою навіть у чужому інтерфейсі.
+          items: [
+            DropdownMenuItem(value: 'system', child: Text(l.languageSystem)),
+            const DropdownMenuItem(value: 'uk', child: Text('Українська')),
+            const DropdownMenuItem(value: 'en', child: Text('English')),
+          ],
+          onChanged: (v) => set(s.copyWith(language: v)),
+        ),
+      ),
+      const SizedBox(height: 12),
       SwitchListTile(
         value: s.startFullscreen,
-        title: const Text('Запускати сеанси на весь екран'),
+        title: Text(l.startSessionsFullscreen),
         onChanged: (v) => set(s.copyWith(startFullscreen: v)),
       ),
       SwitchListTile(
         value: s.newWindowPerSession,
-        title: const Text('Кожен сеанс в окремому вікні'),
-        subtitle: const Text('Інакше — вкладки в головному вікні'),
+        title: Text(l.sessionPerWindow),
+        subtitle: Text(l.sessionPerWindowHint),
         onChanged: (v) => set(s.copyWith(newWindowPerSession: v)),
       ),
       SwitchListTile(
         value: s.keepScreenAwake,
-        title: const Text('Не вимикати екран під час сеансу'),
+        title: Text(l.keepScreenAwake),
         onChanged: (v) => set(s.copyWith(keepScreenAwake: v)),
       ),
       SwitchListTile(
         value: s.showPreviews,
-        title: const Text('Мініатюри ПК у списку'),
+        title: Text(l.showPreviews),
         onChanged: (v) => set(s.copyWith(showPreviews: v)),
       ),
       const SizedBox(height: 12),
@@ -125,11 +144,11 @@ class _GeneralTab extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: DropdownButtonFormField<KeyboardCapture>(
           initialValue: s.keyboardCapture,
-          decoration: const InputDecoration(labelText: 'Клавіші Win, Alt+Tab тощо надсилати на віддалений ПК'),
-          items: const [
-            DropdownMenuItem(value: KeyboardCapture.fullscreenOnly, child: Text('Лише на весь екран')),
-            DropdownMenuItem(value: KeyboardCapture.always, child: Text('Завжди')),
-            DropdownMenuItem(value: KeyboardCapture.never, child: Text('Ніколи')),
+          decoration: InputDecoration(labelText: l.keyboardCapture),
+          items: [
+            DropdownMenuItem(value: KeyboardCapture.fullscreenOnly, child: Text(l.captureFullscreenOnly)),
+            DropdownMenuItem(value: KeyboardCapture.always, child: Text(l.always)),
+            DropdownMenuItem(value: KeyboardCapture.never, child: Text(l.never)),
           ],
           onChanged: (v) => set(s.copyWith(keyboardCapture: v)),
         ),
@@ -147,23 +166,23 @@ class _AccountsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final list = repo.credentials.values.toList()..sort((a, b) => a.label.compareTo(b.label));
     return _pane([
-      Text('Один обліковий запис можна призначити багатьом ПК. Зміна пароля діє одразу для всіх.',
-          style: TextStyle(color: t.textMuted)),
+      Text(l.accountsHint, style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 12),
       for (final c in list)
         ListTile(
           leading: const Icon(Icons.person_outline),
           title: Text(c.label),
           subtitle: Text(
-            '${c.authMode == AuthMode.askPassword ? 'Питати пароль' : 'Пароль збережено'} · '
-            'ПК: ${repo.connections.values.where((x) => x.credentialIds.contains(c.id)).length}',
+            '${c.authMode == AuthMode.askPassword ? l.askPassword : l.passwordSaved} · '
+            '${l.pcCount(repo.connections.values.where((x) => x.credentialIds.contains(c.id)).length)}',
             style: TextStyle(color: t.textMuted, fontSize: 12.5),
           ),
           onTap: () => editCredential(context, repo, existing: c),
           trailing: IconButton(
-            tooltip: 'Видалити',
+            tooltip: l.delete,
             icon: const Icon(Icons.delete_outline),
             onPressed: () => _guardedDelete(context, (force) => repo.deleteCredential(c.id, force: force)),
           ),
@@ -173,7 +192,7 @@ class _AccountsTab extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: FilledButton.icon(
           icon: const Icon(Icons.add),
-          label: const Text('Додати обліковий запис'),
+          label: Text(l.addAccount),
           onPressed: () => editCredential(context, repo),
         ),
       ),
@@ -188,6 +207,7 @@ class _RoutesTab extends StatelessWidget {
   final Repository repo;
 
   Future<void> _editGateway(BuildContext context, [Gateway? g]) async {
+    final l = context.l10n;
     final name = TextEditingController(text: g?.name ?? '');
     final addr = TextEditingController(text: g == null ? '' : (g.port == 443 ? g.host : '${g.host}:${g.port}'));
     var mode = g?.credentialMode ?? GatewayCredentialMode.sameAsPc;
@@ -197,23 +217,23 @@ class _RoutesTab extends StatelessWidget {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
-          title: Text(g == null ? 'Новий шлюз' : 'Шлюз'),
+          title: Text(g == null ? l.gatewayNew : l.gatewayTitle),
           content: SizedBox(
             width: 400,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(
                 controller: addr,
                 autofocus: g == null,
-                decoration: InputDecoration(labelText: 'Адреса шлюзу', hintText: 'rdgw.example.com', errorText: err),
+                decoration: InputDecoration(labelText: l.gatewayAddress, hintText: 'rdgw.example.com', errorText: err),
               ),
               const SizedBox(height: 12),
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Назва (необов\'язково)')),
+              TextField(controller: name, decoration: InputDecoration(labelText: l.nameOptional)),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 initialValue: mode == GatewayCredentialMode.sameAsPc ? '' : (credId ?? ''),
-                decoration: const InputDecoration(labelText: 'Обліковий запис для шлюзу'),
+                decoration: InputDecoration(labelText: l.gatewayAccount),
                 items: [
-                  const DropdownMenuItem(value: '', child: Text('Той самий, що й для ПК')),
+                  DropdownMenuItem(value: '', child: Text(l.gatewaySameAsPc)),
                   for (final cr in repo.credentials.values) DropdownMenuItem(value: cr.id, child: Text(cr.label)),
                 ],
                 onChanged: (v) => set(() {
@@ -224,16 +244,16 @@ class _RoutesTab extends StatelessWidget {
             ]),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Скасувати')),
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
             FilledButton(
               onPressed: () {
                 if (parseAddress(addr.text, defaultPort: 443) == null) {
-                  set(() => err = 'Некоректна адреса');
+                  set(() => err = l.invalidAddress);
                 } else {
                   Navigator.pop(c, true);
                 }
               },
-              child: const Text('Зберегти'),
+              child: Text(l.save),
             ),
           ],
         ),
@@ -252,7 +272,8 @@ class _RoutesTab extends StatelessWidget {
   }
 
   Future<void> _importWireGuard(BuildContext context) async {
-    final f = await openBytes(wgTypes);
+    final l = context.l10n;
+    final f = await openBytes(wgTypes(l));
     if (f == null) return;
     try {
       final conf = parseWireGuardConf(utf8.decode(f.$2, allowMalformed: true));
@@ -268,19 +289,17 @@ class _RoutesTab extends StatelessWidget {
         secretValues: conf.secrets,
       );
       if (context.mounted) {
-        toast(context,
-            conf.config['extraPeersIgnored'] == true
-                ? 'Імпортовано. У файлі кілька [Peer] — поки використовується перший.'
-                : 'Тунель «$name» імпортовано. Ключі збережено в системному сховищі.');
+        toast(context, conf.config['extraPeersIgnored'] == true ? l.wgImportedExtraPeers : l.wgImported(name));
       }
-    } on FormatException catch (e) {
-      if (context.mounted) toast(context, e.message);
+    } on WireGuardConfException catch (e) {
+      if (context.mounted) toast(context, l.wireGuardError(e.error));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     return _pane([
       _caption(context, 'RD Gateway'),
       for (final g in repo.gateways.values)
@@ -290,7 +309,7 @@ class _RoutesTab extends StatelessWidget {
           subtitle: Text(g.port == 443 ? g.host : '${g.host}:${g.port}', style: t.mono),
           onTap: () => _editGateway(context, g),
           trailing: IconButton(
-            tooltip: 'Видалити',
+            tooltip: l.delete,
             icon: const Icon(Icons.delete_outline),
             onPressed: () => _guardedDelete(context, (force) async => repo.deleteGateway(g.id, force: force)),
           ),
@@ -298,20 +317,18 @@ class _RoutesTab extends StatelessWidget {
       Align(
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
-            icon: const Icon(Icons.add), label: const Text('Додати шлюз'), onPressed: () => _editGateway(context)),
+            icon: const Icon(Icons.add), label: Text(l.addGateway), onPressed: () => _editGateway(context)),
       ),
-      _caption(context, 'Вбудовані тунелі'),
-      Text('Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. '
-          'Підключення через тунелі запрацює на етапі 4.',
-          style: TextStyle(color: t.textMuted, fontSize: 13)),
+      _caption(context, l.builtInTunnels),
+      Text(l.tunnelsHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
       const SizedBox(height: 8),
       for (final tu in repo.tunnels.values)
         ListTile(
           leading: const Icon(Icons.shield_outlined),
           title: Text(tu.name),
-          subtitle: Text('${tu.config['endpoint'] ?? ''} · ПК: ${repo.usersOfTunnel(tu.id)}', style: t.mono),
+          subtitle: Text('${tu.config['endpoint'] ?? ''} · ${l.pcCount(repo.usersOfTunnel(tu.id))}', style: t.mono),
           trailing: IconButton(
-            tooltip: 'Видалити',
+            tooltip: l.delete,
             icon: const Icon(Icons.delete_outline),
             onPressed: () => _guardedDelete(context, (force) => repo.deleteTunnel(tu.id, force: force)),
           ),
@@ -319,12 +336,12 @@ class _RoutesTab extends StatelessWidget {
       Wrap(spacing: 8, children: [
         TextButton.icon(
           icon: const Icon(Icons.file_open_outlined),
-          label: const Text('Імпортувати WireGuard .conf'),
+          label: Text(l.importWireGuard),
           onPressed: () => _importWireGuard(context),
         ),
       ]),
-      _caption(context, 'Проксі й SSH'),
-      Text('З\'являться на етапі 6.', style: TextStyle(color: t.textMuted, fontSize: 13)),
+      _caption(context, l.proxyAndSsh),
+      Text(l.comingInStage6, style: TextStyle(color: t.textMuted, fontSize: 13)),
     ]);
   }
 }
@@ -349,34 +366,37 @@ class _GroupsTab extends StatelessWidget {
   }
 
   Future<void> _edit(BuildContext context, [Group? g]) async {
+    final l = context.l10n;
     final name = await promptText(context,
-        title: g == null ? 'Нова група' : 'Перейменувати групу', label: 'Назва', initial: g?.name ?? '');
+        title: g == null ? l.groupNew : l.groupRename, label: l.name, initial: g?.name ?? '');
     if (name == null || name.trim().isEmpty) return;
     repo.saveGroup(g == null ? Group(id: newId(), name: name.trim()) : g.copyWith(name: name.trim()));
   }
 
   Future<void> _setParent(BuildContext context, Group g) async {
+    final l = context.l10n;
     final others = repo.groups.values.where((x) => x.id != g.id).toList()
       ..sort((a, b) => _path(a).compareTo(_path(b)));
-    final i = await pickOne(context, title: 'Вкласти «${g.name}» у…', options: ['Верхній рівень', ...others.map(_path)]);
+    final i = await pickOne(context, title: l.groupNestInto(g.name), options: [l.topLevel, ...others.map(_path)]);
     if (i == null) return;
     try {
       repo.saveGroup(g.copyWith(parentId: () => i == 0 ? null : others[i - 1].id));
-    } on StateError catch (e) {
-      if (context.mounted) toast(context, e.message);
+    } on GroupCycleError {
+      if (context.mounted) toast(context, l.groupCycle);
     }
   }
 
   Future<void> _delete(BuildContext context, Group g) async {
+    final l = context.l10n;
     final others = repo.groups.values.where((x) => x.id != g.id).toList();
     final hasContent = repo.countInGroup(g.id) > 0 || repo.groups.values.any((x) => x.parentId == g.id);
     String? moveTo;
     if (hasContent) {
       final i = await pickOne(context,
-          title: 'Куди перенести вміст групи «${g.name}»?', options: ['Збережені ПК', ...others.map(_path)]);
+          title: l.groupMoveContentsTo(g.name), options: [l.savedPcs, ...others.map(_path)]);
       if (i == null) return;
       moveTo = i == 0 ? null : others[i - 1].id;
-    } else if (!await confirm(context, title: 'Видалити групу «${g.name}»?', ok: 'Видалити', danger: true)) {
+    } else if (!await confirm(context, title: l.groupDeleteTitle(g.name), ok: l.delete, danger: true)) {
       return;
     }
     repo.deleteGroup(g.id, moveTo: moveTo);
@@ -385,33 +405,32 @@ class _GroupsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final list = repo.groups.values.toList()..sort((a, b) => _path(a).compareTo(_path(b)));
     return _pane([
       ListTile(
         leading: const Icon(Icons.folder_special_outlined),
-        title: const Text('Збережені ПК'),
-        subtitle: Text('Стандартна група · ПК: ${repo.countInGroup(null)}', style: TextStyle(color: t.textMuted)),
+        title: Text(l.savedPcs),
+        subtitle: Text(l.defaultGroupInfo(repo.countInGroup(null)), style: TextStyle(color: t.textMuted)),
       ),
       for (final g in list)
         ListTile(
           leading: const Icon(Icons.folder_outlined),
           title: Text(_path(g)),
-          subtitle: Text('ПК: ${repo.countInGroup(g.id)}', style: TextStyle(color: t.textMuted)),
+          subtitle: Text(l.pcCount(repo.countInGroup(g.id)), style: TextStyle(color: t.textMuted)),
           onTap: () => _edit(context, g),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             IconButton(
-                tooltip: 'Вкласти в іншу групу',
+                tooltip: l.nestIntoOther,
                 icon: const Icon(Icons.drive_file_move_outline),
                 onPressed: () => _setParent(context, g)),
-            IconButton(
-                tooltip: 'Видалити', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(context, g)),
+            IconButton(tooltip: l.delete, icon: const Icon(Icons.delete_outline), onPressed: () => _delete(context, g)),
           ]),
         ),
       const SizedBox(height: 8),
       Align(
         alignment: Alignment.centerLeft,
-        child: FilledButton.icon(
-            icon: const Icon(Icons.add), label: const Text('Нова група'), onPressed: () => _edit(context)),
+        child: FilledButton.icon(icon: const Icon(Icons.add), label: Text(l.groupNew), onPressed: () => _edit(context)),
       ),
     ]);
   }
@@ -430,42 +449,44 @@ class _BackupTab extends StatelessWidget {
   }
 
   Future<void> _export(BuildContext context) async {
-    final pw = await promptNewPassword(context, title: 'Пароль для бекапу');
+    final l = context.l10n;
+    final pw = await promptNewPassword(context, title: l.backupPasswordTitle);
     if (pw == null || !context.mounted) return;
-    toast(context, 'Шифрую бекап…');
+    toast(context, l.encryptingBackup);
     final bytes = await BackupService(repo).exportEncrypted(pw);
-    final path = await saveBytes(bytes, 'mhrd-backup-$_stamp.rdpbackup', backupTypes);
+    final path = await saveBytes(bytes, 'mhrd-backup-$_stamp.rdpbackup', backupTypes(l));
     if (path == null) return;
     repo.updateSettings(repo.settings.copyWith(lastBackupAt: DateTime.now()));
-    if (context.mounted) toast(context, 'Бекап збережено: $path');
+    if (context.mounted) toast(context, l.backupSaved(path));
   }
 
   Future<void> _import(BuildContext context) async {
-    final f = await openBytes(backupTypes);
+    final l = context.l10n;
+    final f = await openBytes(backupTypes(l));
     if (f == null || !context.mounted) return;
-    final pw = await promptText(context, title: 'Пароль бекапу', label: 'Пароль', obscure: true, ok: 'Відкрити');
+    final pw = await promptText(context, title: l.backupPasswordLabel, label: l.password, obscure: true, ok: l.open);
     if (pw == null || !context.mounted) return;
     final svc = BackupService(repo);
     final Map<String, dynamic> data;
     try {
-      toast(context, 'Розшифровую…');
+      toast(context, l.decrypting);
       data = await svc.decrypt(f.$2, pw);
-    } on FormatException catch (e) {
-      if (context.mounted) toast(context, e.message);
+    } on BackupException catch (e) {
+      if (context.mounted) toast(context, l.backupError(e.error));
+      return;
+    } on FormatException {
+      if (context.mounted) toast(context, l.backupCorrupted);
       return;
     }
     if (!context.mounted) return;
-    final mode = await pickOne(context, title: 'Як відновити?', options: const [
-      'Об\'єднати з поточними даними',
-      'Замінити все (поточні дані спершу збережуться в автобекап)',
-    ]);
+    final mode = await pickOne(context, title: l.restoreHow, options: [l.restoreMerge, l.restoreReplace]);
     if (mode == null || !context.mounted) return;
     final replace = mode == 1;
     final pv = svc.preview(data, replaceAll: replace);
     final ok = await confirm(context,
-        title: 'Відновити бекап?',
-        body: 'Буде додано ПК: ${pv.added}, оновлено: ${pv.updated}, видалено: ${pv.removed}.',
-        ok: 'Відновити',
+        title: l.restoreConfirmTitle,
+        body: l.restorePreview(pv.added, pv.updated, pv.removed),
+        ok: l.restore,
         danger: replace);
     if (!ok) return;
     if (replace) {
@@ -476,117 +497,125 @@ class _BackupTab extends StatelessWidget {
     }
     try {
       await svc.apply(data, replaceAll: replace);
-      if (context.mounted) toast(context, 'Бекап відновлено.');
-    } on FormatException catch (e) {
-      if (context.mounted) toast(context, e.message);
+      if (context.mounted) toast(context, l.restored);
+    } on BackupException catch (e) {
+      if (context.mounted) toast(context, l.backupError(e.error));
     }
   }
 
   Future<void> _enableAuto(BuildContext context, AutoBackup auto) async {
+    final l = context.l10n;
     final dir = await pickFolder();
     if (dir == null || !context.mounted) return;
-    final pw = await promptNewPassword(context, title: 'Пароль автобекапу');
+    final pw = await promptNewPassword(context, title: l.autoBackupPasswordTitle);
     if (pw == null || !context.mounted) return;
-    toast(context, 'Роблю першу копію…');
+    toast(context, l.autoBackupFirstCopy);
     final path = await auto.enable(dir, pw);
-    if (context.mounted) toast(context, path != null ? 'Автобекап увімкнено. Перша копія: $path' : auto.lastError!);
+    if (context.mounted) {
+      toast(context, path != null ? l.autoBackupEnabled(path) : l.autoBackupFailure(auto.lastError!));
+    }
   }
 
   Future<void> _autoNow(BuildContext context, AutoBackup auto) async {
-    toast(context, 'Роблю копію…');
+    final l = context.l10n;
+    toast(context, l.autoBackupMaking);
     final path = await auto.runNow();
-    if (context.mounted) toast(context, path != null ? 'Копію збережено: $path' : (auto.lastError ?? 'Копія вже робиться.'));
+    if (!context.mounted) return;
+    final err = auto.lastError;
+    toast(context, path != null ? l.autoBackupSaved(path) : (err != null ? l.autoBackupFailure(err) : l.autoBackupBusy));
   }
 
   Future<void> _exportShare(BuildContext context) async {
+    final l = context.l10n;
     final json = const JsonEncoder.withIndent('  ').convert(BackupService(repo).exportShare(repo.connections.values));
-    final path = await saveBytes(Uint8List.fromList(utf8.encode(json)), 'mhrd-pcs-$_stamp.json', shareTypes);
-    if (path != null && context.mounted) toast(context, 'Збережено без паролів: $path');
+    final path = await saveBytes(Uint8List.fromList(utf8.encode(json)), 'mhrd-pcs-$_stamp.json', shareTypes(l));
+    if (path != null && context.mounted) toast(context, l.savedWithoutPasswords(path));
   }
 
   Future<void> _importShare(BuildContext context) async {
-    final f = await openBytes(shareTypes);
+    final l = context.l10n;
+    final f = await openBytes(shareTypes(l));
     if (f == null) return;
     try {
       final data = jsonDecode(utf8.decode(f.$2));
-      if (data is! Map<String, dynamic>) throw const FormatException('Це не файл експорту MHRD.');
+      if (data is! Map<String, dynamic>) throw BackupException(BackupError.notShareFile);
       await BackupService(repo).importShare(data);
-      if (context.mounted) toast(context, 'Імпортовано. Паролі введіть при першому підключенні.');
-    } on FormatException catch (e) {
-      if (context.mounted) toast(context, e.message);
+      if (context.mounted) toast(context, l.shareImported);
+    } on BackupException catch (e) {
+      if (context.mounted) toast(context, l.backupError(e.error));
+    } on FormatException {
+      // зламаний JSON або не UTF-8
+      if (context.mounted) toast(context, l.notShareFile);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final last = repo.settings.lastBackupAt;
     final auto = AppScope.of(context).autoBackup;
     return _pane([
-      _caption(context, 'Повний бекап'),
-      Text('Усі ПК, облікові записи з паролями, шлюзи, тунелі з ключами, групи, теми й налаштування. '
-          'Файл шифрується вашим паролем (Argon2id + AES-256-GCM) і відкривається на будь-якій ОС.',
-          style: TextStyle(color: t.textMuted)),
+      _caption(context, l.fullBackup),
+      Text(l.fullBackupHint, style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 6),
-      Text(last == null ? 'Бекап ще не робили.' : 'Останній бекап: ${formatDateTime(last)}',
+      Text(last == null ? l.backupNever : l.backupLast(formatDateTime(last)),
           style: TextStyle(color: last == null ? t.warn : t.textMuted, fontSize: 13)),
       const SizedBox(height: 12),
       Wrap(spacing: 10, runSpacing: 10, children: [
         FilledButton.icon(
-            icon: const Icon(Icons.lock_outline), label: const Text('Зберегти бекап'), onPressed: () => _export(context)),
+            icon: const Icon(Icons.lock_outline), label: Text(l.saveBackup), onPressed: () => _export(context)),
         OutlinedButton.icon(
-            icon: const Icon(Icons.restore), label: const Text('Відновити з бекапу'), onPressed: () => _import(context)),
+            icon: const Icon(Icons.restore), label: Text(l.restoreFromBackup), onPressed: () => _import(context)),
       ]),
-      _caption(context, 'Автобекап'),
+      _caption(context, l.autoBackup),
       ListenableBuilder(
         listenable: auto,
         builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Після змін, не частіше разу на годину — у вибрану теку, наприклад синхронізовану з хмарою. '
-              'Зберігаються останні 10 копій. Пароль автобекапу лежить у системному сховищі цього пристрою.',
-              style: TextStyle(color: t.textMuted)),
+          Text(l.autoBackupHint, style: TextStyle(color: t.textMuted)),
           const SizedBox(height: 6),
           if (!auto.enabled)
-            Text('Вимкнено.', style: TextStyle(color: t.textMuted, fontSize: 13))
+            Text(l.disabled, style: TextStyle(color: t.textMuted, fontSize: 13))
           else ...[
             Text(auto.dir!, style: t.mono),
             const SizedBox(height: 2),
             Text(
-              auto.lastAt == null ? 'Копій ще не було.' : 'Остання копія: ${formatDateTime(auto.lastAt!)}',
+              auto.lastAt == null ? l.autoBackupNone : l.autoBackupLast(formatDateTime(auto.lastAt!)),
               style: TextStyle(color: t.textMuted, fontSize: 13),
             ),
-            if (auto.lastError != null) Text(auto.lastError!, style: TextStyle(color: t.error, fontSize: 13)),
+            if (auto.lastError != null)
+              Text(l.autoBackupFailure(auto.lastError!), style: TextStyle(color: t.error, fontSize: 13)),
           ],
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 10, children: [
             if (!auto.enabled)
               OutlinedButton.icon(
                   icon: const Icon(Icons.schedule),
-                  label: const Text('Увімкнути…'),
+                  label: Text(l.enableEllipsis),
                   onPressed: () => _enableAuto(context, auto))
             else ...[
               OutlinedButton.icon(
                   icon: const Icon(Icons.save_outlined),
-                  label: const Text('Зробити копію зараз'),
+                  label: Text(l.autoBackupNow),
                   onPressed: () => _autoNow(context, auto)),
               OutlinedButton.icon(
                   icon: const Icon(Icons.folder_open_outlined),
-                  label: const Text('Змінити теку й пароль'),
+                  label: Text(l.autoBackupChange),
                   onPressed: () => _enableAuto(context, auto)),
-              TextButton.icon(
-                  icon: const Icon(Icons.close), label: const Text('Вимкнути'), onPressed: auto.disable),
+              TextButton.icon(icon: const Icon(Icons.close), label: Text(l.disable), onPressed: auto.disable),
             ],
           ]),
         ]),
       ),
-      _caption(context, 'Поділитися списком ПК'),
-      Text('Файл без жодного пароля чи ключа — щоб передати список колезі.', style: TextStyle(color: t.textMuted)),
+      _caption(context, l.sharePcList),
+      Text(l.sharePcListHint, style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 12),
       Wrap(spacing: 10, runSpacing: 10, children: [
         OutlinedButton.icon(
-            icon: const Icon(Icons.ios_share), label: const Text('Експортувати'), onPressed: () => _exportShare(context)),
+            icon: const Icon(Icons.ios_share), label: Text(l.export), onPressed: () => _exportShare(context)),
         OutlinedButton.icon(
             icon: const Icon(Icons.file_download_outlined),
-            label: const Text('Імпортувати'),
+            label: Text(l.import),
             onPressed: () => _importShare(context)),
       ]),
     ]);

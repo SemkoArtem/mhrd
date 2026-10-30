@@ -244,6 +244,7 @@ enum KeyboardCapture { fullscreenOnly, always, never }
 
 class AppSettings {
   const AppSettings({
+    this.language = 'system',
     this.themeId = 'graphite',
     this.listView = PcListView.tiles,
     this.showPreviews = true,
@@ -253,6 +254,9 @@ class AppSettings {
     this.keyboardCapture = KeyboardCapture.fullscreenOnly,
     this.lastBackupAt,
   });
+
+  /// Мова інтерфейсу: 'system' (як в ОС, інакше англійська), 'uk' або 'en'.
+  final String language;
 
   /// id вбудованої теми або власної (`custom:<uuid>`), або 'system'.
   final String themeId;
@@ -265,6 +269,7 @@ class AppSettings {
   final DateTime? lastBackupAt;
 
   AppSettings copyWith({
+    String? language,
     String? themeId,
     PcListView? listView,
     bool? showPreviews,
@@ -275,6 +280,7 @@ class AppSettings {
     DateTime? lastBackupAt,
   }) =>
       AppSettings(
+        language: language ?? this.language,
         themeId: themeId ?? this.themeId,
         listView: listView ?? this.listView,
         showPreviews: showPreviews ?? this.showPreviews,
@@ -286,6 +292,7 @@ class AppSettings {
       );
 
   Map<String, dynamic> toJson() => {
+        'language': language,
         'themeId': themeId,
         'listView': listView.name,
         'showPreviews': showPreviews,
@@ -297,6 +304,7 @@ class AppSettings {
       };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
+        language: const ['system', 'uk', 'en'].contains(j['language']) ? j['language'] as String : 'system',
         themeId: strOr(j['themeId'], 'graphite'),
         listView: enumByName(PcListView.values, j['listView'], PcListView.tiles),
         showPreviews: boolOr(j['showPreviews'], true),

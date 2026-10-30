@@ -89,7 +89,8 @@ void main() {
     final missing = p.join(tmp.path, 'немає');
     final path = await auto.enable(missing, 'пароль');
     expect(path, isNull);
-    expect(auto.lastError, contains('Не вдалося записати копію'));
+    expect(auto.lastError?.kind, AutoBackupFailureKind.writeFailed);
+    expect(auto.lastError?.path, isNotEmpty);
     expect(auto.pending, isTrue);
     expect(auto.delayFrom(DateTime.now()), greaterThan(const Duration(minutes: 59)));
   }, skip: _skip);

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../app.dart';
+import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
@@ -35,6 +36,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   late final TextEditingController _broadcast;
   String? _addressError;
 
+  static const _defaultBroadcast = '255.255.255.255';
+
   @override
   void initState() {
     super.initState();
@@ -48,8 +51,6 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final bc = _c.wakeOnLan?.broadcast;
     _broadcast = TextEditingController(text: bc == null || bc == _defaultBroadcast ? '' : bc);
   }
-
-  static const _defaultBroadcast = '255.255.255.255';
 
   @override
   void dispose() {
@@ -66,21 +67,22 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   void _set(Connection c) => setState(() => _c = c);
 
   void _save() {
+    final l = context.l10n;
     final addr = parseAddress(_address.text);
     if (addr == null) {
-      setState(() => _addressError = 'Вкажіть адресу: 10.0.0.5, srv.local:3390 або [fd00::5]:3389');
+      setState(() => _addressError = l.addressRequired);
       return;
     }
     final macText = _mac.text.trim();
     final mac = macText.isEmpty ? null : parseMac(macText);
     if (macText.isNotEmpty && mac == null) {
-      toast(context, 'MAC-адреса має вигляд AA:BB:CC:DD:EE:FF');
+      toast(context, l.macFormat);
       return;
     }
     final bcText = _broadcast.text.trim();
     final bc = bcText.isEmpty ? _defaultBroadcast : bcText;
     if (mac != null && InternetAddress.tryParse(bc)?.type != InternetAddressType.IPv4) {
-      toast(context, 'Широкомовна адреса — це IPv4, наприклад 192.168.1.255');
+      toast(context, l.broadcastFormat);
       return;
     }
     repo.saveConnection(_c.copyWith(
@@ -98,28 +100,29 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     return DefaultTabController(
       length: 4,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: t.surface,
-          title: Text(widget.isNew ? 'Додати ПК' : 'Редагувати ПК'),
+          title: Text(widget.isNew ? l.addPc : l.editPcTitle),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 12),
-              child: FilledButton(onPressed: _save, child: Text(widget.isNew ? 'Додати' : 'Зберегти')),
+              child: FilledButton(onPressed: _save, child: Text(widget.isNew ? l.add : l.save)),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [Tab(text: 'Загальні'), Tab(text: 'Екран'), Tab(text: 'Пристрої'), Tab(text: 'Додатково')],
+            tabs: [Tab(text: l.tabGeneral), Tab(text: l.tabDisplay), Tab(text: l.tabDevices), Tab(text: l.tabAdvanced)],
           ),
         ),
         body: ListenableBuilder(
           listenable: repo,
           builder: (context, _) => TabBarView(children: [
-            _page([..._general(context)]),
+            _page(_general(context)),
             _page(_display(context)),
             _page(_devices(context)),
             _page(_advanced(context)),
@@ -146,6 +149,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
 
   List<Widget> _general(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     final groups = repo.groups.values.toList()..sort((a, b) => a.name.compareTo(b.name));
     final gateways = repo.gateways.values.toList();
     final creds = _c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
@@ -161,8 +165,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         autofocus: widget.isNew && _c.host.isEmpty,
         style: TextStyle(fontFamily: t.fontMono),
         decoration: InputDecoration(
-          labelText: 'Адреса ПК',
-          hintText: 'Ім\'я, IP або ім\'я:порт',
+          labelText: l.pcAddress,
+          hintText: l.pcAddressHint,
           errorText: _addressError,
         ),
         onChanged: (_) => setState(() => _addressError = null),
@@ -170,22 +174,21 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       const SizedBox(height: 14),
       TextField(
         controller: _name,
-        decoration: const InputDecoration(labelText: 'Назва (необов\'язково)', helperText: 'Якщо порожньо — показується адреса'),
+        decoration: InputDecoration(labelText: l.nameOptional, helperText: l.nameHelper),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<String?>(
         initialValue: repo.groups.containsKey(_c.groupId) ? _c.groupId : null,
-        decoration: const InputDecoration(labelText: 'Група'),
+        decoration: InputDecoration(labelText: l.group),
         items: [
-          const DropdownMenuItem(value: null, child: Text('Збережені ПК')),
+          DropdownMenuItem(value: null, child: Text(l.savedPcs)),
           for (final g in groups) DropdownMenuItem(value: g.id, child: Text(g.name)),
         ],
         onChanged: (v) => _set(_c.copyWith(groupId: () => v)),
       ),
 
-      _section('Облікові записи'),
-      if (creds.isEmpty)
-        Text('Питати логін і пароль при кожному підключенні.', style: TextStyle(color: t.textMuted)),
+      _section(l.accounts),
+      if (creds.isEmpty) Text(l.noAccountsHint, style: TextStyle(color: t.textMuted)),
       if (creds.isNotEmpty)
         ReorderableListView(
           shrinkWrap: true,
@@ -203,10 +206,10 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
                 contentPadding: EdgeInsets.zero,
                 leading: ReorderableDragStartListener(index: i, child: const Icon(Icons.drag_indicator)),
                 title: Text(creds[i].label),
-                subtitle: Text(i == 0 ? 'За замовчуванням' : 'Доступний у «Підключитись як…»',
+                subtitle: Text(i == 0 ? l.defaultAccount : l.availableInConnectAs,
                     style: TextStyle(color: t.textMuted, fontSize: 12)),
                 trailing: IconButton(
-                  tooltip: 'Прибрати з цього ПК',
+                  tooltip: l.removeFromPc,
                   icon: const Icon(Icons.close),
                   onPressed: () => _set(_c.copyWith(
                       credentialIds: _c.credentialIds.where((x) => x != creds[i].id).toList())),
@@ -217,7 +220,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       Wrap(spacing: 8, children: [
         TextButton.icon(
           icon: const Icon(Icons.person_add_alt),
-          label: const Text('Новий обліковий запис'),
+          label: Text(l.credNewTitle),
           onPressed: () async {
             final cr = await editCredential(context, repo);
             if (cr != null) _set(_c.copyWith(credentialIds: [..._c.credentialIds, cr.id]));
@@ -226,37 +229,36 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         if (repo.credentials.values.any((x) => !_c.credentialIds.contains(x.id)))
           TextButton.icon(
             icon: const Icon(Icons.playlist_add),
-            label: const Text('Додати збережений'),
+            label: Text(l.addSavedAccount),
             onPressed: () async {
               final avail = repo.credentials.values.where((x) => !_c.credentialIds.contains(x.id)).toList();
-              final i = await pickOne(context, title: 'Обліковий запис', options: avail.map((x) => x.label).toList());
+              final i = await pickOne(context, title: l.credTitle, options: avail.map((x) => x.label).toList());
               if (i != null) _set(_c.copyWith(credentialIds: [..._c.credentialIds, avail[i].id]));
             },
           ),
       ]),
 
-      _section('Маршрут'),
+      _section(l.route),
       DropdownButtonFormField<RouteKind>(
         initialValue: _c.route,
-        decoration: const InputDecoration(labelText: 'Як підключатися'),
-        items: const [
-          DropdownMenuItem(value: RouteKind.direct, child: Text('Напряму')),
-          DropdownMenuItem(value: RouteKind.tunnel, child: Text('Через вбудований тунель (WireGuard, OpenVPN…)')),
-          DropdownMenuItem(value: RouteKind.proxy, child: Text('Через проксі')),
-          DropdownMenuItem(value: RouteKind.ssh, child: Text('Через SSH-тунель')),
+        decoration: InputDecoration(labelText: l.routeHow),
+        items: [
+          DropdownMenuItem(value: RouteKind.direct, child: Text(l.routeDirect)),
+          DropdownMenuItem(value: RouteKind.tunnel, child: Text(l.routeViaTunnel)),
+          DropdownMenuItem(value: RouteKind.proxy, child: Text(l.routeViaProxy)),
+          DropdownMenuItem(value: RouteKind.ssh, child: Text(l.routeViaSsh)),
         ],
         onChanged: (v) => _set(_c.copyWith(route: v, routeRefId: () => null)),
       ),
       if (_c.route != RouteKind.direct) ...[
         const SizedBox(height: 12),
         if ((routeOptions[_c.route] ?? const []).isEmpty)
-          Text('Ще немає жодного профілю. Додайте його в Налаштування → Маршрути.',
-              style: TextStyle(color: t.warn))
+          Text(l.noRouteProfiles, style: TextStyle(color: t.warn))
         else
           DropdownButtonFormField<String>(
             key: ValueKey('route-${_c.route.name}'),
             initialValue: (routeOptions[_c.route]!.any((o) => o.$1 == _c.routeRefId)) ? _c.routeRefId : null,
-            decoration: const InputDecoration(labelText: 'Профіль'),
+            decoration: InputDecoration(labelText: l.profile),
             items: [
               for (final o in routeOptions[_c.route]!) DropdownMenuItem(value: o.$1, child: Text(o.$2)),
             ],
@@ -268,7 +270,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         initialValue: repo.gateways.containsKey(_c.gatewayId) ? _c.gatewayId : null,
         decoration: const InputDecoration(labelText: 'RD Gateway'),
         items: [
-          const DropdownMenuItem(value: null, child: Text('Без шлюзу')),
+          DropdownMenuItem(value: null, child: Text(l.noGateway)),
           for (final g in gateways) DropdownMenuItem(value: g.id, child: Text(g.label)),
         ],
         onChanged: (v) => _set(_c.copyWith(gatewayId: () => v)),
@@ -277,28 +279,28 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           value: _c.gatewayBypassLocal,
-          title: const Text('Обходити шлюз для локальних адрес'),
+          title: Text(l.bypassGatewayLocal),
           onChanged: (v) => _set(_c.copyWith(gatewayBypassLocal: v)),
         ),
 
-      _section('Підключення'),
+      _section(l.sectionConnection),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: _c.reconnectOnDrop,
-        title: const Text('Перепідключатися при обриві'),
+        title: Text(l.reconnectOnDrop),
         onChanged: (v) => _set(_c.copyWith(reconnectOnDrop: v)),
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: _c.adminSession,
-        title: const Text('Адміністративний сеанс'),
-        subtitle: const Text('Підключення до консольного сеансу сервера'),
+        title: Text(l.adminSession),
+        subtitle: Text(l.adminSessionHint),
         onChanged: (v) => _set(_c.copyWith(adminSession: v)),
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: _c.swapMouseButtons,
-        title: const Text('Поміняти кнопки миші місцями'),
+        title: Text(l.swapMouse),
         onChanged: (v) => _set(_c.copyWith(swapMouseButtons: v)),
       ),
     ];
@@ -309,31 +311,32 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   List<Widget> _display(BuildContext context) {
     final d = _c.display;
     final t = context.mhrd;
+    final l = context.l10n;
     void setD(DisplaySettings x) => _set(_c.copyWith(display: x));
     return [
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: d.useAllMonitors,
-        title: const Text('Використовувати всі монітори'),
+        title: Text(l.useAllMonitors),
         onChanged: (v) => setD(d.copyWith(useAllMonitors: v)),
       ),
       const SizedBox(height: 8),
       DropdownButtonFormField<int>(
         initialValue: d.startFullscreen == null ? 0 : (d.startFullscreen! ? 1 : 2),
-        decoration: const InputDecoration(labelText: 'Запуск на весь екран'),
-        items: const [
-          DropdownMenuItem(value: 0, child: Text('Як у загальних налаштуваннях')),
-          DropdownMenuItem(value: 1, child: Text('Так')),
-          DropdownMenuItem(value: 2, child: Text('Ні')),
+        decoration: InputDecoration(labelText: l.startFullscreen),
+        items: [
+          DropdownMenuItem(value: 0, child: Text(l.asInGeneralSettings)),
+          DropdownMenuItem(value: 1, child: Text(l.yes)),
+          DropdownMenuItem(value: 2, child: Text(l.no)),
         ],
         onChanged: (v) => setD(d.copyWith(startFullscreen: () => v == 0 ? null : v == 1)),
       ),
-      _section('Коли змінюється розмір вікна'),
+      _section(l.onWindowResize),
       SegmentedButton<ResizeMode>(
-        segments: const [
-          ButtonSegment(value: ResizeMode.changeResolution, label: Text('Змінювати роздільність')),
-          ButtonSegment(value: ResizeMode.scale, label: Text('Масштабувати')),
-          ButtonSegment(value: ResizeMode.none, label: Text('Без змін')),
+        segments: [
+          ButtonSegment(value: ResizeMode.changeResolution, label: Text(l.resizeChangeResolution)),
+          ButtonSegment(value: ResizeMode.scale, label: Text(l.resizeScale)),
+          ButtonSegment(value: ResizeMode.none, label: Text(l.resizeNone)),
         ],
         selected: {d.resizeMode},
         onSelectionChanged: (s) => setD(d.copyWith(resizeMode: s.first)),
@@ -341,19 +344,19 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       const SizedBox(height: 16),
       DropdownButtonFormField<int>(
         initialValue: d.colorDepth,
-        decoration: const InputDecoration(labelText: 'Глибина кольору'),
-        items: const [
-          DropdownMenuItem(value: 32, child: Text('Найвища (32 біти)')),
-          DropdownMenuItem(value: 24, child: Text('Висока (24 біти)')),
-          DropdownMenuItem(value: 16, child: Text('Середня (16 біт) — менше трафіку')),
-          DropdownMenuItem(value: 15, child: Text('Низька (15 біт)')),
+        decoration: InputDecoration(labelText: l.colorDepth),
+        items: [
+          DropdownMenuItem(value: 32, child: Text(l.color32)),
+          DropdownMenuItem(value: 24, child: Text(l.color24)),
+          DropdownMenuItem(value: 16, child: Text(l.color16)),
+          DropdownMenuItem(value: 15, child: Text(l.color15)),
         ],
         onChanged: (v) => setD(d.copyWith(colorDepth: v)),
       ),
       const SizedBox(height: 14),
       DropdownButtonFormField<int>(
         initialValue: const [100, 125, 150, 175, 200, 250, 300].contains(d.scalePercent) ? d.scalePercent : 100,
-        decoration: const InputDecoration(labelText: 'Масштаб елементів на віддаленому ПК'),
+        decoration: InputDecoration(labelText: l.remoteScale),
         items: [
           for (final p in const [100, 125, 150, 175, 200, 250, 300]) DropdownMenuItem(value: p, child: Text('$p %')),
         ],
@@ -362,8 +365,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: d.hiDpi,
-        title: const Text('Повна чіткість на Retina / HiDPI'),
-        subtitle: Text('Приблизно вчетверо більше трафіку', style: TextStyle(color: t.warn, fontSize: 12.5)),
+        title: Text(l.hiDpi),
+        subtitle: Text(l.hiDpiWarning, style: TextStyle(color: t.warn, fontSize: 12.5)),
         onChanged: (v) => setD(d.copyWith(hiDpi: v)),
       ),
     ];
@@ -374,35 +377,35 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   List<Widget> _devices(BuildContext context) {
     final d = _c.devices;
     final t = context.mhrd;
+    final l = context.l10n;
     void setD(DeviceSettings x) => _set(_c.copyWith(devices: x));
     return [
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: d.clipboard,
-        title: const Text('Буфер обміну'),
-        subtitle: const Text('Текст і зображення в обидва боки'),
+        title: Text(l.clipboard),
+        subtitle: Text(l.clipboardHint),
         onChanged: (v) => setD(d.copyWith(clipboard: v)),
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: d.microphone,
-        title: const Text('Мікрофон'),
+        title: Text(l.microphone),
         onChanged: (v) => setD(d.copyWith(microphone: v)),
       ),
       const SizedBox(height: 8),
       DropdownButtonFormField<SoundMode>(
         initialValue: d.sound,
-        decoration: const InputDecoration(labelText: 'Звук'),
-        items: const [
-          DropdownMenuItem(value: SoundMode.local, child: Text('На цьому пристрої')),
-          DropdownMenuItem(value: SoundMode.remote, child: Text('На віддаленому ПК')),
-          DropdownMenuItem(value: SoundMode.off, child: Text('Не відтворювати')),
+        decoration: InputDecoration(labelText: l.sound),
+        items: [
+          DropdownMenuItem(value: SoundMode.local, child: Text(l.soundLocal)),
+          DropdownMenuItem(value: SoundMode.remote, child: Text(l.soundRemote)),
+          DropdownMenuItem(value: SoundMode.off, child: Text(l.soundOff)),
         ],
         onChanged: (v) => setD(d.copyWith(sound: v)),
       ),
-      _section('Папки'),
-      if (d.folders.isEmpty)
-        Text('Жодна папка не доступна віддаленому ПК.', style: TextStyle(color: t.textMuted)),
+      _section(l.folders),
+      if (d.folders.isEmpty) Text(l.noFolders, style: TextStyle(color: t.textMuted)),
       for (var i = 0; i < d.folders.length; i++)
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -411,7 +414,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           subtitle: Text(d.folders[i].path, style: t.mono),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             FilterChip(
-              label: const Text('Лише читання'),
+              label: Text(l.readOnly),
               selected: d.folders[i].readOnly,
               onSelected: (v) {
                 final f = [...d.folders];
@@ -420,7 +423,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
               },
             ),
             IconButton(
-              tooltip: 'Прибрати папку',
+              tooltip: l.removeFolder,
               icon: const Icon(Icons.close),
               onPressed: () => setD(d.copyWith(folders: [...d.folders]..removeAt(i))),
             ),
@@ -430,7 +433,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         alignment: Alignment.centerLeft,
         child: TextButton.icon(
           icon: const Icon(Icons.create_new_folder_outlined),
-          label: const Text('Додати папку'),
+          label: Text(l.addFolder),
           onPressed: () async {
             final path = await pickFolder();
             if (path == null) return;
@@ -446,39 +449,40 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
 
   List<Widget> _advanced(BuildContext context) {
     final t = context.mhrd;
+    final l = context.l10n;
     return [
       TextField(
         controller: _tags,
-        decoration: const InputDecoration(labelText: 'Теги', helperText: 'Через кому: офіс, 1с, бухгалтерія'),
+        decoration: InputDecoration(labelText: l.tags, helperText: l.tagsHelper),
       ),
       const SizedBox(height: 14),
       TextField(
         controller: _mac,
         style: TextStyle(fontFamily: t.fontMono),
-        decoration: const InputDecoration(
-          labelText: 'MAC-адреса для Wake-on-LAN',
+        decoration: InputDecoration(
+          labelText: l.wolMac,
           hintText: 'AA:BB:CC:DD:EE:FF',
-          helperText: 'Щоб будити ПК із меню «Розбудити»',
+          helperText: l.wolMacHelper,
         ),
       ),
       const SizedBox(height: 14),
       TextField(
         controller: _broadcast,
         style: TextStyle(fontFamily: t.fontMono),
-        decoration: const InputDecoration(
-          labelText: 'Широкомовна адреса для Wake-on-LAN (необов\'язково)',
+        decoration: InputDecoration(
+          labelText: l.wolBroadcast,
           hintText: _defaultBroadcast,
-          helperText: 'Якщо ПК в іншій підмережі — її broadcast, наприклад 192.168.1.255',
+          helperText: l.wolBroadcastHelper,
         ),
       ),
       if (_c.certPin != null) ...[
-        _section('Сертифікат сервера'),
-        Text('Довірений відбиток: ${_c.certPin}', style: t.mono),
+        _section(l.serverCertificate),
+        Text(l.trustedFingerprint(_c.certPin!), style: t.mono),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(
             onPressed: () => _set(_c.copyWith(certPin: () => null)),
-            child: const Text('Забути сертифікат (спитати знову при підключенні)'),
+            child: Text(l.forgetCertificate),
           ),
         ),
       ],

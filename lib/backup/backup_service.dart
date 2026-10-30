@@ -10,6 +10,14 @@ import '../models/entities.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 
+enum BackupError { notBackupFile, corrupted, wrongPassword, newerVersion, notShareFile }
+
+/// Помилка читання бекапу. Текст для людей складає UI за [error] (переклади).
+class BackupException extends FormatException {
+  BackupException(this.error) : super('backup: ${error.name}');
+  final BackupError error;
+}
+
 /// Два види експорту (SPEC.md → «Безпека, бекап і відновлення»):
 ///  * повний бекап `.rdpbackup` — усе, з паролями й ключами, зашифровано паролем бекапу;
 ///  * експорт для передачі `.json` — вибрані ПК без жодного секрету.
@@ -95,19 +103,19 @@ class BackupService {
   Future<Map<String, dynamic>> decrypt(Uint8List file, String password) async {
     if (_startsWith(file, _magic2)) return _decryptV2(file, password);
     if (_startsWith(file, _magic1)) return _convertV1(await _decryptV1(file, password));
-    throw const FormatException('Це не файл бекапу MHRD.');
+    throw BackupException(BackupError.notBackupFile);
   }
 
   Future<Map<String, dynamic>> _decryptV2(Uint8List f, String password) async {
     final headerLen = _magic2.length + 4 + 1 + 1 + _saltLen + _nonceLen;
-    if (f.length < headerLen + _tagLen) throw const FormatException('Файл бекапу пошкоджено.');
+    if (f.length < headerLen + _tagLen) throw BackupException(BackupError.corrupted);
     var o = _magic2.length;
     final mem = ByteData.sublistView(f, o, o + 4).getUint32(0);
     o += 4;
     final it = f[o++];
     final par = f[o++];
     if (mem < 8 || mem > 1048576 || it < 1 || par < 1) {
-      throw const FormatException('Файл бекапу пошкоджено.');
+      throw BackupException(BackupError.corrupted);
     }
     final salt = f.sublist(o, o + _saltLen);
     o += _saltLen;
@@ -123,7 +131,7 @@ class BackupService {
 
   Future<Map<String, dynamic>> _decryptV1(Uint8List f, String password) async {
     final headerLen = _magic1.length + _saltLen + _nonceLen + _tagLen;
-    if (f.length < headerLen) throw const FormatException('Файл бекапу пошкоджено.');
+    if (f.length < headerLen) throw BackupException(BackupError.corrupted);
     var o = _magic1.length;
     final salt = f.sublist(o, o + _saltLen);
     o += _saltLen;
@@ -142,10 +150,10 @@ class BackupService {
       plain = await AesGcm.with256bits()
           .decrypt(SecretBox(cipher, nonce: nonce, mac: Mac(tag)), secretKey: key, aad: aad);
     } on SecretBoxAuthenticationError {
-      throw const FormatException('Невірний пароль або файл пошкоджено.');
+      throw BackupException(BackupError.wrongPassword);
     }
     final obj = jsonDecode(utf8.decode(plain));
-    if (obj is! Map<String, dynamic>) throw const FormatException('Файл бекапу пошкоджено.');
+    if (obj is! Map<String, dynamic>) throw BackupException(BackupError.corrupted);
     return obj;
   }
 
@@ -269,10 +277,10 @@ class BackupService {
   Future<void> apply(Map<String, dynamic> data, {required bool replaceAll}) async {
     final v = data['schemaVersion'];
     if (data['kind'] != 'mhrd-backup' || v is! int) {
-      throw const FormatException('Це не бекап MHRD.');
+      throw BackupException(BackupError.notBackupFile);
     }
     if (v > 1) {
-      throw const FormatException('Бекап створено новішою версією MHRD. Оновіть застосунок.');
+      throw BackupException(BackupError.newerVersion);
     }
     List<Map<String, dynamic>> list(String k) => (data[k] as List? ?? const [])
         .whereType<Map>()
@@ -386,7 +394,7 @@ class BackupService {
 
   /// Імпорт файлу «для передачі»: те саме, що apply у режимі об'єднання, але без секретів.
   Future<void> importShare(Map<String, dynamic> data) async {
-    if (data['kind'] != 'mhrd-share') throw const FormatException('Це не файл експорту MHRD.');
+    if (data['kind'] != 'mhrd-share') throw BackupException(BackupError.notShareFile);
     await apply({...data, 'kind': 'mhrd-backup'}, replaceAll: false);
   }
 }

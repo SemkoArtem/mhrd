@@ -12,13 +12,24 @@ import 'secret_store.dart';
 const _uuid = Uuid();
 String newId() => _uuid.v4();
 
-/// Що саме посилається на об'єкт, який збираються видалити.
+enum InUseKind { credential, gateway, tunnel, proxy, ssh }
+
+/// Що саме посилається на об'єкт, який збираються видалити. Текст складає UI (переклади).
 class InUse implements Exception {
-  InUse(this.what, this.users);
-  final String what;
-  final List<String> users;
+  InUse(this.kind, {this.pcs = const [], this.gateways = const []});
+  final InUseKind kind;
+
+  /// Назви ПК і шлюзів, що використовують об'єкт.
+  final List<String> pcs;
+  final List<String> gateways;
+
   @override
-  String toString() => '$what використовують: ${users.join(', ')}';
+  String toString() => 'InUse(${kind.name}): ${[...pcs, ...gateways].join(', ')}';
+}
+
+/// Спроба вкласти групу саму в себе (напряму чи через інші групи).
+class GroupCycleError extends StateError {
+  GroupCycleError() : super('group cycle');
 }
 
 /// Єдине джерело правди для UI. Тримає все в пам'яті, пише в SQLite одразу.
@@ -132,11 +143,12 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Connection duplicateConnection(Connection c) {
+  /// [name] — назва копії (UI передає перекладене «… (копія)»).
+  Connection duplicateConnection(Connection c, {required String name}) {
     final now = DateTime.now();
     final copy = c.copyWith(
       id: newId(),
-      name: '${c.displayName} (копія)',
+      name: name,
       certPin: () => null,
       lastUsed: () => null,
       createdAt: now,
@@ -177,11 +189,9 @@ class Repository extends ChangeNotifier {
   /// Видаляє акаунт. Якщо його використовують ПК чи шлюзи і [force] = false,
   /// кидає [InUse] зі списком, щоб UI спитав підтвердження.
   Future<void> deleteCredential(String id, {bool force = false}) async {
-    final users = [
-      ...connections.values.where((c) => c.credentialIds.contains(id)).map((c) => c.displayName),
-      ...gateways.values.where((g) => g.credentialId == id).map((g) => 'шлюз ${g.label}'),
-    ];
-    if (users.isNotEmpty && !force) throw InUse('Обліковий запис', users);
+    final pcs = connections.values.where((c) => c.credentialIds.contains(id)).map((c) => c.displayName).toList();
+    final gws = gateways.values.where((g) => g.credentialId == id).map((g) => g.label).toList();
+    if ((pcs.isNotEmpty || gws.isNotEmpty) && !force) throw InUse(InUseKind.credential, pcs: pcs, gateways: gws);
     final cred = credentials[id];
     db.transaction(() {
       for (final c in connections.values.where((c) => c.credentialIds.contains(id)).toList()) {
@@ -203,7 +213,7 @@ class Repository extends ChangeNotifier {
     var p = g.parentId;
     final seen = <String>{g.id};
     while (p != null) {
-      if (!seen.add(p)) throw StateError('Група не може бути вкладена сама в себе.');
+      if (!seen.add(p)) throw GroupCycleError();
       p = groups[p]?.parentId;
     }
     db.put(kGroup, g.id, g.toJson());
@@ -240,7 +250,7 @@ class Repository extends ChangeNotifier {
 
   void deleteGateway(String id, {bool force = false}) {
     final users = connections.values.where((c) => c.gatewayId == id).map((c) => c.displayName).toList();
-    if (users.isNotEmpty && !force) throw InUse('Шлюз', users);
+    if (users.isNotEmpty && !force) throw InUse(InUseKind.gateway, pcs: users);
     db.transaction(() {
       for (final c in connections.values.where((c) => c.gatewayId == id).toList()) {
         final upd = c.copyWith(gatewayId: () => null);
@@ -264,7 +274,7 @@ class Repository extends ChangeNotifier {
 
   Future<void> deleteTunnel(String id, {bool force = false}) async {
     final t = tunnels[id];
-    _deleteRoute('Тунель', RouteKind.tunnel, kTunnel, id, force);
+    _deleteRoute(InUseKind.tunnel, RouteKind.tunnel, kTunnel, id, force);
     tunnels.remove(id);
     if (t != null) {
       for (final f in t.secretFields) {
@@ -283,7 +293,7 @@ class Repository extends ChangeNotifier {
 
   Future<void> deleteProxy(String id, {bool force = false}) async {
     final p = proxies[id];
-    _deleteRoute('Проксі', RouteKind.proxy, kProxy, id, force);
+    _deleteRoute(InUseKind.proxy, RouteKind.proxy, kProxy, id, force);
     proxies.remove(id);
     if (p != null) await secrets.delete(p.secretKey);
     notifyListeners();
@@ -298,7 +308,7 @@ class Repository extends ChangeNotifier {
 
   Future<void> deleteSsh(String id, {bool force = false}) async {
     final s = ssh[id];
-    _deleteRoute('SSH-профіль', RouteKind.ssh, kSsh, id, force);
+    _deleteRoute(InUseKind.ssh, RouteKind.ssh, kSsh, id, force);
     ssh.remove(id);
     if (s != null) await secrets.delete(s.secretKey);
     notifyListeners();
@@ -316,9 +326,9 @@ class Repository extends ChangeNotifier {
 
   /// Спільне для тунелів, проксі й SSH: якщо профіль використовують ПК і [force] = false,
   /// кидає [InUse]; інакше переводить ці ПК на «Напряму» і видаляє запис — атомарно.
-  void _deleteRoute(String what, RouteKind kind, String dbKind, String id, bool force) {
+  void _deleteRoute(InUseKind what, RouteKind kind, String dbKind, String id, bool force) {
     final users = connections.values.where((c) => c.route == kind && c.routeRefId == id).toList();
-    if (users.isNotEmpty && !force) throw InUse(what, users.map((c) => c.displayName).toList());
+    if (users.isNotEmpty && !force) throw InUse(what, pcs: users.map((c) => c.displayName).toList());
     db.transaction(() {
       for (final c in users) {
         final upd = c.copyWith(route: RouteKind.direct, routeRefId: () => null);

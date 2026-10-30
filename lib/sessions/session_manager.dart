@@ -16,6 +16,9 @@ enum SessionState {
   failed,
 }
 
+/// Чому підключення зараз неможливе (текст складає UI).
+enum ConnectBlock { engineMissing }
+
 class Session {
   Session({required this.id, required this.connectionId, required this.title});
   final String id;
@@ -44,13 +47,10 @@ class SessionManager extends ChangeNotifier {
     return null;
   }
 
-  /// Повертає текст для користувача, якщо підключення поки неможливе.
-  String? connect(Connection c, {String? credentialId}) {
+  /// Повертає причину, якщо підключення поки неможливе; null — підключення почалося.
+  ConnectBlock? connect(Connection c, {String? credentialId}) {
     repo.markUsed(c.id);
-    if (!engineAvailable) {
-      return 'RDP-ядро ще не підключене — це етап 2. '
-          'Профіль «${c.displayName}» збережено, усе інше вже працює.';
-    }
+    if (!engineAvailable) return ConnectBlock.engineMissing;
     // TODO(етап 2): створити Session, відкрити маршрут, запустити FreeRDP.
     return null;
   }

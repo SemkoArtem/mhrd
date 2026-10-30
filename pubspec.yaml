@@ -10,6 +10,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Переклади інтерфейсу: lib/l10n/*.arb → AppLocalizations (flutter gen-l10n)
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   # Локальна база (SQLite через FFI, без кодогенерації). З 3.x сам вбудовує бібліотеку SQLite
   # через build hooks, тому sqlite3_flutter_libs більше не потрібен.
   sqlite3: ^3.8.0
@@ -30,6 +34,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
   # Тексти ліцензій OFL: показуються в «Ліцензіях» застосунку (реєстрація в main.dart).
   assets:
     - assets/fonts/licenses/
