@@ -1,4 +1,8 @@
-/* Буфер обміну для Windows: CF_UNICODETEXT і CF_DIB у обидва боки.
+/* Буфер обміну для Windows: CF_UNICODETEXT і CF_DIB у обидва боки; файли — звідси на сервер.
+ *
+ * Файли (CF_HDROP у нашому буфері): серверу оголошуємо формат FileGroupDescriptorW. На «Вставити»
+ * сервер просить список (FILEDESCRIPTORW з розмірами, теки — рекурсивно), потім вміст кожного
+ * файлу частинами (FileContentsRequest). Провідник на ПК сам показує прогрес.
  *
  * Локальна копія → WM_CLIPBOARDUPDATE → серверу список форматів (без даних).
  * Сервер просить дані (ServerFormatDataRequest) → читаємо системний буфер і відповідаємо.
@@ -13,8 +17,12 @@
 
 #include <windows.h>
 
+#include <shellapi.h>
+#include <shlobj.h>
+
 #define WM_MHRD_SERVER_FORMATS (WM_APP + 1)
 #define RENDER_TIMEOUT_MS 5000
+#define MAX_CLIP_FILES 100000 /* запобіжник від «скопіював увесь диск» */
 
 struct MhrdClipboard
 {
@@ -33,6 +41,13 @@ struct MhrdClipboard
 	BYTE* response;
 	UINT32 responseLen;
 	BOOL responseOk;
+
+	/* Файли з нашого буфера на момент запиту списку сервером (індекс = listIndex) */
+	UINT fileFormat; /* id формату FileGroupDescriptorW у цій системі */
+	WCHAR** files;
+	UINT32 fileCount;
+	HANDLE openFile; /* відкритий для читання файл (сервер читає послідовно) */
+	UINT32 openIndex;
 };
 
 static CliprdrClientContext* get_cliprdr(MhrdClipboard* cb)
@@ -62,19 +77,206 @@ static void send_client_format_list(MhrdClipboard* cb)
 	CliprdrClientContext* c = get_cliprdr(cb);
 	if (!c)
 		return;
-	CLIPRDR_FORMAT formats[2] = { 0 };
+	CLIPRDR_FORMAT formats[3] = { 0 };
 	UINT32 n = 0;
 	/* Windows сам синтезує CF_UNICODETEXT з CF_TEXT і CF_DIB з бітмапа. */
 	if (IsClipboardFormatAvailable(CF_UNICODETEXT))
 		formats[n++].formatId = CF_UNICODETEXT;
 	if (IsClipboardFormatAvailable(CF_DIB))
 		formats[n++].formatId = CF_DIB;
+	if (IsClipboardFormatAvailable(CF_HDROP))
+	{
+		formats[n].formatId = cb->fileFormat;
+		formats[n++].formatName = (char*)"FileGroupDescriptorW";
+	}
 	CLIPRDR_FORMAT_LIST list = { 0 };
 	list.common.msgType = CB_FORMAT_LIST;
 	list.numFormats = n;
 	list.formats = formats;
 	UINT rc = c->ClientFormatList(c, &list);
 	(void)rc;
+}
+
+/* ── Файли: наш буфер → сервер ────────────────────────────────── */
+
+static void free_files(MhrdClipboard* cb)
+{
+	if (cb->openFile != INVALID_HANDLE_VALUE)
+		CloseHandle(cb->openFile);
+	cb->openFile = INVALID_HANDLE_VALUE;
+	for (UINT32 i = 0; i < cb->fileCount; i++)
+		free(cb->files[i]);
+	free(cb->files);
+	cb->files = NULL;
+	cb->fileCount = 0;
+}
+
+typedef struct
+{
+	FILEDESCRIPTORW* desc;
+	WCHAR** paths;
+	UINT32 count;
+	UINT32 cap;
+} FileList;
+
+/* Додає файл або теку (з усім вмістом). rel — ім'я, як його побачить сервер ("Тека\файл.txt"). */
+static void add_file(FileList* list, const WCHAR* abs, const WCHAR* rel)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+	if (list->count >= MAX_CLIP_FILES || wcslen(rel) >= MAX_PATH ||
+	    !GetFileAttributesExW(abs, GetFileExInfoStandard, &a))
+		return;
+	if (list->count == list->cap)
+	{
+		const UINT32 cap = list->cap ? list->cap * 2 : 16;
+		FILEDESCRIPTORW* d = realloc(list->desc, cap * sizeof(FILEDESCRIPTORW));
+		if (d)
+			list->desc = d;
+		WCHAR** p = realloc(list->paths, cap * sizeof(WCHAR*));
+		if (p)
+			list->paths = p;
+		if (!d || !p)
+			return;
+		list->cap = cap;
+	}
+	WCHAR* dup = _wcsdup(abs);
+	if (!dup)
+		return;
+	FILEDESCRIPTORW* d = &list->desc[list->count];
+	memset(d, 0, sizeof(*d));
+	d->dwFlags = FD_ATTRIBUTES | FD_FILESIZE | FD_WRITESTIME | FD_PROGRESSUI;
+	d->dwFileAttributes = a.dwFileAttributes;
+	d->ftLastWriteTime = a.ftLastWriteTime;
+	d->nFileSizeHigh = a.nFileSizeHigh;
+	d->nFileSizeLow = a.nFileSizeLow;
+	wcsncpy_s(d->cFileName, MAX_PATH, rel, _TRUNCATE);
+	list->paths[list->count++] = dup;
+
+	if (!(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+		return;
+	/* Тека: вміст рекурсивно, імена — відносно скопійованого. */
+	const size_t absLen = wcslen(abs), relLen = wcslen(rel);
+	WCHAR* pattern = malloc((absLen + 3) * sizeof(WCHAR));
+	if (!pattern)
+		return;
+	swprintf(pattern, absLen + 3, L"%s\\*", abs);
+	WIN32_FIND_DATAW fd;
+	HANDLE h = FindFirstFileW(pattern, &fd);
+	free(pattern);
+	if (h == INVALID_HANDLE_VALUE)
+		return;
+	do
+	{
+		if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
+			continue;
+		const size_t nameLen = wcslen(fd.cFileName);
+		WCHAR* childAbs = malloc((absLen + nameLen + 2) * sizeof(WCHAR));
+		WCHAR* childRel = malloc((relLen + nameLen + 2) * sizeof(WCHAR));
+		if (childAbs && childRel)
+		{
+			swprintf(childAbs, absLen + nameLen + 2, L"%s\\%s", abs, fd.cFileName);
+			swprintf(childRel, relLen + nameLen + 2, L"%s\\%s", rel, fd.cFileName);
+			add_file(list, childAbs, childRel);
+		}
+		free(childAbs);
+		free(childRel);
+	} while (FindNextFileW(h, &fd));
+	FindClose(h);
+}
+
+/* Знімок файлів із CF_HDROP → FILEGROUPDESCRIPTORW (u32 кількість + FILEDESCRIPTORW[]). */
+static BYTE* build_file_list(MhrdClipboard* cb, UINT32* outLen)
+{
+	FileList list = { 0 };
+	if (open_clipboard(NULL))
+	{
+		HDROP drop = (HDROP)GetClipboardData(CF_HDROP);
+		const UINT n = drop ? DragQueryFileW(drop, 0xFFFFFFFF, NULL, 0) : 0;
+		for (UINT i = 0; i < n; i++)
+		{
+			WCHAR path[MAX_PATH * 4];
+			if (!DragQueryFileW(drop, i, path, ARRAYSIZE(path)))
+				continue;
+			const WCHAR* slash = wcsrchr(path, L'\\');
+			add_file(&list, path, slash ? slash + 1 : path); /* верхній рівень — лише ім'я */
+		}
+		CloseClipboard();
+	}
+
+	EnterCriticalSection(&cb->lock);
+	free_files(cb);
+	cb->files = list.paths;
+	cb->fileCount = list.count;
+	LeaveCriticalSection(&cb->lock);
+
+	const UINT32 len = (UINT32)(sizeof(UINT32) + (size_t)list.count * sizeof(FILEDESCRIPTORW));
+	BYTE* buf = malloc(len);
+	if (buf)
+	{
+		memcpy(buf, &list.count, sizeof(UINT32));
+		if (list.count)
+			memcpy(buf + sizeof(UINT32), list.desc, (size_t)list.count * sizeof(FILEDESCRIPTORW));
+		*outLen = len;
+	}
+	free(list.desc);
+	return buf;
+}
+
+/* Сервер просить розмір файлу або шматок його вмісту. */
+static UINT on_server_file_contents_request(CliprdrClientContext* c, const CLIPRDR_FILE_CONTENTS_REQUEST* req)
+{
+	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
+	CLIPRDR_FILE_CONTENTS_RESPONSE resp = { 0 };
+	resp.common.msgType = CB_FILECONTENTS_RESPONSE;
+	resp.common.msgFlags = CB_RESPONSE_FAIL;
+	resp.streamId = req->streamId;
+	BYTE* data = NULL;
+	UINT32 len = 0;
+
+	EnterCriticalSection(&cb->lock);
+	const WCHAR* path = req->listIndex < cb->fileCount ? cb->files[req->listIndex] : NULL;
+	if (path && (req->dwFlags & FILECONTENTS_SIZE))
+	{
+		WIN32_FILE_ATTRIBUTE_DATA a;
+		if (GetFileAttributesExW(path, GetFileExInfoStandard, &a) && (data = malloc(8)) != NULL)
+		{
+			const UINT64 size = ((UINT64)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+			memcpy(data, &size, 8);
+			len = 8;
+			resp.common.msgFlags = CB_RESPONSE_OK;
+		}
+	}
+	else if (path && (req->dwFlags & FILECONTENTS_RANGE))
+	{
+		/* Сервер читає файл послідовно — тримаємо його відкритим між запитами. */
+		if (cb->openFile == INVALID_HANDLE_VALUE || cb->openIndex != req->listIndex)
+		{
+			if (cb->openFile != INVALID_HANDLE_VALUE)
+				CloseHandle(cb->openFile);
+			cb->openFile = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+			                           FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+			cb->openIndex = req->listIndex;
+		}
+		LARGE_INTEGER pos;
+		pos.LowPart = req->nPositionLow;
+		pos.HighPart = (LONG)req->nPositionHigh;
+		DWORD got = 0;
+		if (cb->openFile != INVALID_HANDLE_VALUE && SetFilePointerEx(cb->openFile, pos, NULL, FILE_BEGIN) &&
+		    (data = malloc(req->cbRequested ? req->cbRequested : 1)) != NULL &&
+		    ReadFile(cb->openFile, data, req->cbRequested, &got, NULL))
+		{
+			len = got; /* у кінці файлу — менше, ніж просили */
+			resp.common.msgFlags = CB_RESPONSE_OK;
+		}
+	}
+	LeaveCriticalSection(&cb->lock);
+
+	resp.common.dataLen = len;
+	resp.cbRequested = len;
+	resp.requestedData = data;
+	UINT rc = c->ClientFileContentsResponse(c, &resp);
+	free(data);
+	return rc;
 }
 
 static UINT on_server_format_data_request(CliprdrClientContext* c, const CLIPRDR_FORMAT_DATA_REQUEST* req)
@@ -85,6 +287,21 @@ static UINT on_server_format_data_request(CliprdrClientContext* c, const CLIPRDR
 	resp.common.msgFlags = CB_RESPONSE_FAIL;
 
 	const UINT fmt = req->requestedFormatId;
+	if (fmt == cb->fileFormat)
+	{
+		UINT32 len = 0;
+		BYTE* list = build_file_list(cb, &len);
+		if (list)
+		{
+			resp.common.msgFlags = CB_RESPONSE_OK;
+			resp.common.dataLen = len;
+			resp.requestedFormatData = list;
+		}
+		UINT rc = c->ClientFormatDataResponse(c, &resp);
+		free(list);
+		return rc;
+	}
+
 	BYTE* copy = NULL;
 	(void)cb;
 	/* Потік каналу, не потік вікна, — відкриваємо буфер без власника. */
@@ -234,7 +451,9 @@ static UINT on_monitor_ready(CliprdrClientContext* c, const CLIPRDR_MONITOR_READ
 	general.capabilitySetType = CB_CAPSTYPE_GENERAL;
 	general.capabilitySetLength = CB_CAPSTYPE_GENERAL_LEN;
 	general.version = CB_CAPS_VERSION_2;
-	general.generalFlags = CB_USE_LONG_FORMAT_NAMES;
+	/* Файли — потоками за запитом сервера, без шляхів нашого диска, і більші за 4 ГБ. */
+	general.generalFlags =
+	    CB_USE_LONG_FORMAT_NAMES | CB_STREAM_FILECLIP_ENABLED | CB_FILECLIP_NO_FILE_PATHS | CB_HUGE_FILE_SUPPORT_ENABLED;
 	CLIPRDR_CAPABILITIES caps = { 0 };
 	caps.cCapabilitiesSets = 1;
 	caps.capabilitySets = (CLIPRDR_CAPABILITY_SET*)&general;
@@ -268,6 +487,7 @@ void clipboard_attach(MhrdClipboard* cb, CliprdrClientContext* cliprdr)
 	cliprdr->ServerFormatListResponse = on_server_format_list_response;
 	cliprdr->ServerFormatDataRequest = on_server_format_data_request;
 	cliprdr->ServerFormatDataResponse = on_server_format_data_response;
+	cliprdr->ServerFileContentsRequest = on_server_file_contents_request;
 	EnterCriticalSection(&cb->lock);
 	cb->cliprdr = cliprdr;
 	LeaveCriticalSection(&cb->lock);
@@ -363,6 +583,8 @@ MhrdClipboard* clipboard_new(void)
 	if (!cb)
 		return NULL;
 	InitializeCriticalSection(&cb->lock);
+	cb->openFile = INVALID_HANDLE_VALUE;
+	cb->fileFormat = RegisterClipboardFormatW(L"FileGroupDescriptorW");
 	cb->ready = CreateEvent(NULL, TRUE, FALSE, NULL);
 	cb->responseEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	cb->thread = CreateThread(NULL, 0, window_thread, cb, 0, NULL);
@@ -397,6 +619,7 @@ void clipboard_free(MhrdClipboard* cb)
 	if (cb->responseEvent)
 		CloseHandle(cb->responseEvent);
 	free(cb->response);
+	free_files(cb);
 	DeleteCriticalSection(&cb->lock);
 	free(cb);
 }
