@@ -22,8 +22,11 @@ jobs:
       - run: flutter analyze
       - run: flutter test
 
+  # Повна збірка під 4 ОС — лише вручну (Actions → build → Run workflow): у приватному
+  # репозиторії хвилини Windows рахуються ×2, macOS — ×10, і кожен push з'їдав би сотні хвилин.
   build:
     needs: test
+    if: github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:

@@ -45,7 +45,7 @@ lib/
   ui/                          головний екран, «Додати ПК», налаштування, редактор теми
 test/                          юніт-тести логіки
 docs/SPEC.md                   специфікація (джерело правди)
-.github/workflows/build.yml    тести + збірка під 4 ОС у GitHub Actions
+.github/workflows/build.yml    тести на кожен push; збірка під 4 ОС — лише вручну (workflow_dispatch)
 ```
 
 ## Стан і пріоритети
