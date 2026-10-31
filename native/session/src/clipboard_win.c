@@ -17,6 +17,7 @@
 
 #include <windows.h>
 
+#include <ole2.h>
 #include <shellapi.h>
 #include <shlobj.h>
 
@@ -44,10 +45,20 @@ struct MhrdClipboard
 
 	/* Файли з нашого буфера на момент запиту списку сервером (індекс = listIndex) */
 	UINT fileFormat; /* id формату FileGroupDescriptorW у цій системі */
+	UINT contentsFormat; /* id формату FileContents */
 	WCHAR** files;
 	UINT32 fileCount;
 	HANDLE openFile; /* відкритий для читання файл (сервер читає послідовно) */
 	UINT32 openIndex;
+
+	/* Файли сервера → нам (OLE IDataObject у буфері Windows) */
+	UINT32 serverFiles;        /* id формату FileGroupDescriptorW у сервера; 0 — файлів немає */
+	IDataObject* dataObject;   /* наш об'єкт у буфері Windows */
+	HANDLE fcEvent;            /* відповідь на FileContentsRequest */
+	BYTE* fcData;
+	UINT32 fcLen;
+	BOOL fcOk;
+	UINT32 nextStreamId;
 };
 
 static CliprdrClientContext* get_cliprdr(MhrdClipboard* cb)
@@ -343,15 +354,20 @@ static UINT on_server_format_list(CliprdrClientContext* c, const CLIPRDR_FORMAT_
 {
 	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
 	BOOL text = FALSE, dib = FALSE;
+	UINT32 files = 0;
 	for (UINT32 i = 0; i < list->numFormats; i++)
 	{
 		const UINT32 id = list->formats[i].formatId;
+		const char* name = list->formats[i].formatName;
 		text |= id == CF_UNICODETEXT;
 		dib |= id == CF_DIB;
+		if (name && strcmp(name, "FileGroupDescriptorW") == 0)
+			files = id;
 	}
 	EnterCriticalSection(&cb->lock);
 	cb->serverText = text;
 	cb->serverDib = dib;
+	cb->serverFiles = files;
 	LeaveCriticalSection(&cb->lock);
 
 	CLIPRDR_FORMAT_LIST_RESPONSE resp = { 0 };
@@ -425,12 +441,476 @@ static HGLOBAL request_server_data(MhrdClipboard* cb, UINT fmt, DWORD timeoutMs)
 	return h;
 }
 
-/* Займаємо буфер Windows: формати є, дані — потім (WM_RENDERFORMAT). */
+/* ── Файли: сервер → наш буфер (OLE) ──────────────────────────── */
+
+static UINT on_server_file_contents_response(CliprdrClientContext* c, const CLIPRDR_FILE_CONTENTS_RESPONSE* resp)
+{
+	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
+	EnterCriticalSection(&cb->lock);
+	free(cb->fcData);
+	cb->fcData = NULL;
+	cb->fcLen = 0;
+	cb->fcOk = (resp->common.msgFlags & CB_RESPONSE_OK) != 0;
+	if (cb->fcOk && resp->cbRequested && resp->requestedData)
+	{
+		cb->fcData = malloc(resp->cbRequested);
+		if (cb->fcData)
+		{
+			memcpy(cb->fcData, resp->requestedData, resp->cbRequested);
+			cb->fcLen = resp->cbRequested;
+		}
+		else
+			cb->fcOk = FALSE;
+	}
+	LeaveCriticalSection(&cb->lock);
+	SetEvent(cb->fcEvent);
+	return CHANNEL_RC_OK;
+}
+
+/* Розмір файлу (sizeOnly) або шматок вмісту з сервера. Блокує до відповіді (до 60 с). */
+static BOOL request_file_contents(MhrdClipboard* cb, UINT32 index, BOOL sizeOnly, UINT64 pos, UINT32 want, BYTE* out,
+                                  UINT32* got)
+{
+	*got = 0;
+	CliprdrClientContext* c = get_cliprdr(cb);
+	if (!c)
+		return FALSE;
+	ResetEvent(cb->fcEvent);
+	CLIPRDR_FILE_CONTENTS_REQUEST req = { 0 };
+	req.common.msgType = CB_FILECONTENTS_REQUEST;
+	req.streamId = ++cb->nextStreamId;
+	req.listIndex = index;
+	req.dwFlags = sizeOnly ? FILECONTENTS_SIZE : FILECONTENTS_RANGE;
+	req.nPositionLow = (UINT32)pos;
+	req.nPositionHigh = (UINT32)(pos >> 32);
+	req.cbRequested = sizeOnly ? 8 : want;
+	if (c->ClientFileContentsRequest(c, &req) != CHANNEL_RC_OK)
+		return FALSE;
+	if (WaitForSingleObject(cb->fcEvent, 60000) != WAIT_OBJECT_0)
+		return FALSE;
+	EnterCriticalSection(&cb->lock);
+	const BOOL ok = cb->fcOk;
+	UINT32 n = cb->fcLen;
+	if (n > req.cbRequested)
+		n = req.cbRequested;
+	if (ok && n)
+		memcpy(out, cb->fcData, n);
+	*got = ok ? n : 0;
+	free(cb->fcData);
+	cb->fcData = NULL;
+	cb->fcLen = 0;
+	LeaveCriticalSection(&cb->lock);
+	return ok;
+}
+
+/* IStream: файл сервера, який Провідник читає частинами під час «Вставити». */
+typedef struct
+{
+	IStream iface;
+	LONG refs;
+	MhrdClipboard* cb;
+	UINT32 index;
+	ULONGLONG size;
+	ULONGLONG pos;
+} FileStream;
+
+static HRESULT STDMETHODCALLTYPE fs_QueryInterface(IStream* This, REFIID riid, void** ppv)
+{
+	if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IStream) ||
+	    IsEqualIID(riid, &IID_ISequentialStream))
+	{
+		*ppv = This;
+		This->lpVtbl->AddRef(This);
+		return S_OK;
+	}
+	*ppv = NULL;
+	return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE fs_AddRef(IStream* This)
+{
+	return (ULONG)InterlockedIncrement(&((FileStream*)This)->refs);
+}
+
+static ULONG STDMETHODCALLTYPE fs_Release(IStream* This)
+{
+	FileStream* s = (FileStream*)This;
+	const LONG n = InterlockedDecrement(&s->refs);
+	if (n == 0)
+		free(s);
+	return (ULONG)n;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Read(IStream* This, void* pv, ULONG cb, ULONG* pcbRead)
+{
+	FileStream* s = (FileStream*)This;
+	ULONG done = 0;
+	while (done < cb && s->pos < s->size)
+	{
+		ULONGLONG left = s->size - s->pos;
+		UINT32 want = (UINT32)min((ULONGLONG)(cb - done), min(left, (ULONGLONG)(1u << 20)));
+		UINT32 got = 0;
+		if (!request_file_contents(s->cb, s->index, FALSE, s->pos, want, (BYTE*)pv + done, &got))
+			return done ? S_OK : STG_E_READFAULT;
+		if (got == 0)
+			break;
+		done += got;
+		s->pos += got;
+	}
+	if (pcbRead)
+		*pcbRead = done;
+	return done < cb ? S_FALSE : S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Write(IStream* This, const void* pv, ULONG cb, ULONG* written)
+{
+	(void)This;
+	(void)pv;
+	(void)cb;
+	(void)written;
+	return STG_E_ACCESSDENIED;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Seek(IStream* This, LARGE_INTEGER move, DWORD origin, ULARGE_INTEGER* newPos)
+{
+	FileStream* s = (FileStream*)This;
+	LONGLONG base = origin == STREAM_SEEK_SET ? 0 : origin == STREAM_SEEK_CUR ? (LONGLONG)s->pos : (LONGLONG)s->size;
+	const LONGLONG p = base + move.QuadPart;
+	if (p < 0)
+		return STG_E_INVALIDFUNCTION;
+	s->pos = (ULONGLONG)p;
+	if (newPos)
+		newPos->QuadPart = s->pos;
+	return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_SetSize(IStream* This, ULARGE_INTEGER size)
+{
+	(void)This;
+	(void)size;
+	return E_NOTIMPL;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_CopyTo(IStream* This, IStream* dst, ULARGE_INTEGER cb, ULARGE_INTEGER* read,
+                                           ULARGE_INTEGER* written)
+{
+	(void)This;
+	(void)dst;
+	(void)cb;
+	(void)read;
+	(void)written;
+	return E_NOTIMPL;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Commit(IStream* This, DWORD flags)
+{
+	(void)This;
+	(void)flags;
+	return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Revert(IStream* This)
+{
+	(void)This;
+	return E_NOTIMPL;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_LockRegion(IStream* This, ULARGE_INTEGER off, ULARGE_INTEGER cb, DWORD type)
+{
+	(void)This;
+	(void)off;
+	(void)cb;
+	(void)type;
+	return STG_E_INVALIDFUNCTION;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Stat(IStream* This, STATSTG* st, DWORD flags)
+{
+	(void)flags;
+	FileStream* s = (FileStream*)This;
+	memset(st, 0, sizeof(*st));
+	st->type = STGTY_STREAM;
+	st->cbSize.QuadPart = s->size;
+	st->grfMode = STGM_READ;
+	return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE fs_Clone(IStream* This, IStream** out)
+{
+	(void)This;
+	*out = NULL;
+	return E_NOTIMPL;
+}
+
+static IStreamVtbl g_fileStreamVtbl = {
+	.QueryInterface = fs_QueryInterface,
+	.AddRef = fs_AddRef,
+	.Release = fs_Release,
+	.Read = fs_Read,
+	.Write = fs_Write,
+	.Seek = fs_Seek,
+	.SetSize = fs_SetSize,
+	.CopyTo = fs_CopyTo,
+	.Commit = fs_Commit,
+	.Revert = fs_Revert,
+	.LockRegion = fs_LockRegion,
+	.UnlockRegion = fs_LockRegion,
+	.Stat = fs_Stat,
+	.Clone = fs_Clone,
+};
+
+/* IDataObject у буфері Windows: FileGroupDescriptorW (список) і FileContents (потоки). */
+typedef struct
+{
+	IDataObject iface;
+	LONG refs;
+	MhrdClipboard* cb;
+	UINT32 serverFormat;
+	BYTE* desc; /* FILEGROUPDESCRIPTORW із сервера (кешується після першого запиту) */
+	UINT32 descLen;
+	FORMATETC fmts[2];
+} FileDataObject;
+
+static BOOL fdo_load_desc(FileDataObject* o)
+{
+	if (o->desc)
+		return TRUE;
+	HGLOBAL h = request_server_data(o->cb, o->serverFormat, 30000);
+	if (!h)
+		return FALSE;
+	const SIZE_T size = GlobalSize(h);
+	const void* p = GlobalLock(h);
+	if (p && size >= sizeof(UINT32))
+	{
+		o->desc = malloc(size);
+		if (o->desc)
+		{
+			memcpy(o->desc, p, size);
+			o->descLen = (UINT32)size;
+		}
+	}
+	if (p)
+		GlobalUnlock(h);
+	GlobalFree(h);
+	return o->desc != NULL;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_QueryInterface(IDataObject* This, REFIID riid, void** ppv)
+{
+	if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IDataObject))
+	{
+		*ppv = This;
+		This->lpVtbl->AddRef(This);
+		return S_OK;
+	}
+	*ppv = NULL;
+	return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE fdo_AddRef(IDataObject* This)
+{
+	return (ULONG)InterlockedIncrement(&((FileDataObject*)This)->refs);
+}
+
+static ULONG STDMETHODCALLTYPE fdo_Release(IDataObject* This)
+{
+	FileDataObject* o = (FileDataObject*)This;
+	const LONG n = InterlockedDecrement(&o->refs);
+	if (n == 0)
+	{
+		free(o->desc);
+		free(o);
+	}
+	return (ULONG)n;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_GetData(IDataObject* This, FORMATETC* fmt, STGMEDIUM* med)
+{
+	FileDataObject* o = (FileDataObject*)This;
+	memset(med, 0, sizeof(*med));
+	if (fmt->cfFormat == o->cb->fileFormat && (fmt->tymed & TYMED_HGLOBAL))
+	{
+		if (!fdo_load_desc(o))
+			return E_FAIL;
+		HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, o->descLen);
+		void* p = h ? GlobalLock(h) : NULL;
+		if (!p)
+		{
+			if (h)
+				GlobalFree(h);
+			return E_OUTOFMEMORY;
+		}
+		memcpy(p, o->desc, o->descLen);
+		GlobalUnlock(h);
+		med->tymed = TYMED_HGLOBAL;
+		med->hGlobal = h;
+		return S_OK;
+	}
+	if (fmt->cfFormat == o->cb->contentsFormat && (fmt->tymed & TYMED_ISTREAM))
+	{
+		if (!fdo_load_desc(o))
+			return E_FAIL;
+		UINT32 count = 0;
+		memcpy(&count, o->desc, sizeof(UINT32));
+		if (fmt->lindex < 0 || (UINT32)fmt->lindex >= count ||
+		    sizeof(UINT32) + ((size_t)fmt->lindex + 1) * sizeof(FILEDESCRIPTORW) > o->descLen)
+			return DV_E_LINDEX;
+		const FILEDESCRIPTORW* d = (const FILEDESCRIPTORW*)(o->desc + sizeof(UINT32)) + fmt->lindex;
+		ULONGLONG size = ((ULONGLONG)d->nFileSizeHigh << 32) | d->nFileSizeLow;
+		if (!(d->dwFlags & FD_FILESIZE))
+		{
+			BYTE buf[8] = { 0 };
+			UINT32 got = 0;
+			if (!request_file_contents(o->cb, (UINT32)fmt->lindex, TRUE, 0, 8, buf, &got) || got < 8)
+				return E_FAIL;
+			memcpy(&size, buf, 8);
+		}
+		FileStream* s = calloc(1, sizeof(FileStream));
+		if (!s)
+			return E_OUTOFMEMORY;
+		s->iface.lpVtbl = &g_fileStreamVtbl;
+		s->refs = 1;
+		s->cb = o->cb;
+		s->index = (UINT32)fmt->lindex;
+		s->size = size;
+		med->tymed = TYMED_ISTREAM;
+		med->pstm = &s->iface;
+		return S_OK;
+	}
+	return DV_E_FORMATETC;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_GetDataHere(IDataObject* This, FORMATETC* fmt, STGMEDIUM* med)
+{
+	(void)This;
+	(void)fmt;
+	(void)med;
+	return E_NOTIMPL;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_QueryGetData(IDataObject* This, FORMATETC* fmt)
+{
+	FileDataObject* o = (FileDataObject*)This;
+	if (fmt->cfFormat == o->cb->fileFormat && (fmt->tymed & TYMED_HGLOBAL))
+		return S_OK;
+	if (fmt->cfFormat == o->cb->contentsFormat && (fmt->tymed & TYMED_ISTREAM))
+		return S_OK;
+	return DV_E_FORMATETC;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_GetCanonicalFormatEtc(IDataObject* This, FORMATETC* in, FORMATETC* out)
+{
+	(void)This;
+	*out = *in;
+	out->ptd = NULL;
+	return DATA_S_SAMEFORMATETC;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_SetData(IDataObject* This, FORMATETC* fmt, STGMEDIUM* med, BOOL release)
+{
+	(void)This;
+	(void)fmt;
+	(void)med;
+	(void)release;
+	return E_NOTIMPL; /* «Preferred/Performed DropEffect» тощо нам не потрібні */
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_EnumFormatEtc(IDataObject* This, DWORD dir, IEnumFORMATETC** out)
+{
+	FileDataObject* o = (FileDataObject*)This;
+	if (dir != DATADIR_GET)
+		return E_NOTIMPL;
+	return SHCreateStdEnumFmtEtc(ARRAYSIZE(o->fmts), o->fmts, out);
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_DAdvise(IDataObject* This, FORMATETC* fmt, DWORD advf, IAdviseSink* sink,
+                                             DWORD* conn)
+{
+	(void)This;
+	(void)fmt;
+	(void)advf;
+	(void)sink;
+	(void)conn;
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_DUnadvise(IDataObject* This, DWORD conn)
+{
+	(void)This;
+	(void)conn;
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static HRESULT STDMETHODCALLTYPE fdo_EnumDAdvise(IDataObject* This, IEnumSTATDATA** out)
+{
+	(void)This;
+	*out = NULL;
+	return OLE_E_ADVISENOTSUPPORTED;
+}
+
+static IDataObjectVtbl g_fileDataObjectVtbl = {
+	.QueryInterface = fdo_QueryInterface,
+	.AddRef = fdo_AddRef,
+	.Release = fdo_Release,
+	.GetData = fdo_GetData,
+	.GetDataHere = fdo_GetDataHere,
+	.QueryGetData = fdo_QueryGetData,
+	.GetCanonicalFormatEtc = fdo_GetCanonicalFormatEtc,
+	.SetData = fdo_SetData,
+	.EnumFormatEtc = fdo_EnumFormatEtc,
+	.DAdvise = fdo_DAdvise,
+	.DUnadvise = fdo_DUnadvise,
+	.EnumDAdvise = fdo_EnumDAdvise,
+};
+
+static IDataObject* file_data_object_new(MhrdClipboard* cb, UINT32 serverFormat)
+{
+	FileDataObject* o = calloc(1, sizeof(FileDataObject));
+	if (!o)
+		return NULL;
+	o->iface.lpVtbl = &g_fileDataObjectVtbl;
+	o->refs = 1;
+	o->cb = cb;
+	o->serverFormat = serverFormat;
+	o->fmts[0].cfFormat = (CLIPFORMAT)cb->fileFormat;
+	o->fmts[0].dwAspect = DVASPECT_CONTENT;
+	o->fmts[0].lindex = -1;
+	o->fmts[0].tymed = TYMED_HGLOBAL;
+	o->fmts[1].cfFormat = (CLIPFORMAT)cb->contentsFormat;
+	o->fmts[1].dwAspect = DVASPECT_CONTENT;
+	o->fmts[1].lindex = -1;
+	o->fmts[1].tymed = TYMED_ISTREAM;
+	return &o->iface;
+}
+
+/* Буфер Windows уже наш (OLE) — прибрати, щоб вставляння після кінця сеансу не зависало. */
+static void release_ole_clipboard(MhrdClipboard* cb)
+{
+	if (cb->dataObject)
+	{
+		if (OleIsCurrentClipboard(cb->dataObject) == S_OK)
+			OleSetClipboard(NULL);
+		cb->dataObject->lpVtbl->Release(cb->dataObject);
+		cb->dataObject = NULL;
+	}
+}
+
+/* Займаємо буфер Windows: файли — OLE-об'єктом (Провідник читає потоки); текст і картинки —
+ * форматами з відкладеним заповненням (дані — на WM_RENDERFORMAT). */
 static void take_ownership(MhrdClipboard* cb)
 {
 	EnterCriticalSection(&cb->lock);
 	const BOOL text = cb->serverText, dib = cb->serverDib;
+	const UINT32 files = cb->serverFiles;
 	LeaveCriticalSection(&cb->lock);
+	release_ole_clipboard(cb);
+	if (files)
+	{
+		cb->dataObject = file_data_object_new(cb, files);
+		if (cb->dataObject && OleSetClipboard(cb->dataObject) == S_OK)
+			return;
+		release_ole_clipboard(cb);
+	}
 	if (!open_clipboard(cb->hwnd))
 		return;
 	EmptyClipboard();
@@ -439,6 +919,19 @@ static void take_ownership(MhrdClipboard* cb)
 	if (dib)
 		SetClipboardData(CF_DIB, NULL);
 	CloseClipboard();
+}
+
+/* Буфер змінили ми самі (наше вікно або OLE-вікно нашого процесу) — серверу не пересилаємо. */
+static BOOL clipboard_is_ours(HWND hwnd)
+{
+	HWND owner = GetClipboardOwner();
+	if (!owner)
+		return FALSE;
+	if (owner == hwnd)
+		return TRUE;
+	DWORD pid = 0;
+	GetWindowThreadProcessId(owner, &pid);
+	return pid == GetCurrentProcessId();
 }
 
 /* ── Канал ────────────────────────────────────────────────────── */
@@ -488,6 +981,7 @@ void clipboard_attach(MhrdClipboard* cb, CliprdrClientContext* cliprdr)
 	cliprdr->ServerFormatDataRequest = on_server_format_data_request;
 	cliprdr->ServerFormatDataResponse = on_server_format_data_response;
 	cliprdr->ServerFileContentsRequest = on_server_file_contents_request;
+	cliprdr->ServerFileContentsResponse = on_server_file_contents_response;
 	EnterCriticalSection(&cb->lock);
 	cb->cliprdr = cliprdr;
 	LeaveCriticalSection(&cb->lock);
@@ -497,8 +991,10 @@ void clipboard_detach(MhrdClipboard* cb)
 {
 	EnterCriticalSection(&cb->lock);
 	cb->cliprdr = NULL;
+	cb->fcOk = FALSE;
 	LeaveCriticalSection(&cb->lock);
 	SetEvent(cb->responseEvent); /* розбудити WM_RENDERFORMAT, якщо чекає */
+	SetEvent(cb->fcEvent);       /* і читання файлу Провідником */
 }
 
 /* ── Приховане вікно ──────────────────────────────────────────── */
@@ -512,8 +1008,8 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 			SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)((CREATESTRUCT*)lParam)->lpCreateParams);
 			return 0;
 		case WM_CLIPBOARDUPDATE:
-			/* Зміни, які зробили ми самі (take_ownership), серверу не пересилаємо. */
-			if (cb && GetClipboardOwner() != hwnd)
+			/* Зміни, які зробили ми самі (take_ownership, OLE), серверу не пересилаємо. */
+			if (cb && !clipboard_is_ours(hwnd))
 				send_client_format_list(cb);
 			return 0;
 		case WM_MHRD_SERVER_FORMATS:
@@ -546,6 +1042,8 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 			}
 			return 0;
 		case WM_DESTROY:
+			if (cb)
+				release_ole_clipboard(cb);
 			RemoveClipboardFormatListener(hwnd);
 			PostQuitMessage(0);
 			return 0;
@@ -557,6 +1055,8 @@ static LRESULT CALLBACK wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
 static DWORD WINAPI window_thread(LPVOID arg)
 {
 	MhrdClipboard* cb = (MhrdClipboard*)arg;
+	/* OLE-буфер (файли з сервера) працює лише в STA-потоці з циклом повідомлень — тут. */
+	const BOOL ole = SUCCEEDED(OleInitialize(NULL));
 	WNDCLASSW wc = { 0 };
 	wc.lpfnWndProc = wnd_proc;
 	wc.hInstance = GetModuleHandle(NULL);
@@ -566,15 +1066,18 @@ static DWORD WINAPI window_thread(LPVOID arg)
 	if (cb->hwnd)
 		AddClipboardFormatListener(cb->hwnd);
 	SetEvent(cb->ready);
-	if (!cb->hwnd)
-		return 1;
-	MSG msg;
-	while (GetMessage(&msg, NULL, 0, 0) > 0)
+	if (cb->hwnd)
 	{
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
+		MSG msg;
+		while (GetMessage(&msg, NULL, 0, 0) > 0)
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
 	}
-	return 0;
+	if (ole)
+		OleUninitialize();
+	return cb->hwnd ? 0 : 1;
 }
 
 MhrdClipboard* clipboard_new(void)
@@ -585,10 +1088,12 @@ MhrdClipboard* clipboard_new(void)
 	InitializeCriticalSection(&cb->lock);
 	cb->openFile = INVALID_HANDLE_VALUE;
 	cb->fileFormat = RegisterClipboardFormatW(L"FileGroupDescriptorW");
+	cb->contentsFormat = RegisterClipboardFormatW(L"FileContents");
 	cb->ready = CreateEvent(NULL, TRUE, FALSE, NULL);
 	cb->responseEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+	cb->fcEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	cb->thread = CreateThread(NULL, 0, window_thread, cb, 0, NULL);
-	if (!cb->ready || !cb->responseEvent || !cb->thread)
+	if (!cb->ready || !cb->responseEvent || !cb->fcEvent || !cb->thread)
 	{
 		clipboard_free(cb);
 		return NULL;
@@ -618,7 +1123,10 @@ void clipboard_free(MhrdClipboard* cb)
 		CloseHandle(cb->ready);
 	if (cb->responseEvent)
 		CloseHandle(cb->responseEvent);
+	if (cb->fcEvent)
+		CloseHandle(cb->fcEvent);
 	free(cb->response);
+	free(cb->fcData);
 	free_files(cb);
 	DeleteCriticalSection(&cb->lock);
 	free(cb);

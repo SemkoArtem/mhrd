@@ -22,6 +22,11 @@ endif()
 add_executable(mhrd-session src/main.c src/proto.c src/shm.c ${MHRD_CLIPBOARD})
 target_link_libraries(mhrd-session PRIVATE freerdp-client freerdp winpr cjson)
 
+if(WIN32)
+  # Буфер обміну: OLE-об'єкт для файлів із сервера (ole32, uuid), CF_HDROP і перелік форматів (shell32).
+  target_link_libraries(mhrd-session PRIVATE ole32 uuid shell32)
+endif()
+
 if(MSVC)
   target_compile_options(mhrd-session PRIVATE /W4 /utf-8)
   target_compile_definitions(mhrd-session PRIVATE _CRT_SECURE_NO_WARNINGS)
