@@ -211,6 +211,19 @@ void main() {
       expect(repo.connections['pc']!.lastUsed, isNotNull);
     });
 
+    test('папки «лише для читання» не підключаються зовсім', () async {
+      final c = pc().copyWith(
+          devices: const DeviceSettings(folders: [
+        SharedFolder(name: 'Docs', path: r'C:\Docs'),
+        SharedFolder(name: 'Secret', path: r'C:\Secret', readOnly: true),
+      ]));
+      await m.start(c, username: 'u', password: 'p', width: 800, height: 600);
+      final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
+      expect(json['folders'], [
+        {'name': 'Docs', 'path': r'C:\Docs'}
+      ]);
+    });
+
     test('certPin ПК передається в mhrd-session', () async {
       await m.start(pc(certPin: 'AB:CD'), username: 'u', password: 'p', width: 800, height: 600);
       final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;

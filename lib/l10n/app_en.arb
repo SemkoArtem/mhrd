@@ -182,6 +182,8 @@
   "folders": "Folders",
   "noFolders": "No folders are shared with the remote PC.",
   "readOnly": "Read-only",
+  "readOnlyNotSupported": "Read-only mode is not supported yet — this folder won't be shared. Clear the mark to share it with write access.",
+  "foldersHint": "Each folder appears on the remote PC as a drive in “This PC”.",
   "removeFolder": "Remove folder",
   "addFolder": "Add folder",
   "tags": "Tags",

@@ -597,6 +597,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readOnly => 'Read-only';
 
   @override
+  String get readOnlyNotSupported =>
+      'Read-only mode is not supported yet — this folder won\'t be shared. Clear the mark to share it with write access.';
+
+  @override
+  String get foldersHint =>
+      'Each folder appears on the remote PC as a drive in “This PC”.';
+
+  @override
   String get removeFolder => 'Remove folder';
 
   @override

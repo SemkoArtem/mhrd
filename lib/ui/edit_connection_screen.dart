@@ -405,13 +405,19 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         onChanged: (v) => setD(d.copyWith(sound: v)),
       ),
       _section(l.folders),
+      Text(l.foldersHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
+      const SizedBox(height: 6),
       if (d.folders.isEmpty) Text(l.noFolders, style: TextStyle(color: t.textMuted)),
       for (var i = 0; i < d.folders.length; i++)
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.folder_outlined),
           title: Text(d.folders[i].name),
-          subtitle: Text(d.folders[i].path, style: t.mono),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(d.folders[i].path, style: t.mono),
+            if (d.folders[i].readOnly)
+              Text(l.readOnlyNotSupported, style: TextStyle(color: t.warn, fontSize: 12)),
+          ]),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             FilterChip(
               label: Text(l.readOnly),

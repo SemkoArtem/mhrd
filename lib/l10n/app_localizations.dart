@@ -1148,6 +1148,18 @@ abstract class AppLocalizations {
   /// **'Лише читання'**
   String get readOnly;
 
+  /// No description provided for @readOnlyNotSupported.
+  ///
+  /// In uk, this message translates to:
+  /// **'Режим «лише читання» ще не підтримується — цю папку не буде підключено. Зніміть позначку, щоб підключити з записом.'**
+  String get readOnlyNotSupported;
+
+  /// No description provided for @foldersHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК».'**
+  String get foldersHint;
+
   /// No description provided for @removeFolder.
   ///
   /// In uk, this message translates to:

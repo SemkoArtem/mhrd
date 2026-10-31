@@ -87,6 +87,11 @@ class SessionManager extends ChangeNotifier {
       'clipboard': c.devices.clipboard,
       'sound': c.devices.sound.name, // local | remote | off
       'microphone': c.devices.microphone,
+      // «Лише читання» FreeRDP не вміє — такі папки не підключаємо зовсім, а не тихо з записом.
+      'folders': [
+        for (final f in c.devices.folders)
+          if (!f.readOnly) {'name': f.name, 'path': f.path},
+      ],
     });
     notifyListeners();
     return s;

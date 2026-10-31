@@ -451,6 +451,21 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	free(user);
 	free(domain);
 
+	/* Спільні папки: кожна — мережевий диск у «Цей ПК» на віддаленому ПК (канал rdpdr).
+	 * Папки «лише для читання» застосунок сюди не передає: FreeRDP такого режиму не має. */
+	const cJSON* folders = cJSON_GetObjectItemCaseSensitive(j, "folders");
+	const cJSON* f = NULL;
+	cJSON_ArrayForEach(f, folders)
+	{
+		const char* name = jstr(f, "name");
+		const char* path = jstr(f, "path");
+		if (!ok || !name || !path)
+			continue;
+		const char* params[] = { "drive", name, path };
+		ok = freerdp_client_add_device_channel(s, ARRAYSIZE(params), params) &&
+		     freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, TRUE);
+	}
+
 	const char* pin = jstr(j, "certPin");
 	m->certPin = pin ? _strdup(pin) : NULL;
 out:

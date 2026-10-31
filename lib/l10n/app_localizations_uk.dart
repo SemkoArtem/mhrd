@@ -596,6 +596,14 @@ class AppLocalizationsUk extends AppLocalizations {
   String get readOnly => 'Лише читання';
 
   @override
+  String get readOnlyNotSupported =>
+      'Режим «лише читання» ще не підтримується — цю папку не буде підключено. Зніміть позначку, щоб підключити з записом.';
+
+  @override
+  String get foldersHint =>
+      'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК».';
+
+  @override
   String get removeFolder => 'Прибрати папку';
 
   @override
