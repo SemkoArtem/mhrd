@@ -965,7 +965,7 @@ abstract class AppLocalizations {
   /// No description provided for @routeViaTunnel.
   ///
   /// In uk, this message translates to:
-  /// **'Через вбудований тунель (WireGuard, OpenVPN…)'**
+  /// **'Через вбудований тунель (WireGuard)'**
   String get routeViaTunnel;
 
   /// No description provided for @routeViaProxy.
@@ -1463,7 +1463,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunnelsHint.
   ///
   /// In uk, this message translates to:
-  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; OpenVPN, Tailscale та інші — далі.'**
+  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; Tailscale — далі. Для інших VPN увімкніть їх у системі й виберіть «Напряму».'**
   String get tunnelsHint;
 
   /// No description provided for @importWireGuard.

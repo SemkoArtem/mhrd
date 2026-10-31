@@ -502,7 +502,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get routeHow => 'Як підключатися';
 
   @override
-  String get routeViaTunnel => 'Через вбудований тунель (WireGuard, OpenVPN…)';
+  String get routeViaTunnel => 'Через вбудований тунель (WireGuard)';
 
   @override
   String get routeViaProxy => 'Через проксі';
@@ -773,7 +773,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tunnelsHint =>
-      'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; OpenVPN, Tailscale та інші — далі.';
+      'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; Tailscale — далі. Для інших VPN увімкніть їх у системі й виберіть «Напряму».';
 
   @override
   String get importWireGuard => 'Імпортувати WireGuard .conf';

@@ -502,8 +502,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routeHow => 'How to connect';
 
   @override
-  String get routeViaTunnel =>
-      'Through a built-in tunnel (WireGuard, OpenVPN…)';
+  String get routeViaTunnel => 'Through a built-in tunnel (WireGuard)';
 
   @override
   String get routeViaProxy => 'Through a proxy';
@@ -774,7 +773,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tunnelsHint =>
-      'The tunnel runs inside MHRD: no administrator rights, and it doesn\'t interfere with another VPN. WireGuard is supported for now; OpenVPN, Tailscale and others come later.';
+      'The tunnel runs inside MHRD: no administrator rights, and it doesn\'t interfere with another VPN. WireGuard is supported for now; Tailscale comes later. For other VPNs, turn them on in the system and choose \"Direct\".';
 
   @override
   String get importWireGuard => 'Import WireGuard .conf';

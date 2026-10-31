@@ -14,7 +14,7 @@ MHRD (MacroHard Remote Desktop, робоча назва) — безкоштов�
   ресурси, іконки чи назви Microsoft. Назва в коді й пакетах — лише `mhrd`.
 - **Стек:** Flutter (Dart) для всього UI й логіки; FreeRDP 3.x (C, Apache 2.0) як RDP-ядро
   (не Rust/IronRDP — рішення власника); тунелі — wireguard-go у режимі netstack (MIT),
-  пізніше tsnet, OpenVPN 3 Core (AGPLv3), libopenconnect.
+  пізніше tsnet. OpenVPN і OpenConnect не вбудовуємо (рішення власника, 2026-10-31).
 - **Кожен сеанс — окремий процес `mhrd-session`** (`native/session`), а не потік: збій FreeRDP
   не валить застосунок. Зв'язок — локальний канал + спільна пам'ять для кадрів; паролі лише
   через канал, ніколи в аргументах чи змінних середовища. Деталі — SPEC → «Архітектура».
@@ -134,7 +134,7 @@ docs/SPEC.md                   специфікація (джерело прав
      `native/session/vcpkg-overlay/freerdp/mhrd/drive_main.c`);
    - з етапу 3: зміна роздільності під вікно (Display Control), повний екран із плашкою
      (`window_manager`, Ctrl+Alt+Enter), HiDPI — фізичні пікселі + масштаб ОС серверу.
-7. Tailscale/Headscale, OpenVPN, OpenConnect.
+7. Tailscale/Headscale.
 
 ## Правила роботи
 

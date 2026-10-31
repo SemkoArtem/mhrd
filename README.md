@@ -45,7 +45,7 @@
 
 ## У планах
 
-- Інші вбудовані тунелі: OpenVPN, Tailscale/Headscale, OpenConnect.
+- Вбудований тунель Tailscale/Headscale.
 - **Android і Linux**, згодом macOS.
 
 Повний перелік і критерії готовності — у [`docs/SPEC.md`](docs/SPEC.md) → «Етапи робіт».
