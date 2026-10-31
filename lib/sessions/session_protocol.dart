@@ -12,6 +12,7 @@ abstract final class Msg {
   static const mouseWheel = 0x05;
   static const certAnswer = 0x06;
   static const disconnect = 0x07;
+  static const resize = 0x08;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -68,6 +69,9 @@ Uint8List encodeMouseWheel(int delta, {bool horizontal = false, required int x, 
 Uint8List encodeCertAnswer(bool accept) => encodeFrame(Msg.certAnswer, [accept ? 1 : 0]);
 
 Uint8List encodeDisconnect() => encodeFrame(Msg.disconnect);
+
+/// Нова роздільність віддаленого екрана (канал Display Control). Сервер відповість SurfaceEvent.
+Uint8List encodeResize(int width, int height) => encodeFrame(Msg.resize, _u16s([width, height]));
 
 List<int> _u16s(List<int> values) => [
       for (final v in values) ...[v.clamp(0, 0xFFFF) & 0xFF, (v.clamp(0, 0xFFFF) >> 8) & 0xFF],

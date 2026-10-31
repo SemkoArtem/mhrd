@@ -60,6 +60,7 @@ class SessionManager extends ChangeNotifier {
     required String password,
     required int width,
     required int height,
+    int scale = 100,
   }) async {
     final exe = enginePath;
     if (exe == null) throw StateError('mhrd-session not found');
@@ -79,6 +80,8 @@ class SessionManager extends ChangeNotifier {
       'password': password,
       'width': width,
       'height': height,
+      // Масштаб інтерфейсу на ПК: явний з налаштувань ПК, інакше — як у цієї ОС.
+      'scale': c.display.scalePercent != 100 ? c.display.scalePercent : scale,
       'colorDepth': c.display.colorDepth,
       'adminSession': c.adminSession,
       'reconnect': c.reconnectOnDrop,
@@ -87,10 +90,9 @@ class SessionManager extends ChangeNotifier {
       'clipboard': c.devices.clipboard,
       'sound': c.devices.sound.name, // local | remote | off
       'microphone': c.devices.microphone,
-      // «Лише читання» FreeRDP не вміє — такі папки не підключаємо зовсім, а не тихо з записом.
+      // Режим доступу виконує наш канал дисків (native/session/vcpkg-overlay/freerdp/mhrd).
       'folders': [
-        for (final f in c.devices.folders)
-          if (!f.readOnly) {'name': f.name, 'path': f.path},
+        for (final f in c.devices.folders) {'name': f.name, 'path': f.path, 'access': f.access.name},
       ],
     });
     notifyListeners();

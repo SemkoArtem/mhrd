@@ -16,12 +16,14 @@
 #include <freerdp/client.h>
 #include <freerdp/client/channels.h>
 #include <freerdp/client/cmdline.h>
+#include <freerdp/client/disp.h>
 #include <freerdp/error.h>
 #include <freerdp/event.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
+#include <winpr/path.h>
 #include <winpr/string.h>
 #include <winpr/synch.h>
 #include <winpr/winsock.h>
@@ -42,6 +44,11 @@ typedef struct
 	BOOL userDisconnect;    /* застосунок попросив відключитись */
 	ShmBuffer shm;
 	MhrdClipboard* clipboard; /* NULL — буфер обміну для цього ПК вимкнено */
+	DispClientContext* disp;  /* канал Display Control; NULL — сервер не вміє міняти роздільність */
+	BOOL dispReady;           /* сервер надіслав свої можливості — можна просити нову роздільність */
+	UINT32 wantWidth, wantHeight; /* запит, що прийшов раніше, ніж канал був готовий */
+	UINT32 desktopScale;          /* масштаб інтерфейсу на ПК, % (як у ОС клієнта) */
+	UINT32 deviceScale;           /* 100 / 140 / 180 — MS-RDPBCGR */
 } MhrdContext;
 
 /* ── Події до застосунку ───────────────────────────────────────── */
@@ -199,7 +206,55 @@ static BOOL mhrd_desktop_resize(rdpContext* ctx)
 	                     freerdp_settings_get_uint32(s, FreeRDP_DesktopHeight), TRUE);
 }
 
-/* Буфер обміну — наш модуль; решту (GFX → малювання в GDI тощо) робить стандартний обробник. */
+/* ── Зміна роздільності (Display Control) ─────────────────────── */
+
+/* Просить сервер змінити роздільність. Ширина — парна, обидва розміри 200–8192 (MS-RDPEDISP). */
+static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height)
+{
+	if (width < DISPLAY_CONTROL_MIN_MONITOR_WIDTH)
+		width = DISPLAY_CONTROL_MIN_MONITOR_WIDTH;
+	if (width > DISPLAY_CONTROL_MAX_MONITOR_WIDTH)
+		width = DISPLAY_CONTROL_MAX_MONITOR_WIDTH;
+	if (height < DISPLAY_CONTROL_MIN_MONITOR_HEIGHT)
+		height = DISPLAY_CONTROL_MIN_MONITOR_HEIGHT;
+	if (height > DISPLAY_CONTROL_MAX_MONITOR_HEIGHT)
+		height = DISPLAY_CONTROL_MAX_MONITOR_HEIGHT;
+	width &= ~1u;
+
+	if (!m->disp || !m->dispReady)
+	{
+		m->wantWidth = width; /* надішлемо, щойно канал буде готовий */
+		m->wantHeight = height;
+		return;
+	}
+	m->wantWidth = m->wantHeight = 0;
+	DISPLAY_CONTROL_MONITOR_LAYOUT layout = { 0 };
+	layout.Flags = DISPLAY_CONTROL_MONITOR_PRIMARY;
+	layout.Width = width;
+	layout.Height = height;
+	/* Фізичний розмір у мм для 96 DPI — сервер використовує його для масштабу. */
+	layout.PhysicalWidth = width * 254 / 960;
+	layout.PhysicalHeight = height * 254 / 960;
+	layout.DesktopScaleFactor = m->desktopScale;
+	layout.DeviceScaleFactor = m->deviceScale;
+	UINT rc = m->disp->SendMonitorLayout(m->disp, 1, &layout);
+	(void)rc;
+}
+
+static UINT mhrd_disp_caps(DispClientContext* disp, UINT32 maxMonitors, UINT32 factorA, UINT32 factorB)
+{
+	(void)maxMonitors;
+	(void)factorA;
+	(void)factorB;
+	MhrdContext* m = (MhrdContext*)disp->custom;
+	m->dispReady = TRUE;
+	if (m->wantWidth && m->wantHeight)
+		send_monitor_layout(m, m->wantWidth, m->wantHeight);
+	return CHANNEL_RC_OK;
+}
+
+/* Буфер обміну й Display Control — наші; решту (GFX → малювання в GDI тощо) робить
+ * стандартний обробник. */
 static void mhrd_channel_connected(void* context, const ChannelConnectedEventArgs* e)
 {
 	MhrdContext* m = (MhrdContext*)context;
@@ -207,6 +262,12 @@ static void mhrd_channel_connected(void* context, const ChannelConnectedEventArg
 	{
 		if (m->clipboard)
 			clipboard_attach(m->clipboard, (CliprdrClientContext*)e->pInterface);
+	}
+	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+	{
+		m->disp = (DispClientContext*)e->pInterface;
+		m->disp->custom = m;
+		m->disp->DisplayControlCaps = mhrd_disp_caps;
 	}
 	else
 		freerdp_client_OnChannelConnectedEventHandler(context, e);
@@ -219,6 +280,11 @@ static void mhrd_channel_disconnected(void* context, const ChannelDisconnectedEv
 	{
 		if (m->clipboard)
 			clipboard_detach(m->clipboard);
+	}
+	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
+	{
+		m->disp = NULL;
+		m->dispReady = FALSE;
 	}
 	else
 		freerdp_client_OnChannelDisconnectedEventHandler(context, e);
@@ -239,6 +305,9 @@ static BOOL mhrd_pre_connect(freerdp* instance)
 	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxPlanar, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_RemoteFxCodec, TRUE);
+	/* Зміна роздільності на льоту під розмір вікна (канал Display Control). */
+	freerdp_settings_set_bool(s, FreeRDP_SupportDisplayControl, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_DynamicResolutionUpdate, TRUE);
 	/* Сервер сам міряє канал і на повільному вимикає шпалери, анімації тощо. */
 	freerdp_set_connection_type(s, CONNECTION_TYPE_AUTODETECT);
 	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, TRUE);
@@ -439,6 +508,18 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, jbool(j, "clipboard", TRUE)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_AudioCapture, jbool(j, "microphone", FALSE));
+	/* Масштаб: картинка у фізичних пікселях, а інтерфейс ПК збільшено як у ОС клієнта —
+	 * чітко й звичного розміру. DesktopScaleFactor 100–500 %, DeviceScaleFactor лише 100/140/180. */
+	int scale = jint(j, "scale", 100);
+	if (scale < 100)
+		scale = 100;
+	if (scale > 500)
+		scale = 500;
+	m->desktopScale = (UINT32)scale;
+	m->deviceScale = scale < 134 ? 100 : scale < 174 ? 140 : 180;
+	if (ok)
+		ok = freerdp_settings_set_uint32(s, FreeRDP_DesktopScaleFactor, m->desktopScale) &&
+		     freerdp_settings_set_uint32(s, FreeRDP_DeviceScaleFactor, m->deviceScale);
 	/* Звук: "local" — тут, "remote" — на віддаленому ПК, "off" — ніде. */
 	const char* sound = jstr(j, "sound");
 	if (ok && sound && strcmp(sound, "remote") == 0)
@@ -452,18 +533,47 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	free(domain);
 
 	/* Спільні папки: кожна — мережевий диск у «Цей ПК» на віддаленому ПК (канал rdpdr).
-	 * Папки «лише для читання» застосунок сюди не передає: FreeRDP такого режиму не має. */
+	 * Режим доступу передається префіксом шляху, який розуміє наш drive_main.c
+	 * (vcpkg-overlay/freerdp/mhrd): "|add|" — додавання без видалення, "|ro|" — лише читання.
+	 * Невідомий режим — найсуворіший («лише читання»), а не повний. */
 	const cJSON* folders = cJSON_GetObjectItemCaseSensitive(j, "folders");
 	const cJSON* f = NULL;
 	cJSON_ArrayForEach(f, folders)
 	{
 		const char* name = jstr(f, "name");
 		const char* path = jstr(f, "path");
+		const char* access = jstr(f, "access");
 		if (!ok || !name || !path)
 			continue;
-		const char* params[] = { "drive", name, path };
-		ok = freerdp_client_add_device_channel(s, ARRAYSIZE(params), params) &&
-		     freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, TRUE);
+		if (!winpr_PathFileExists(path))
+		{
+			WLog_WARN("mhrd", "shared folder does not exist, skipping: %s", path);
+			continue; /* папку видалили — сеанс працює без неї (SPEC → «Помилки») */
+		}
+		const char* prefix = "|ro|";
+		if (access && strcmp(access, "full") == 0)
+			prefix = "";
+		else if (access && strcmp(access, "addOnly") == 0)
+			prefix = "|add|";
+		char* drivePath = NULL;
+		size_t n = 0;
+		if (winpr_asprintf(&drivePath, &n, "%s%s", prefix, path) < 0 || !drivePath)
+		{
+			ok = FALSE;
+			continue;
+		}
+		/* Напряму, а не freerdp_client_add_device_channel: той перевіряє існування шляху
+		 * разом із префіксом режиму і пропустив би папку. */
+		const char* args[] = { name, drivePath };
+		RDPDR_DEVICE* dev = freerdp_device_new(RDPDR_DTYP_FILESYSTEM, ARRAYSIZE(args), args);
+		free(drivePath);
+		if (!dev || !freerdp_device_collection_add(s, dev))
+		{
+			freerdp_device_free(dev);
+			ok = FALSE;
+			continue;
+		}
+		ok = freerdp_settings_set_bool(s, FreeRDP_DeviceRedirection, TRUE);
 	}
 
 	const char* pin = jstr(j, "certPin");
@@ -518,6 +628,10 @@ static void handle_input(MhrdContext* m)
 						flags |= (UINT16)delta;
 					freerdp_input_send_mouse_event(input, flags, get_u16(d + 3), get_u16(d + 5));
 				}
+				break;
+			case MSG_RESIZE:
+				if (msg->len >= 4)
+					send_monitor_layout(m, get_u16(d), get_u16(d + 2));
 				break;
 			case MSG_DISCONNECT:
 				m->userDisconnect = TRUE;

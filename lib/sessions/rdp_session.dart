@@ -262,6 +262,18 @@ class RdpSession extends ChangeNotifier {
     _channel.send(encodeMouseWheel(delta, horizontal: horizontal, x: x, y: y));
   }
 
+  (int, int)? _requestedSize;
+
+  /// Просить сервер змінити роздільність під вікно. Ширину округлюємо до парної (MS-RDPEDISP).
+  /// Якщо сервер не вміє (немає Display Control), картинка просто масштабується далі.
+  void requestResize(int width, int height) {
+    if (!_canInput) return;
+    final w = width.clamp(200, 8192) & ~1, h = height.clamp(200, 8192);
+    if ((w, h) == (this.width, this.height) || (w, h) == _requestedSize) return;
+    _requestedSize = (w, h);
+    _channel.send(encodeResize(w, h));
+  }
+
   /// Просить процес відключитись сам; за 5 с — закриває примусово (SPEC → «Архітектура»).
   void disconnect() {
     if (!isActive && _killTimer == null) {

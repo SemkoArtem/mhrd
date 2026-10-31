@@ -536,6 +536,30 @@ abstract class AppLocalizations {
   /// **'Відключитись'**
   String get disconnectAction;
 
+  /// No description provided for @fullscreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'На весь екран (Ctrl+Alt+Enter)'**
+  String get fullscreen;
+
+  /// No description provided for @exitFullscreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вийти з повного екрана (Ctrl+Alt+Enter)'**
+  String get exitFullscreen;
+
+  /// No description provided for @pinBar.
+  ///
+  /// In uk, this message translates to:
+  /// **'Закріпити панель'**
+  String get pinBar;
+
+  /// No description provided for @unpinBar.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відкріпити панель'**
+  String get unpinBar;
+
   /// No description provided for @close.
   ///
   /// In uk, this message translates to:
@@ -1148,17 +1172,23 @@ abstract class AppLocalizations {
   /// **'Лише читання'**
   String get readOnly;
 
-  /// No description provided for @readOnlyNotSupported.
-  ///
-  /// In uk, this message translates to:
-  /// **'Режим «лише читання» ще не підтримується — цю папку не буде підключено. Зніміть позначку, щоб підключити з записом.'**
-  String get readOnlyNotSupported;
-
   /// No description provided for @foldersHint.
   ///
   /// In uk, this message translates to:
-  /// **'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК».'**
+  /// **'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК». «Додавати без видалення»: можна читати все й класти нове, але не видаляти, не перейменовувати й не змінювати те, що вже є.'**
   String get foldersHint;
+
+  /// No description provided for @folderAddOnly.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додавати без видалення'**
+  String get folderAddOnly;
+
+  /// No description provided for @folderFull.
+  ///
+  /// In uk, this message translates to:
+  /// **'Повний доступ'**
+  String get folderFull;
 
   /// No description provided for @removeFolder.
   ///

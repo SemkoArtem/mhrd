@@ -272,6 +272,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get disconnectAction => 'Відключитись';
 
   @override
+  String get fullscreen => 'На весь екран (Ctrl+Alt+Enter)';
+
+  @override
+  String get exitFullscreen => 'Вийти з повного екрана (Ctrl+Alt+Enter)';
+
+  @override
+  String get pinBar => 'Закріпити панель';
+
+  @override
+  String get unpinBar => 'Відкріпити панель';
+
+  @override
   String get close => 'Закрити';
 
   @override
@@ -596,12 +608,14 @@ class AppLocalizationsUk extends AppLocalizations {
   String get readOnly => 'Лише читання';
 
   @override
-  String get readOnlyNotSupported =>
-      'Режим «лише читання» ще не підтримується — цю папку не буде підключено. Зніміть позначку, щоб підключити з записом.';
+  String get foldersHint =>
+      'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК». «Додавати без видалення»: можна читати все й класти нове, але не видаляти, не перейменовувати й не змінювати те, що вже є.';
 
   @override
-  String get foldersHint =>
-      'Кожна папка з\'явиться на віддаленому ПК як диск у «Цей ПК».';
+  String get folderAddOnly => 'Додавати без видалення';
+
+  @override
+  String get folderFull => 'Повний доступ';
 
   @override
   String get removeFolder => 'Прибрати папку';

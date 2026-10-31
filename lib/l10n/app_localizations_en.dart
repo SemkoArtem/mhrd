@@ -270,6 +270,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get disconnectAction => 'Disconnect';
 
   @override
+  String get fullscreen => 'Full screen (Ctrl+Alt+Enter)';
+
+  @override
+  String get exitFullscreen => 'Exit full screen (Ctrl+Alt+Enter)';
+
+  @override
+  String get pinBar => 'Pin the bar';
+
+  @override
+  String get unpinBar => 'Unpin the bar';
+
+  @override
   String get close => 'Close';
 
   @override
@@ -597,12 +609,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get readOnly => 'Read-only';
 
   @override
-  String get readOnlyNotSupported =>
-      'Read-only mode is not supported yet — this folder won\'t be shared. Clear the mark to share it with write access.';
+  String get foldersHint =>
+      'Each folder appears on the remote PC as a drive in “This PC”. “Add without deleting”: the PC can read everything and put new files there, but can\'t delete, rename or change what\'s already there.';
 
   @override
-  String get foldersHint =>
-      'Each folder appears on the remote PC as a drive in “This PC”.';
+  String get folderAddOnly => 'Add without deleting';
+
+  @override
+  String get folderFull => 'Full access';
 
   @override
   String get removeFolder => 'Remove folder';

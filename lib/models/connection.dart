@@ -82,19 +82,36 @@ class DisplaySettings {
       );
 }
 
+/// Що віддалений ПК може робити в спільній папці.
+enum FolderAccess {
+  /// Читати, створювати, змінювати, видаляти.
+  full,
+
+  /// Читати все й класти нове; видаляти, перейменовувати й змінювати наявне — ні.
+  addOnly,
+
+  /// Лише читати.
+  readOnly,
+}
+
 class SharedFolder {
-  const SharedFolder({required this.name, required this.path, this.readOnly = false});
+  const SharedFolder({required this.name, required this.path, this.access = FolderAccess.addOnly});
 
   final String name;
   final String path;
-  final bool readOnly;
+  final FolderAccess access;
 
-  Map<String, dynamic> toJson() => {'name': name, 'path': path, 'readOnly': readOnly};
+  SharedFolder copyWith({FolderAccess? access}) => SharedFolder(name: name, path: path, access: access ?? this.access);
+
+  Map<String, dynamic> toJson() => {'name': name, 'path': path, 'access': access.name};
 
   factory SharedFolder.fromJson(Map<String, dynamic> j) => SharedFolder(
         name: strOr(j['name'], ''),
         path: strOr(j['path'], ''),
-        readOnly: boolOr(j['readOnly'], false),
+        // Старі записи мали лише прапорець readOnly.
+        access: j['access'] is String
+            ? enumByName(FolderAccess.values, j['access'], FolderAccess.addOnly)
+            : (boolOr(j['readOnly'], false) ? FolderAccess.readOnly : FolderAccess.full),
       );
 }
 

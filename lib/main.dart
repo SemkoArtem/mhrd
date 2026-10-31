@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'backup/auto_backup.dart';
@@ -12,6 +15,8 @@ import 'storage/secret_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Керування вікном (повний екран сеансу) — лише на десктопах.
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) await windowManager.ensureInitialized();
   LicenseRegistry.addLicense(_fontLicenses);
   final dir = await getApplicationSupportDirectory();
   final db = MhrdDatabase.open(dir);

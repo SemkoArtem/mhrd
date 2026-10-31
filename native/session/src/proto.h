@@ -19,6 +19,7 @@ enum
 	MSG_MOUSE_WHEEL = 0x05,  /* i16 крок (+120 = від себе), u8 горизонтально, u16 x, u16 y */
 	MSG_CERT_ANSWER = 0x06,  /* u8 довіряти */
 	MSG_DISCONNECT = 0x07,
+	MSG_RESIZE = 0x08,       /* u16 ширина, u16 висота — нова роздільність (канал Display Control) */
 
 	/* mhrd-session -> застосунок */
 	EVT_STATE = 0x81,        /* u8 стан: 1 з'єднання, 2 підключено */

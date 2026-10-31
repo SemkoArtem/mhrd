@@ -139,6 +139,16 @@ void main() {
       expect(ch.sent[2], encodeMouseMove(50, 60));
     });
 
+    test('зміна роздільності: парна ширина, без повторів, лише після підключення', () async {
+      s.requestResize(1001, 700);
+      expect(ch.sentTypes, [Msg.connect]); // ще не підключено
+      ch.emit(Msg.evtState, [2]);
+      await settle();
+      s.requestResize(1001, 700);
+      s.requestResize(1001, 700); // той самий розмір — не повторюємо
+      expect(ch.sent.where((f) => f[4] == Msg.resize).toList(), [encodeResize(1000, 700)]);
+    });
+
     test('сертифікат: питання, відповідь у канал', () async {
       ch.emit(Msg.evtCertificate, utf8.encode(jsonEncode({'host': 'h', 'fingerprint': 'AB:CD', 'changed': true})));
       await settle();
@@ -211,17 +221,26 @@ void main() {
       expect(repo.connections['pc']!.lastUsed, isNotNull);
     });
 
-    test('папки «лише для читання» не підключаються зовсім', () async {
+    test('папки передаються з режимом доступу', () async {
       final c = pc().copyWith(
           devices: const DeviceSettings(folders: [
         SharedFolder(name: 'Docs', path: r'C:\Docs'),
-        SharedFolder(name: 'Secret', path: r'C:\Secret', readOnly: true),
+        SharedFolder(name: 'Secret', path: r'C:\Secret', access: FolderAccess.readOnly),
+        SharedFolder(name: 'Work', path: r'C:\Work', access: FolderAccess.full),
       ]));
       await m.start(c, username: 'u', password: 'p', width: 800, height: 600);
       final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
       expect(json['folders'], [
-        {'name': 'Docs', 'path': r'C:\Docs'}
+        {'name': 'Docs', 'path': r'C:\Docs', 'access': 'addOnly'}, // типовий — найбезпечніший
+        {'name': 'Secret', 'path': r'C:\Secret', 'access': 'readOnly'},
+        {'name': 'Work', 'path': r'C:\Work', 'access': 'full'},
       ]);
+    });
+
+    test('старі записи з прапорцем readOnly читаються правильно', () {
+      expect(SharedFolder.fromJson({'name': 'a', 'path': 'b', 'readOnly': true}).access, FolderAccess.readOnly);
+      expect(SharedFolder.fromJson({'name': 'a', 'path': 'b', 'readOnly': false}).access, FolderAccess.full);
+      expect(SharedFolder.fromJson({'name': 'a', 'path': 'b', 'access': 'addOnly'}).access, FolderAccess.addOnly);
     });
 
     test('certPin ПК передається в mhrd-session', () async {

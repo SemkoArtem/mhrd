@@ -122,7 +122,7 @@ PersistentKeepalive = 25
         credentialIds: const ['c1', 'c2'],
         route: RouteKind.tunnel,
         routeRefId: 't1',
-        devices: const DeviceSettings(folders: [SharedFolder(name: 'Docs', path: '/home/u/Docs', readOnly: true)]),
+        devices: const DeviceSettings(folders: [SharedFolder(name: 'Docs', path: '/home/u/Docs', access: FolderAccess.readOnly)]),
         wakeOnLan: const WakeOnLan(mac: 'AA:BB:CC:DD:EE:FF'),
         createdAt: now,
         updatedAt: now,

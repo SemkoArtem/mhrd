@@ -415,25 +415,28 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           title: Text(d.folders[i].name),
           subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(d.folders[i].path, style: t.mono),
-            if (d.folders[i].readOnly)
-              Text(l.readOnlyNotSupported, style: TextStyle(color: t.warn, fontSize: 12)),
-          ]),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            FilterChip(
-              label: Text(l.readOnly),
-              selected: d.folders[i].readOnly,
-              onSelected: (v) {
+            DropdownButton<FolderAccess>(
+              value: d.folders[i].access,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                DropdownMenuItem(value: FolderAccess.addOnly, child: Text(l.folderAddOnly)),
+                DropdownMenuItem(value: FolderAccess.full, child: Text(l.folderFull)),
+                DropdownMenuItem(value: FolderAccess.readOnly, child: Text(l.readOnly)),
+              ],
+              onChanged: (v) {
+                if (v == null) return;
                 final f = [...d.folders];
-                f[i] = SharedFolder(name: f[i].name, path: f[i].path, readOnly: v);
+                f[i] = f[i].copyWith(access: v);
                 setD(d.copyWith(folders: f));
               },
             ),
-            IconButton(
-              tooltip: l.removeFolder,
-              icon: const Icon(Icons.close),
-              onPressed: () => setD(d.copyWith(folders: [...d.folders]..removeAt(i))),
-            ),
           ]),
+          trailing: IconButton(
+            tooltip: l.removeFolder,
+            icon: const Icon(Icons.close),
+            onPressed: () => setD(d.copyWith(folders: [...d.folders]..removeAt(i))),
+          ),
         ),
       Align(
         alignment: Alignment.centerLeft,

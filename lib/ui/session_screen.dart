@@ -1,16 +1,22 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
+import '../models/connection.dart';
 import '../sessions/scancodes.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
 import '../theme/mhrd_theme.dart';
 
-/// Екран одного сеансу: картинка віддаленого ПК, клавіатура й миша, діалог сертифіката,
-/// пояснення причини відключення. Вкладки й повний екран — етап 3.
+/// Екран одного сеансу: картинка віддаленого ПК (піксель у піксель з урахуванням масштабу ОС),
+/// клавіатура й миша, повний екран із плашкою, що ховається, діалог сертифіката, пояснення
+/// причини відключення. Вкладки — етап 3.
 class SessionScreen extends StatefulWidget {
   const SessionScreen({super.key, required this.session, this.onRetry});
 
@@ -29,6 +35,42 @@ class _SessionScreenState extends State<SessionScreen> {
   int _buttons = 0;
   double _wheelRest = 0;
   bool _certDialogOpen = false;
+  Timer? _resizeTimer;
+  Size? _viewSize;
+
+  /// Фізичних пікселів на логічну точку (масштаб Windows 150% → 1.5). Віддалений екран
+  /// просимо у фізичних пікселях — інакше ОС розтягує картинку і вона розмита.
+  double _dpr = 1;
+
+  bool _fullscreen = false;
+  bool _barShown = false;
+  bool _barPinned = false;
+
+  static bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
+  /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
+  void _onViewSize(Size size) {
+    if (s.connection.display.resizeMode != ResizeMode.changeResolution || size == _viewSize) return;
+    _viewSize = size;
+    _resizeTimer?.cancel();
+    _resizeTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) s.requestResize((size.width * _dpr).floor(), (size.height * _dpr).floor());
+    });
+  }
+
+  /// Повний екран: вікно на весь монітор, робочий стіл ПК заповнює його (після зміни
+  /// роздільності), зверху — плашка з панеллю, що ховається.
+  Future<void> _setFullscreen(bool on) async {
+    if (!_desktop || on == _fullscreen) return;
+    await windowManager.setFullScreen(on);
+    if (!mounted) return;
+    setState(() {
+      _fullscreen = on;
+      _barShown = false;
+    });
+    _focus.requestFocus();
+  }
 
   late final SessionManager _manager = AppScope.of(context).sessions;
 
@@ -38,6 +80,11 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     s.addListener(_onSession);
+    // «Запуск на весь екран»: налаштування ПК, інакше загальне.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (s.connection.display.startFullscreen ?? _manager.repo.settings.startFullscreen) _setFullscreen(true);
+    });
   }
 
   @override
@@ -49,6 +96,8 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     s.removeListener(_onSession);
+    _resizeTimer?.cancel();
+    if (_fullscreen) windowManager.setFullScreen(false);
     _releaseKeys();
     _manager.close(s);
     _focus.dispose();
@@ -67,7 +116,8 @@ class _SessionScreenState extends State<SessionScreen> {
     final r = await showDialog<(bool, bool)>(
       context: context,
       barrierDismissible: false,
-      builder: (c) => _CertificateDialog(cert: cert, canRemember: _manager.repo.connections.containsKey(s.connection.id)),
+      builder: (c) =>
+          _CertificateDialog(cert: cert, canRemember: _manager.repo.connections.containsKey(s.connection.id)),
     );
     _certDialogOpen = false;
     if (!mounted) return;
@@ -80,6 +130,16 @@ class _SessionScreenState extends State<SessionScreen> {
   // ── Клавіатура ────────────────────────────────────────────────
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    // Ctrl+Alt+Enter — повний екран і назад (не йде на віддалений ПК).
+    final hw = HardwareKeyboard.instance;
+    if (e is KeyDownEvent &&
+        (e.logicalKey == LogicalKeyboardKey.enter || e.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        hw.isControlPressed &&
+        hw.isAltPressed) {
+      _releaseKeys();
+      _setFullscreen(!_fullscreen);
+      return KeyEventResult.handled;
+    }
     final code = rdpScancode(e.physicalKey.usbHidUsage);
     if (code == null) return KeyEventResult.ignored;
     final down = e is! KeyUpEvent;
@@ -102,8 +162,11 @@ class _SessionScreenState extends State<SessionScreen> {
 
   // ── Миша ──────────────────────────────────────────────────────
 
-  (int, int) _pos(Offset p) =>
-      (p.dx.round().clamp(0, s.width > 0 ? s.width - 1 : 0), p.dy.round().clamp(0, s.height > 0 ? s.height - 1 : 0));
+  /// Логічна точка в картинці → піксель віддаленого екрана.
+  (int, int) _pos(Offset p) => (
+        (p.dx * _dpr).floor().clamp(0, s.width > 0 ? s.width - 1 : 0),
+        (p.dy * _dpr).floor().clamp(0, s.height > 0 ? s.height - 1 : 0),
+      );
 
   void _onPointer(PointerEvent e) {
     final (x, y) = _pos(e.localPosition);
@@ -141,7 +204,16 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
-    final l = context.l10n;
+    _dpr = MediaQuery.devicePixelRatioOf(context);
+    if (_fullscreen) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(children: [
+          Positioned.fill(child: _body(context)),
+          Positioned(top: 0, left: 0, right: 0, child: _fullscreenBar(context)),
+        ]),
+      );
+    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -150,39 +222,102 @@ class _SessionScreenState extends State<SessionScreen> {
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
-            child: Row(children: [
-              IconButton(
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                icon: const Icon(Icons.arrow_back, size: 18),
-                onPressed: () => Navigator.maybePop(context),
-              ),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: switch (s.state) {
-                    SessionState.connected => t.ok,
-                    SessionState.failed => t.error,
-                    _ => t.warn,
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(s.connection.displayName,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
-              ),
-              if (s.isActive)
-                TextButton.icon(
-                  icon: const Icon(Icons.power_settings_new, size: 18),
-                  label: Text(l.disconnectAction),
-                  onPressed: s.disconnect,
-                ),
-            ]),
+            child: _barRow(context),
           ),
           Expanded(child: _body(context)),
         ]),
+      ),
+    );
+  }
+
+  /// Вміст панелі сеансу (і звичайної, і повноекранної).
+  Widget _barRow(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    return Row(children: [
+      if (!_fullscreen)
+        IconButton(
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          icon: const Icon(Icons.arrow_back, size: 18),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+      if (_fullscreen)
+        IconButton(
+          tooltip: _barPinned ? l.unpinBar : l.pinBar,
+          icon: Icon(_barPinned ? Icons.push_pin : Icons.push_pin_outlined, size: 18),
+          onPressed: () => setState(() => _barPinned = !_barPinned),
+        ),
+      Container(
+        width: 8,
+        height: 8,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: switch (s.state) {
+            SessionState.connected => t.ok,
+            SessionState.failed => t.error,
+            _ => t.warn,
+          },
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Text(s.connection.displayName,
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
+      ),
+      if (_desktop)
+        IconButton(
+          tooltip: _fullscreen ? l.exitFullscreen : l.fullscreen,
+          icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen, size: 20),
+          onPressed: () => _setFullscreen(!_fullscreen),
+        ),
+      if (s.isActive)
+        TextButton.icon(
+          icon: const Icon(Icons.power_settings_new, size: 18),
+          label: Text(l.disconnectAction),
+          onPressed: s.disconnect,
+        ),
+    ]);
+  }
+
+  /// Повний екран: зверху по центру — тонка плашка. Навели мишу — з'являється панель;
+  /// відвели — ховається (якщо не закріплена).
+  Widget _fullscreenBar(BuildContext context) {
+    final t = context.mhrd;
+    final open = _barShown || _barPinned;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _barShown = true),
+        onExit: (_) {
+          if (!_barPinned) setState(() => _barShown = false);
+        },
+        child: AnimatedSize(
+          duration: t.fast,
+          child: open
+              ? Container(
+                  width: 560,
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    border: Border.all(color: t.border),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(t.radius)),
+                  ),
+                  child: _barRow(context),
+                )
+              : GestureDetector(
+                  onTap: () => setState(() => _barShown = true),
+                  child: Container(
+                    width: 120,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: t.surface,
+                      border: Border.all(color: t.border),
+                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(t.radius)),
+                    ),
+                  ),
+                ),
+        ),
       ),
     );
   }
@@ -221,7 +356,8 @@ class _SessionScreenState extends State<SessionScreen> {
       return _Message(
         progress: true,
         color: t.textMuted,
-        title: s.state == SessionState.negotiating ? l.sessionNegotiating : l.sessionConnecting(s.connection.displayName),
+        title:
+            s.state == SessionState.negotiating ? l.sessionNegotiating : l.sessionConnecting(s.connection.displayName),
       );
     }
     return Focus(
@@ -231,26 +367,33 @@ class _SessionScreenState extends State<SessionScreen> {
       onFocusChange: (has) {
         if (!has) _releaseKeys();
       },
-      child: Center(
-        child: FittedBox(
-          fit: BoxFit.contain,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.basic,
-            child: Listener(
-              onPointerHover: _onPointer,
-              onPointerMove: _onPointer,
-              onPointerDown: _onPointer,
-              onPointerUp: _onPointer,
-              onPointerSignal: _onSignal,
-              child: SizedBox(
-                width: s.width.toDouble(),
-                height: s.height.toDouble(),
-                child: RawImage(image: img, filterQuality: FilterQuality.medium),
+      child: LayoutBuilder(builder: (context, box) {
+        _onViewSize(box.biggest);
+        // Розмір картинки в логічних точках: 1 піксель ПК = 1 фізичний піксель екрана.
+        final w = s.width / _dpr, h = s.height / _dpr;
+        final exact = (box.maxWidth - w).abs() < 1 && (box.maxHeight - h).abs() < 1;
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.basic,
+              child: Listener(
+                onPointerHover: _onPointer,
+                onPointerMove: _onPointer,
+                onPointerDown: _onPointer,
+                onPointerUp: _onPointer,
+                onPointerSignal: _onSignal,
+                child: SizedBox(
+                  width: w,
+                  height: h,
+                  // Піксель у піксель — без згладжування (воно й розмиває); масштаб — зі згладжуванням.
+                  child: RawImage(image: img, filterQuality: exact ? FilterQuality.none : FilterQuality.medium),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 }

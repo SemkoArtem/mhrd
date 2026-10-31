@@ -76,11 +76,17 @@ class _HomeScreenState extends State<HomeScreen> {
       (user, password) = r;
     }
     if (!mounted) return;
-    // Етап 2: роздільність = розмір вікна (зміна розміру на льоту — етап 3).
+    // Роздільність = розмір вікна у фізичних пікселях (масштаб Windows 150% → ×1.5), а масштаб
+    // ОС передаємо серверу — так картинка чітка, а текст на ПК звичного розміру.
     final size = MediaQuery.sizeOf(context);
-    int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 4) * 4;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
     final s = await sessions.start(c,
-        username: user!, password: password ?? '', width: even(size.width, 640, 8192), height: even(size.height - 40, 480, 8192));
+        username: user!,
+        password: password ?? '',
+        width: even(size.width * dpr, 640, 8192),
+        height: even((size.height - 40) * dpr, 480, 8192),
+        scale: (dpr * 100).round());
     if (mounted) _openSession(s, c, credentialId: credentialId);
   }
 
@@ -152,11 +158,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final errors = <String>[];
     for (final (name, bytes) in files) {
       try {
-        final r = parseRdpFile(decodeRdpBytes(bytes), id: newId(), fallbackName: name.replaceAll(RegExp(r'\.rdp$', caseSensitive: false), ''));
+        final r = parseRdpFile(decodeRdpBytes(bytes),
+            id: newId(), fallbackName: name.replaceAll(RegExp(r'\.rdp$', caseSensitive: false), ''));
         var conn = r.connection;
         if (r.username != null) {
           final existing = repo.credentials.values.where((c) => c.username == r.username).toList();
-          final cred = existing.isNotEmpty ? existing.first : Credential(id: newId(), name: '', username: r.username!, authMode: AuthMode.askPassword);
+          final cred = existing.isNotEmpty
+              ? existing.first
+              : Credential(id: newId(), name: '', username: r.username!, authMode: AuthMode.askPassword);
           if (existing.isEmpty) await repo.saveCredential(cred);
           conn = conn.copyWith(credentialIds: [cred.id]);
         }
@@ -192,8 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _openSettings() =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+  void _openSettings() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 
   PcActions get _actions => PcActions(
         connect: _connect,
@@ -304,14 +312,19 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
       child: Row(children: [
         if (!wide)
-          Builder(builder: (c) => IconButton(
-                tooltip: l.groups,
-                icon: const Icon(Icons.menu),
-                onPressed: () => Scaffold.of(c).openDrawer(),
-              )),
+          Builder(
+              builder: (c) => IconButton(
+                    tooltip: l.groups,
+                    icon: const Icon(Icons.menu),
+                    onPressed: () => Scaffold.of(c).openDrawer(),
+                  )),
         Text('MHRD',
             style: TextStyle(
-                fontFamily: t.fontMono, fontWeight: FontWeight.w500, fontSize: 20, letterSpacing: 0.8, color: t.accent)),
+                fontFamily: t.fontMono,
+                fontWeight: FontWeight.w500,
+                fontSize: 20,
+                letterSpacing: 0.8,
+                color: t.accent)),
         if (wide) ...[
           const SizedBox(width: 8),
           Text('remote desktop', style: TextStyle(color: t.textMuted, fontSize: 12)),
@@ -457,8 +470,10 @@ class _HomeScreenState extends State<HomeScreen> {
               SegmentedButton<PcListView>(
                 showSelectedIcon: false,
                 segments: [
-                  ButtonSegment(value: PcListView.tiles, icon: const Icon(Icons.grid_view, size: 18), tooltip: l.viewTiles),
-                  ButtonSegment(value: PcListView.list, icon: const Icon(Icons.view_list, size: 18), tooltip: l.viewList),
+                  ButtonSegment(
+                      value: PcListView.tiles, icon: const Icon(Icons.grid_view, size: 18), tooltip: l.viewTiles),
+                  ButtonSegment(
+                      value: PcListView.list, icon: const Icon(Icons.view_list, size: 18), tooltip: l.viewList),
                 ],
                 selected: {repo.settings.listView},
                 onSelectionChanged: (s) => repo.updateSettings(repo.settings.copyWith(listView: s.first)),
