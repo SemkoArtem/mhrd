@@ -81,29 +81,109 @@ class _HomeScreenState extends State<HomeScreen> {
       if (r == null) return;
       (user, password) = r;
     }
-    if (!mounted) return;
-    if (sessions.nativeWindows) {
-      final s = await _startWindow(c, user!, password ?? '');
-      if (s != null && mounted) _watchWindow(s, c, credentialId: credentialId);
-      return;
+    // RD Gateway зі своїм акаунтом без збереженого пароля — питаємо й для нього.
+    String? gatewayPassword;
+    final gwAccount = sessions.gatewayAccountToAsk(c);
+    if (gwAccount != null) {
+      if (!mounted) return;
+      final g = repo.gateways[c.gatewayId]!;
+      final r = await askCredentials(context, target: l.gatewayUser(g.label), username: gwAccount.username);
+      if (r == null) return;
+      gatewayPassword = r.$2;
     }
+    if (!mounted) return;
+    try {
+      if (sessions.nativeWindows) {
+        final s = await _startWindow(c, user!, password ?? '', gatewayPassword: gatewayPassword);
+        if (s != null && mounted) _watchWindow(s, c, credentialId: credentialId);
+        return;
+      }
+      await _startInApp(c, user!, password ?? '', credentialId: credentialId, gatewayPassword: gatewayPassword);
+    } on RouteException catch (e) {
+      if (mounted) toast(context, l.routeError(e.error));
+    } on TunnelException catch (e) {
+      if (mounted) _showTunnelError(c, e);
+    }
+  }
+
+  /// Тунель не відкрився: що сталося — словами, подробиці — для діагностики.
+  Future<void> _showTunnelError(Connection c, TunnelException e) async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    await showDialog<void>(
+      context: context,
+      builder: (dc) => AlertDialog(
+        icon: Icon(Icons.shield_outlined, color: t.error),
+        title: Text(c.displayName),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(l.tunnelError(e.error), textAlign: TextAlign.center),
+            if (e.detail.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SelectableText(e.detail, textAlign: TextAlign.center, style: t.mono),
+            ],
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dc), child: Text(l.close))],
+      ),
+    );
+  }
+
+  /// Перше підключення до SSH-сервера: показуємо відбиток ключа і питаємо, чи довіряти.
+  Future<bool> _confirmSshHostKey(Connection c, String fingerprint) async {
+    await _bringToFront();
+    if (!mounted) return false;
+    final l = context.l10n;
+    final t = context.mhrd;
+    final host = repo.ssh[c.routeRefId]?.host ?? '';
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dc) => AlertDialog(
+        icon: Icon(Icons.key_outlined, color: t.accent),
+        title: Text(l.sshHostKeyTitle),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(l.sshHostKeyBody(host)),
+            const SizedBox(height: 10),
+            Text(l.certFingerprint, style: TextStyle(color: t.textMuted, fontSize: 12)),
+            SelectableText(fingerprint, style: t.mono.copyWith(color: t.text)),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.certReject)),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(l.certAccept)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  /// Мобільні: сеанс на екрані всередині застосунку.
+  Future<void> _startInApp(Connection c, String user, String password,
+      {String? credentialId, String? gatewayPassword}) async {
+    final sessions = AppScope.of(context).sessions;
     // Роздільність = розмір вікна у фізичних пікселях (масштаб Windows 150% → ×1.5), а масштаб
     // ОС передаємо серверу — так картинка чітка, а текст на ПК звичного розміру.
     final size = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
     final s = await sessions.start(c,
-        username: user!,
-        password: password ?? '',
+        username: user,
+        password: password,
         width: even(size.width * dpr, 640, 8192),
         height: even((size.height - 40) * dpr, 480, 8192),
-        scale: (dpr * 100).round());
+        scale: (dpr * 100).round(),
+        gatewayPassword: gatewayPassword,
+        confirmSshHostKey: (fp) => _confirmSshHostKey(c, fp));
     if (mounted) _openSession(s, c, credentialId: credentialId);
   }
 
   /// Десктоп: сеанс у власному вікні процесу `mhrd-session`. Роздільність — у фізичних пікселях
   /// монітора: на весь екран — увесь екран, інакше 80% (вікно потім саме підлаштує її під себе).
-  Future<RdpSession?> _startWindow(Connection c, String username, String password) async {
+  Future<RdpSession?> _startWindow(Connection c, String username, String password, {String? gatewayPassword}) async {
     final l = context.l10n;
     final t = context.mhrd;
     final sessions = AppScope.of(context).sessions;
@@ -121,6 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
       width: c.display.width ?? even(display.size.width * k, 640, 8192),
       height: c.display.height ?? even(display.size.height * k, 480, 8192),
       scale: (display.devicePixelRatio * 100).round(),
+      gatewayPassword: gatewayPassword,
+      confirmSshHostKey: (fp) => _confirmSshHostKey(c, fp),
       window: {
         'title': '${c.displayName} — MHRD',
         // Шрифт плашки — той самий, що в застосунку (лежить поруч у flutter_assets).
@@ -136,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'disconnect': l.disconnectAction,
           'menuFullscreen': l.fullscreen,
           'menuKeyboard': l.onScreenKeyboard,
+          'reconnecting': '${l.statusReconnecting}…',
         },
         // Піктограми кнопок — зі шрифту Material Icons, який Flutter кладе поруч. Посилання на
         // Icons.* тут потрібні ще й тому, що збірка лишає у шрифті лише використані піктограми.

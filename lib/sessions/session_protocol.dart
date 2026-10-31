@@ -87,7 +87,7 @@ sealed class SessionEvent {
   const SessionEvent();
 }
 
-/// 1 — з'єднання, 2 — підключено.
+/// 1 — з'єднання, 2 — підключено, 3 — зв'язок обірвався, йде перепідключення.
 class StateEvent extends SessionEvent {
   const StateEvent(this.state);
   final int state;

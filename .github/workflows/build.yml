@@ -21,6 +21,13 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # Тунелі: справжній WireGuard і SSH на loopback (native/tunnels/tunnel_test.go)
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/tunnels/go.mod
+          cache-dependency-path: native/tunnels/go.sum
+      - run: go vet ./... && go test ./...
+        working-directory: native/tunnels
 
   # Повна збірка під 4 ОС — лише вручну (Actions → build → Run workflow): у приватному
   # репозиторії хвилини Windows рахуються ×2, macOS — ×10, і кожен push з'їдав би сотні хвилин.
@@ -89,6 +96,16 @@ jobs:
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           $env:VCPKG_ROOT = "$env:RUNNER_TEMP\vcpkg"
           ./native/session/build.ps1 -Config Release
+      # Модуль тунелів mhrd-tunnel (Go: WireGuard netstack, SSH)
+      - if: matrix.platform == 'windows'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: native/tunnels/go.mod
+          cache-dependency-path: native/tunnels/go.sum
+      - if: matrix.platform == 'windows'
+        name: Build mhrd-tunnel
+        shell: pwsh
+        run: ./native/tunnels/build.ps1
       - run: flutter pub get
       - run: ${{ matrix.build }}
       - uses: actions/upload-artifact@v4

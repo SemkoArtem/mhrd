@@ -19,6 +19,7 @@
 #include <freerdp/client/channels.h>
 #include <freerdp/client/cmdline.h>
 #include <freerdp/client/disp.h>
+#include <freerdp/codec/h264.h>
 #include <freerdp/error.h>
 #include <freerdp/event.h>
 #include <freerdp/freerdp.h>
@@ -57,11 +58,13 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[12];         /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[13];         /* копії рядків для win (живуть до кінця процесу) */
+	volatile LONG reconnecting;   /* зв'язок відновлюється — ввід із вікна не надсилаємо */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
 
 static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height);
+static SSIZE_T mhrd_retry_dialog(freerdp* instance, const char* what, size_t current, void* userarg);
 
 /* ── Події до застосунку ───────────────────────────────────────── */
 
@@ -325,17 +328,30 @@ static void mhrd_channel_disconnected(void* context, const ChannelDisconnectedEv
 		freerdp_client_OnChannelDisconnectedEventHandler(context, e);
 }
 
+/* Чи є робочий декодер H.264 (у FreeRDP він вибирає підсистему сам; немає жодної — NULL). */
+static BOOL h264_available(void)
+{
+	H264_CONTEXT* h = h264_context_new(FALSE);
+	if (!h)
+		return FALSE;
+	h264_context_free(h);
+	return TRUE;
+}
+
 static BOOL mhrd_pre_connect(freerdp* instance)
 {
 	rdpContext* ctx = instance->context;
 	rdpSettings* s = ctx->settings;
 	/* Графічний конвеєр (GFX): RemoteFX progressive, planar, ClearCodec — у рази менше трафіку,
-	 * ніж класичні бітмапи. H.264 вимкнено: у цій збірці FreeRDP немає декодера (потрібен
-	 * Media Foundation або ffmpeg). */
+	 * ніж класичні бітмапи. H.264 — лише якщо декодер справді запускається на цьому ПК
+	 * (Media Foundation; у Windows N його може не бути) — інакше сервер слав би кадри, які
+	 * нічим показати. AVC444 — повний колір без розмиття тексту, AVC420 — запасний. */
 	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, TRUE);
-	freerdp_settings_set_bool(s, FreeRDP_GfxH264, FALSE);
-	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, FALSE);
-	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444v2, FALSE);
+	const BOOL h264 = h264_available();
+	WLog_INFO("mhrd", "video: h264=%d", h264);
+	freerdp_settings_set_bool(s, FreeRDP_GfxH264, h264);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, h264);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444v2, h264);
 	freerdp_settings_set_bool(s, FreeRDP_GfxProgressive, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, TRUE);
 	freerdp_settings_set_bool(s, FreeRDP_GfxPlanar, TRUE);
@@ -352,6 +368,12 @@ static BOOL mhrd_pre_connect(freerdp* instance)
 	/* Що пропонуємо серверу: якщо мікрофон тут увімкнено, а канал AUDIO_INPUT у журналі так і не
 	 * з'явився — сервер сам відмовився. Так буває в адміністративному сеансі (ConsoleSession:
 	 * Windows туди мікрофон не передає) або коли запис заборонено політикою сервера. */
+	WLog_INFO("mhrd", "route: proxyType=%" PRIu32 " proxy=%s:%" PRIu16 " gateway=%d",
+	          freerdp_settings_get_uint32(s, FreeRDP_ProxyType),
+	          freerdp_settings_get_string(s, FreeRDP_ProxyHostname)
+	              ? freerdp_settings_get_string(s, FreeRDP_ProxyHostname)
+	              : "-",
+	          freerdp_settings_get_uint16(s, FreeRDP_ProxyPort), freerdp_settings_get_bool(s, FreeRDP_GatewayEnabled));
 	WLog_INFO("mhrd", "audio: playback=%d remoteConsole=%d capture=%d",
 	          freerdp_settings_get_bool(s, FreeRDP_AudioPlayback),
 	          freerdp_settings_get_bool(s, FreeRDP_RemoteConsoleAudio),
@@ -480,6 +502,7 @@ static BOOL mhrd_client_new(freerdp* instance, rdpContext* context)
 	instance->VerifyCertificateEx = mhrd_verify_certificate;
 	instance->VerifyChangedCertificateEx = mhrd_verify_changed_certificate;
 	instance->LogonErrorInfo = mhrd_logon_error_info;
+	instance->RetryDialog = mhrd_retry_dialog;
 	return TRUE;
 }
 
@@ -520,6 +543,62 @@ static void wipe_string(cJSON* j, const char* key)
 	cJSON* v = cJSON_GetObjectItemCaseSensitive(j, key);
 	if (cJSON_IsString(v))
 		memset(v->valuestring, 0, strlen(v->valuestring));
+}
+
+/* Проксі (SPEC → «Інші маршрути»): {type: "socks5"|"http", host, port, username?, password?}.
+ * Немає об'єкта — напряму. FreeRDP сам іде через проксі на рівні TCP. */
+static BOOL apply_proxy(rdpSettings* s, const cJSON* p)
+{
+	if (!p)
+		return TRUE;
+	const char* type = jstr(p, "type");
+	const char* host = jstr(p, "host");
+	if (!host || !host[0])
+		return FALSE;
+	const char* user = jstr(p, "username");
+	const char* pass = jstr(p, "password");
+	return freerdp_settings_set_uint32(s, FreeRDP_ProxyType,
+	                                   type && strcmp(type, "http") == 0 ? PROXY_TYPE_HTTP : PROXY_TYPE_SOCKS) &&
+	       freerdp_settings_set_string(s, FreeRDP_ProxyHostname, host) &&
+	       freerdp_settings_set_uint16(s, FreeRDP_ProxyPort, (UINT16)jint(p, "port", 1080)) &&
+	       freerdp_settings_set_string(s, FreeRDP_ProxyUsername, user && user[0] ? user : NULL) &&
+	       freerdp_settings_set_string(s, FreeRDP_ProxyPassword, pass && pass[0] ? pass : NULL);
+}
+
+/* RD Gateway: {host, port, sameCredentials, username?, password?, bypassLocal}. HTTP і RPC —
+ * обидва транспорти, FreeRDP сам вибере, що підтримує шлюз. */
+static BOOL apply_gateway(rdpSettings* s, const cJSON* g)
+{
+	if (!g)
+		return TRUE;
+	const char* host = jstr(g, "host");
+	if (!host || !host[0])
+		return FALSE;
+	const BOOL same = jbool(g, "sameCredentials", TRUE);
+	BOOL ok = freerdp_settings_set_bool(s, FreeRDP_GatewayEnabled, TRUE) &&
+	          freerdp_settings_set_string(s, FreeRDP_GatewayHostname, host) &&
+	          freerdp_settings_set_uint32(s, FreeRDP_GatewayPort, (UINT32)jint(g, "port", 443)) &&
+	          freerdp_settings_set_bool(s, FreeRDP_GatewayHttpTransport, TRUE) &&
+	          freerdp_settings_set_bool(s, FreeRDP_GatewayRpcTransport, TRUE) &&
+	          freerdp_settings_set_bool(s, FreeRDP_GatewayUseSameCredentials, same) &&
+	          freerdp_settings_set_bool(s, FreeRDP_GatewayBypassLocal, jbool(g, "bypassLocal", FALSE)) &&
+	          freerdp_settings_set_uint32(s, FreeRDP_GatewayUsageMethod,
+	                                      jbool(g, "bypassLocal", FALSE) ? TSC_PROXY_MODE_DETECT
+	                                                                     : TSC_PROXY_MODE_DIRECT);
+	if (ok && !same)
+	{
+		char* user = NULL;
+		char* domain = NULL;
+		const char* account = jstr(g, "username");
+		if (account && !freerdp_parse_username(account, &user, &domain))
+			return FALSE;
+		ok = freerdp_settings_set_string(s, FreeRDP_GatewayUsername, user) &&
+		     freerdp_settings_set_string(s, FreeRDP_GatewayDomain, domain) &&
+		     freerdp_settings_set_string(s, FreeRDP_GatewayPassword, jstr(g, "password"));
+		free(user);
+		free(domain);
+	}
+	return ok;
 }
 
 static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
@@ -622,6 +701,10 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	const char* pin = jstr(j, "certPin");
 	m->certPin = pin ? _strdup(pin) : NULL;
 
+	if (ok)
+		ok = apply_proxy(s, cJSON_GetObjectItemCaseSensitive(j, "proxy")) &&
+		     apply_gateway(s, cJSON_GetObjectItemCaseSensitive(j, "gateway"));
+
 	/* Власне вікно сеансу (десктоп): заголовок, шрифт і тексти плашки, кольори теми MHRD. */
 	m->nativeWindow = jbool(j, "nativeWindow", FALSE);
 	if (m->nativeWindow)
@@ -632,7 +715,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 			jstr(j, "title"),          jstr(j, "fontPath"),          jstr(labels, "pin"),
 			jstr(labels, "unpin"),     jstr(labels, "minimize"),     jstr(labels, "exitFullscreen"),
 			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
-			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath")
+			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath"),
+			jstr(labels, "reconnecting")
 		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
@@ -648,6 +732,7 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.menuFullscreen = m->winStrings[9];
 		m->win.menuKeyboard = m->winStrings[10];
 		m->win.iconFontPath = m->winStrings[11];
+		m->win.labelReconnecting = m->winStrings[12];
 		const cJSON* icons = cJSON_GetObjectItemCaseSensitive(j, "icons");
 		m->win.iconPin = (uint32_t)jint(icons, "pin", 0);
 		m->win.iconUnpin = (uint32_t)jint(icons, "unpin", 0);
@@ -668,6 +753,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	}
 out:
 	wipe_string(j, "password");
+	wipe_string(cJSON_GetObjectItemCaseSensitive(j, "proxy"), "password");
+	wipe_string(cJSON_GetObjectItemCaseSensitive(j, "gateway"), "password");
 	cJSON_Delete(j);
 	return ok;
 }
@@ -715,19 +802,28 @@ static const uint8_t* host_buffer(void* ctx, uint32_t* width, uint32_t* height, 
 	return (const uint8_t*)m->shm.data;
 }
 
+/* Поки FreeRDP відновлює зв'язок, транспорт перестворюється — ввід туди не пишемо. */
+static BOOL input_allowed(void* ctx)
+{
+	return InterlockedCompareExchange(&((MhrdContext*)ctx)->reconnecting, 0, 0) == 0;
+}
+
 static void host_key(void* ctx, uint16_t code, BOOL down, BOOL repeat)
 {
-	freerdp_input_send_keyboard_event_ex(((MhrdContext*)ctx)->common.context.input, down, repeat, code);
+	if (input_allowed(ctx))
+		freerdp_input_send_keyboard_event_ex(((MhrdContext*)ctx)->common.context.input, down, repeat, code);
 }
 
 static void host_mouse(void* ctx, uint16_t flags, uint16_t x, uint16_t y)
 {
-	freerdp_input_send_mouse_event(((MhrdContext*)ctx)->common.context.input, flags, x, y);
+	if (input_allowed(ctx))
+		freerdp_input_send_mouse_event(((MhrdContext*)ctx)->common.context.input, flags, x, y);
 }
 
 static void host_wheel(void* ctx, int delta, BOOL horizontal, uint16_t x, uint16_t y)
 {
-	send_wheel(((MhrdContext*)ctx)->common.context.input, delta, horizontal, x, y);
+	if (input_allowed(ctx))
+		send_wheel(((MhrdContext*)ctx)->common.context.input, delta, horizontal, x, y);
 }
 
 static void host_resize(void* ctx, uint32_t width, uint32_t height)
@@ -808,6 +904,50 @@ static void configure_logging(void)
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_INFO);
 }
 
+/* Між спробами перепідключення; користувач закрив вікно чи натиснув «Відключитись» — досить. */
+static SSIZE_T mhrd_retry_dialog(freerdp* instance, const char* what, size_t current, void* userarg)
+{
+	(void)what;
+	(void)userarg;
+	MhrdContext* m = (MhrdContext*)instance->context;
+	/* Цикл сеансу зараз стоїть — повідомлення застосунку розбираємо тут. Ввід відкидаємо:
+	 * після відновлення він був би вже не до місця. */
+	ProtoMsg* msg;
+	while ((msg = proto_pop()) != NULL)
+	{
+		if (msg->type == MSG_DISCONNECT)
+			m->userDisconnect = TRUE;
+		else if (msg->type == MSG_FOCUS && m->nativeWindow)
+			window_post_focus();
+		free(msg);
+	}
+	if (proto_closed() && !m->nativeWindow)
+		m->userDisconnect = TRUE; /* без вікна сеанс без застосунку не має сенсу */
+	if (m->userDisconnect)
+		return -1;
+	WLog_INFO("mhrd", "reconnect attempt %" PRIuz, current + 1);
+	return 3000; /* мс до наступної спроби, якщо ця не вдасться */
+}
+
+/* Зв'язок обірвався (SPEC → «Стани сесії» → reconnecting). FreeRDP сам вирішує, чи варто:
+ * не перепідключається, якщо сервер навмисно завершив сеанс чи пароль більше не підходить. */
+static BOOL reconnect(MhrdContext* m)
+{
+	freerdp* instance = m->common.context.instance;
+	InterlockedExchange(&m->reconnecting, 1);
+	send_state(3);
+	if (m->nativeWindow)
+		window_post_reconnecting(TRUE);
+	const BOOL ok = client_auto_reconnect_ex(instance, NULL);
+	InterlockedExchange(&m->reconnecting, 0);
+	if (m->nativeWindow)
+		window_post_reconnecting(FALSE);
+	WLog_INFO("mhrd", "reconnect %s", ok ? "succeeded" : "gave up");
+	if (ok)
+		send_state(2);
+	return ok;
+}
+
 static void run_session(MhrdContext* m)
 {
 	rdpContext* ctx = &m->common.context;
@@ -823,7 +963,11 @@ static void run_session(MhrdContext* m)
 		if (WaitForMultipleObjects(n, handles, FALSE, 100) == WAIT_FAILED)
 			break;
 		if (!freerdp_check_event_handles(ctx))
+		{
+			if (!m->userDisconnect && reconnect(m))
+				continue;
 			break;
+		}
 		handle_input(m);
 		/* Застосунок закрився. Без вікна сеанс без нього не має сенсу; власне вікно живе
 		 * незалежно — його закриває лише користувач. */

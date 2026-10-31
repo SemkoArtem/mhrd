@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
+import '../sessions/session_manager.dart' show RouteError, TunnelError;
 import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
@@ -42,6 +43,31 @@ extension L10nMessages on AppLocalizations {
         AutoBackupFailureKind.writeFailed => autoBackupWriteFailed(f.path, f.detail),
         AutoBackupFailureKind.noPassword => autoBackupNoPassword,
         AutoBackupFailureKind.other => autoBackupFailed(f.detail),
+      };
+
+  String routeError(RouteError e) => switch (e) {
+        RouteError.proxyMissing => routeErrProxyMissing,
+        RouteError.gatewayMissing => routeErrGatewayMissing,
+        RouteError.tunnelMissing => routeErrTunnelMissing,
+        RouteError.sshMissing => routeErrSshMissing,
+        RouteError.tunnelUnsupported => routeErrTunnel,
+        RouteError.tunnelEngineMissing => routeErrTunnelEngine,
+        RouteError.gatewayWithTunnel => routeErrGatewayTunnel,
+      };
+
+  String tunnelError(TunnelError e) => switch (e) {
+        TunnelError.config => tunnelErrConfig,
+        TunnelError.endpointDns => tunnelErrEndpointDns,
+        TunnelError.start => tunnelErrStart,
+        TunnelError.unreachable => tunnelErrUnreachable,
+        TunnelError.connect => tunnelErrConnect,
+        TunnelError.auth => tunnelErrAuth,
+        TunnelError.keyPassphrase => tunnelErrKeyPassphrase,
+        TunnelError.badKey => tunnelErrBadKey,
+        TunnelError.hostKeyChanged => tunnelErrHostKeyChanged,
+        TunnelError.hostKeyRejected => tunnelErrHostKeyRejected,
+        TunnelError.listen => tunnelErrListen,
+        TunnelError.failed => tunnelErrFailed,
       };
 
   String inUseKind(InUseKind k) => switch (k) {

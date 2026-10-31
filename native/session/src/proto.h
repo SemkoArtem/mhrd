@@ -23,7 +23,7 @@ enum
 	MSG_FOCUS = 0x09,        /* показати власне вікно сеансу (режим nativeWindow) */
 
 	/* mhrd-session -> застосунок */
-	EVT_STATE = 0x81,        /* u8 стан: 1 з'єднання, 2 підключено */
+	EVT_STATE = 0x81,        /* u8 стан: 1 з'єднання, 2 підключено, 3 зв'язок обірвався — перепідключення */
 	EVT_SURFACE = 0x82,      /* u32 ширина, u32 висота, u32 крок рядка, ім'я спільної пам'яті */
 	EVT_FRAME = 0x83,        /* u32 x, y, w, h — ділянка оновилась */
 	EVT_CERTIFICATE = 0x84,  /* JSON: host, port, commonName, subject, issuer, fingerprint, flags, changed */

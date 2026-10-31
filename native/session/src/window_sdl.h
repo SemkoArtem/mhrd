@@ -42,6 +42,7 @@ typedef struct
 	uint32_t iconPin, iconUnpin, iconKeyboard, iconMinimize, iconFullscreen, iconExitFullscreen, iconDisconnect;
 	const char* menuFullscreen; /* пункти системного меню вікна (Windows) */
 	const char* menuKeyboard;
+	const char* labelReconnecting; /* поверх картинки, поки зв'язок відновлюється */
 	uint32_t colorSurface, colorBorder, colorText, colorAccent, colorError; /* 0xRRGGBB */
 	BOOL startFullscreen;
 	int keyboardCapture; /* 0 — лише на весь екран, 1 — завжди, 2 — ніколи */
@@ -60,4 +61,5 @@ void window_shutdown(void);
 void window_post_surface(void);                         /* новий буфер (перший кадр чи нова роздільність) */
 void window_post_frame(int x, int y, int w, int h);     /* ділянка оновилась */
 void window_post_focus(void);                           /* застосунок просить показати вікно */
+void window_post_reconnecting(BOOL on);                 /* зв'язок обірвався / відновився */
 void window_post_quit(void);                            /* сеанс завершився */

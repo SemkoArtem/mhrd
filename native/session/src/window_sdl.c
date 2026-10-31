@@ -32,6 +32,7 @@ enum
 	EV_QUIT,
 	EV_MENU_FULLSCREEN, /* пункти системного меню вікна */
 	EV_MENU_KEYBOARD,
+	EV_RECONNECTING, /* стан — у W.reconnecting */
 	EV_COUNT
 };
 
@@ -90,6 +91,9 @@ static struct
 
 	Uint64 hoverSince; /* коли мишу навели на поточну кнопку */
 	BOOL tooltipShown;
+
+	SDL_AtomicInt reconnecting; /* 1 — зв'язок обірвався, FreeRDP відновлює (пише потік FreeRDP) */
+	SDL_Texture* reconnectLabel;
 } W;
 
 /* ── Клавіші: SDL_Scancode (= USB HID usage) → скан-код RDP (PC/AT, набір 1) ── */
@@ -196,6 +200,12 @@ void window_post_focus(void)
 void window_post_quit(void)
 {
 	push(EV_QUIT);
+}
+
+void window_post_reconnecting(BOOL on)
+{
+	SDL_SetAtomicInt(&W.reconnecting, on ? 1 : 0);
+	push(EV_RECONNECTING);
 }
 
 /* ── Геометрія ────────────────────────────────────────────────── */
@@ -317,6 +327,7 @@ static void load_labels(void)
 	W.fullscreenLabel = make_label(W.cfg.labelFullscreen);
 	W.labels[BTN_DISCONNECT] = make_label(W.cfg.labelDisconnect);
 	W.labels[BTN_COUNT] = make_label(W.cfg.title);
+	W.reconnectLabel = make_label(W.cfg.labelReconnecting);
 }
 
 static BOOL bar_visible(void)
@@ -480,6 +491,29 @@ static void draw_bar(void)
 	draw_tooltip();
 }
 
+/* Зв'язок обірвався: картинку притемнюємо, по центру — «Перепідключення…». */
+static void draw_reconnecting(void)
+{
+	int pw = 0, ph = 0;
+	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(W.renderer, 0, 0, 0, 150);
+	const SDL_FRect all = { 0, 0, (float)pw, (float)ph };
+	SDL_RenderFillRect(W.renderer, &all);
+	if (!W.reconnectLabel)
+		return;
+	const float s = ui_scale();
+	float tw = 0, th = 0;
+	SDL_GetTextureSize(W.reconnectLabel, &tw, &th);
+	const SDL_FRect box = { floorf(((float)pw - tw) / 2.0f - 20 * s), floorf(((float)ph - th) / 2.0f - 12 * s),
+		                    tw + 40 * s, th + 24 * s };
+	set_color(W.cfg.colorSurface, 255);
+	SDL_RenderFillRect(W.renderer, &box);
+	set_color(W.cfg.colorAccent, 255);
+	SDL_RenderRect(W.renderer, &box);
+	draw_label(W.reconnectLabel, &box, FALSE);
+}
+
 static void render(void)
 {
 	SDL_SetRenderDrawColor(W.renderer, 0, 0, 0, 255);
@@ -492,6 +526,8 @@ static void render(void)
 		SDL_SetTextureScaleMode(W.texture, exact ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 		SDL_RenderTexture(W.renderer, W.texture, NULL, &dst);
 	}
+	if (SDL_GetAtomicInt(&W.reconnecting))
+		draw_reconnecting();
 	draw_bar();
 	SDL_RenderPresent(W.renderer);
 }
@@ -931,6 +967,11 @@ void window_run(void)
 					case EV_MENU_KEYBOARD:
 						open_keyboard();
 						break;
+					case EV_RECONNECTING:
+						release_keys(); /* після відновлення на ПК не має лишитись натиснутих клавіш */
+						if (W.window)
+							render();
+						break;
 					default:
 						break;
 				}
@@ -1013,6 +1054,8 @@ void window_shutdown(void)
 		SDL_DestroyTexture(W.unpinLabel);
 	if (W.fullscreenLabel)
 		SDL_DestroyTexture(W.fullscreenLabel);
+	if (W.reconnectLabel)
+		SDL_DestroyTexture(W.reconnectLabel);
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
 		if (W.icons[i])

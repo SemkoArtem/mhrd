@@ -28,6 +28,9 @@ abstract class SessionChannel {
   void send(Uint8List frame);
   Future<int> get exitCode;
   void kill();
+
+  /// PID процесу сеансу — за ним стежить тунель, щоб жити рівно стільки ж.
+  int get pid;
 }
 
 /// Справжній процес `mhrd-session`: stdin/stdout — канал, stderr — журнал FreeRDP.
@@ -62,6 +65,9 @@ class ProcessChannel implements SessionChannel {
 
   @override
   void kill() => _p.kill();
+
+  @override
+  int get pid => _p.pid;
 
   /// Закриває stdin — так процес сеансу дізнається, що застосунок пішов.
   void closeInput() => _p.stdin.close();
@@ -140,7 +146,11 @@ class RdpSession extends ChangeNotifier {
   void _onEvent(SessionEvent e) {
     switch (e) {
       case StateEvent(:final state):
-        this.state = state == 2 ? SessionState.connected : SessionState.connecting;
+        this.state = switch (state) {
+          2 => SessionState.connected,
+          3 => SessionState.reconnecting, // зв'язок обірвався, mhrd-session відновлює сам
+          _ => SessionState.connecting,
+        };
       case SurfaceEvent():
         _frame?.close();
         width = e.width;

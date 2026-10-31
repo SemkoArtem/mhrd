@@ -13,6 +13,9 @@ vcpkg_from_github(
         fix-windows-pkgconfig.patch
         install-layout.patch
         windows-linkage.patch
+        # MHRD: на Windows FreeRDP 3.32 перевіряв адреси через PathIsURLA (лише URL зі схемою):
+        # проксі тихо не працював, а перенаправлення RDS-ферми падало. Перевіряємо як ім'я вузла.
+        mhrd-hostname-checks.patch
 )
 file(WRITE "${SOURCE_PATH}/.source_version" "${VERSION}-vcpkg")
 file(WRITE "${SOURCE_PATH}/CMakeCPack.cmake" "")
@@ -68,6 +71,12 @@ endif()
 
 if (NOT HAS_SHADOW_SUBSYSTEM)
     list(APPEND FEATURE_OPTIONS -DWITH_SHADOW_SUBSYSTEM=OFF -DWITH_SERVER_SHADOW_CLI=OFF)
+endif()
+
+# MHRD: H.264 (AVC420/AVC444) через Media Foundation — декодер самої Windows, mfplat.dll
+# вантажиться під час роботи; немає (Windows N) — mhrd-session лишає звичайну графіку.
+if(VCPKG_TARGET_IS_WINDOWS)
+    list(APPEND FEATURE_OPTIONS -DWITH_MEDIA_FOUNDATION=ON)
 endif()
 
 vcpkg_find_acquire_program(PKGCONFIG)

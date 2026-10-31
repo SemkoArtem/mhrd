@@ -1,0 +1,94 @@
+diff --git a/libfreerdp/core/proxy.c b/libfreerdp/core/proxy.c
+--- a/libfreerdp/core/proxy.c
++++ b/libfreerdp/core/proxy.c
+@@ -83,6 +83,21 @@ static BOOL socks_proxy_connect(rdpContext* context, BIO* bufferedBio, const cha
+                                 const char* proxyPassword, const char* hostname, UINT16 port);
+ static void proxy_read_environment(rdpSettings* settings, char* envname);
+ 
++/* MHRD: у Windows winpr_str_is_valid_url(N) = PathIsURLA, яка відкидає звичайну адресу
++ * (127.0.0.1, proxy.lan) без схеми — і проксі тихо не працював. Тут достатньо перевірити, що
++ * це одне слово розумної довжини; решту перевірять DNS і саме з'єднання. */
++static BOOL mhrd_valid_host(const char* host, size_t len)
++{
++	if (!host || (len == 0) || (len > 255))
++		return FALSE;
++	for (size_t i = 0; i < len; i++)
++	{
++		if ((unsigned char)host[i] <= ' ' || host[i] == '/' || host[i] == '@')
++			return FALSE;
++	}
++	return TRUE;
++}
++
+ BOOL proxy_prepare(rdpSettings* settings, const char** lpPeerHostname, UINT16* lpPeerPort,
+                    const char** lpProxyUsername, const char** lpProxyPassword)
+ {
+@@ -105,7 +120,7 @@ BOOL proxy_prepare(rdpSettings* settings, const char** lpPeerHostname, UINT16* l
+ 	if (freerdp_settings_get_uint32(settings, FreeRDP_ProxyType) != PROXY_TYPE_NONE)
+ 	{
+ 		*lpPeerHostname = freerdp_settings_get_string(settings, FreeRDP_ProxyHostname);
+-		if (!*lpPeerHostname || !winpr_str_is_valid_url(*lpPeerHostname))
++		if (!*lpPeerHostname || !mhrd_valid_host(*lpPeerHostname, strnlen(*lpPeerHostname, 256)))
+ 			return FALSE;
+ 		*lpPeerPort = freerdp_settings_get_uint16(settings, FreeRDP_ProxyPort);
+ 		*lpProxyUsername = freerdp_settings_get_string(settings, FreeRDP_ProxyUsername);
+@@ -643,7 +658,7 @@ static BOOL http_proxy_connect(rdpContext* context, BIO* bufferedBio, const char
+ 	// Check for IPv6 (max 45) or DNS (max 255) name. Bounded length to 256 so too long hostnames do
+ 	// not silently pass
+ 	const size_t hostLen = strnlen(hostname, 255 + 1);
+-	if (!is_ipv6_addr(hostname, hostLen) && !winpr_str_is_valid_urlN(hostname, hostLen))
++	if (!is_ipv6_addr(hostname, hostLen) && !mhrd_valid_host(hostname, hostLen))
+ 		return FALSE;
+ 
+ 	if (_itoa_s(port, port_str, sizeof(port_str), 10) < 0)
+@@ -961,7 +976,7 @@ static BOOL socks_proxy_connect(rdpContext* context, BIO* bufferedBio, const cha
+ 	// Check for IPv6 (max 45) or DNS (max 255) name. Bounded length to 256 so too long hostnames do
+ 	// not silently pass
+ 	const size_t hostnlen = strnlen(hostname, 255 + 1);
+-	if (!is_ipv6_addr(hostname, hostnlen) && !winpr_str_is_valid_urlN(hostname, hostnlen))
++	if (!is_ipv6_addr(hostname, hostnlen) && !mhrd_valid_host(hostname, hostnlen))
+ 		return FALSE;
+ 
+ 	BYTE nauthMethods = 1;
+diff --git a/libfreerdp/core/redirection.c b/libfreerdp/core/redirection.c
+--- a/libfreerdp/core/redirection.c
++++ b/libfreerdp/core/redirection.c
+@@ -59,6 +59,20 @@ struct rdp_redirection
+ 	rdpCertificate* TargetCertificate;
+ };
+ 
++/* MHRD: у Windows winpr_str_is_valid_url = PathIsURLA, яка відкидає ім'я вузла без схеми
++ * (host.domain.local, NetBIOS) — і перенаправлення брокером RDS-ферми падало. */
++static BOOL mhrd_valid_host(const char* host)
++{
++	if (!host || !host[0])
++		return FALSE;
++	for (const char* p = host; *p; p++)
++	{
++		if ((unsigned char)*p <= ' ' || *p == '/' || *p == '@')
++			return FALSE;
++	}
++	return TRUE;
++}
++
+ static void redirection_free_array(char*** what, UINT32* count)
+ {
+ 	WINPR_ASSERT(what);
+@@ -801,7 +815,7 @@ static state_run_t rdp_recv_server_redirection_pdu(rdpRdp* rdp, wStream* s)
+ 	{
+ 		if (!rdp_redirection_read_unicode_string(s, &(redirection->TargetFQDN), 512))
+ 			return STATE_RUN_FAILED;
+-		if (!winpr_str_is_valid_url(redirection->TargetFQDN))
++		if (!mhrd_valid_host(redirection->TargetFQDN))
+ 			return STATE_RUN_FAILED;
+ 		WLog_DBG(TAG, "TargetFQDN: %s", redirection->TargetFQDN);
+ 	}
+@@ -810,7 +824,7 @@ static state_run_t rdp_recv_server_redirection_pdu(rdpRdp* rdp, wStream* s)
+ 	{
+ 		if (!rdp_redirection_read_unicode_string(s, &(redirection->TargetNetBiosName), 32))
+ 			return STATE_RUN_FAILED;
+-		if (!winpr_str_is_valid_url(redirection->TargetNetBiosName))
++		if (!mhrd_valid_host(redirection->TargetNetBiosName))
+ 			return STATE_RUN_FAILED;
+ 		WLog_DBG(TAG, "TargetNetBiosName: %s", redirection->TargetNetBiosName);
+ 	}

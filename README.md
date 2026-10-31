@@ -20,6 +20,14 @@
   клавіатура, згорнути, у вікно, відключитись.
 - Перевірка сертифіката сервера з запам'ятовуванням довіри; зрозумілі причини відключення
   й «Підключитись знову».
+- Автоматичне перепідключення, якщо зв'язок обірвався.
+- H.264 (AVC444) через вбудований у Windows декодер — менше трафіку й плавніше відео.
+
+**Маршрути до ПК**
+- Вбудований **WireGuard** (імпорт `.conf`): без прав адміністратора й драйвера, не заважає
+  іншому VPN.
+- **SSH-тунель** (пароль або ключ) з перевіркою ключа сервера.
+- **Проксі** SOCKS5 і HTTP, **RD Gateway**.
 
 **Пристрої**
 - Буфер обміну в обидва боки: текст, зображення і **файли**.
@@ -37,9 +45,7 @@
 
 ## У планах
 
-- Автоматичне перепідключення після обриву мережі, H.264.
-- Вбудовані тунелі без прав адміністратора: WireGuard, далі OpenVPN, Tailscale/Headscale.
-- Проксі, SSH-тунель, RD Gateway.
+- Інші вбудовані тунелі: OpenVPN, Tailscale/Headscale, OpenConnect.
 - **Android і Linux**, згодом macOS.
 
 Повний перелік і критерії готовності — у [`docs/SPEC.md`](docs/SPEC.md) → «Етапи робіт».
@@ -49,13 +55,17 @@
 Потрібно:
 - [Flutter](https://docs.flutter.dev/get-started/install) stable (3.35 або новіший);
 - Visual Studio 2022 Build Tools з «Desktop development with C++» і компонентом **ATL**;
-- [vcpkg](https://github.com/microsoft/vcpkg) (повний клон) — у `C:\src\vcpkg` або в `VCPKG_ROOT`.
+- [vcpkg](https://github.com/microsoft/vcpkg) (повний клон) — у `C:\src\vcpkg` або в `VCPKG_ROOT`;
+- [Go](https://go.dev/dl/) — для модуля тунелів.
 
 ```powershell
 # 1. Модуль сеансу mhrd-session (FreeRDP, OpenSSL, SDL3 — статично; перший раз ~30 хв)
 powershell -ExecutionPolicy Bypass -File native\session\build.ps1
 
-# 2. Застосунок (кладе mhrd-session.exe поруч із mhrd.exe)
+# 2. Модуль тунелів mhrd-tunnel (WireGuard, SSH)
+powershell -ExecutionPolicy Bypass -File native\tunnels\build.ps1
+
+# 3. Застосунок (кладе mhrd-session.exe і mhrd-tunnel.exe поруч із mhrd.exe)
 flutter pub get
 flutter build windows --release
 ```
@@ -71,6 +81,7 @@ Linux, macOS і Android з'являться в цьому запуску → **A
 ```
 lib/               Flutter: список ПК, налаштування, бекап, теми, керування сеансами
 native/session/    mhrd-session (C): FreeRDP 3 + власне вікно на SDL3, буфер обміну, папки
+native/tunnels/    mhrd-tunnel (Go): WireGuard (netstack) і SSH-тунелі
 docs/SPEC.md       специфікація: функції, архітектура, модель даних, тест-план, етапи
 ```
 
@@ -90,7 +101,8 @@ SIL OFL (див. `assets/fonts/licenses/`).
 
 **MHRD** is a free, open-source RDP client built on FreeRDP 3 and Flutter. Every remote desktop
 opens in its own window and process. Already working on Windows: connections with certificate
-pinning, HiDPI-exact rendering with dynamic resolution, full screen with a hideable bar,
+pinning, auto-reconnect, H.264, built-in WireGuard and SSH tunnels without admin rights,
+SOCKS5/HTTP proxy and RD Gateway, HiDPI-exact rendering with dynamic resolution, full screen with a hideable bar,
 clipboard (text, images, files) both ways, shared folders with access modes (full /
 add-only / read-only), sound and microphone, an encrypted backup, themes, Ukrainian and
 English UI. Android and Linux ports come next. License: AGPLv3.

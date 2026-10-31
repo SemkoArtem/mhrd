@@ -9,6 +9,7 @@ import 'package:mhrd/sessions/rdp_session.dart';
 import 'package:mhrd/sessions/scancodes.dart';
 import 'package:mhrd/sessions/session_manager.dart';
 import 'package:mhrd/sessions/session_protocol.dart';
+import 'package:mhrd/sessions/tunnel.dart';
 import 'package:mhrd/storage/database.dart';
 import 'package:mhrd/storage/repository.dart';
 import 'package:mhrd/storage/secret_store.dart';
@@ -31,6 +32,38 @@ class FakeChannel implements SessionChannel {
   void send(Uint8List frame) => sent.add(frame);
   @override
   Future<int> get exitCode => exit.future;
+  @override
+  void kill() => killed = true;
+  @override
+  int get pid => 4242;
+}
+
+/// Фальшивий mhrd-tunnel: на запит відповідає подіями зі [script]; як і справжній, після
+/// hostKey мовчить, доки не прийде trustHostKey.
+class FakeTunnel implements TunnelChannel {
+  final _events = StreamController<Map<String, Object?>>();
+  final sent = <Map<String, Object?>>[];
+  List<Map<String, Object?>> script = [];
+  var _next = 0;
+  bool killed = false;
+
+  @override
+  Stream<Map<String, Object?>> get events => _events.stream;
+
+  void _play() {
+    while (_next < script.length) {
+      final e = script[_next++];
+      scheduleMicrotask(() => _events.add(e));
+      if (e['event'] == 'hostKey') return;
+    }
+  }
+
+  @override
+  void send(Map<String, Object?> message) {
+    sent.add(message);
+    if (sent.length == 1 || message.containsKey('trustHostKey')) _play();
+  }
+
   @override
   void kill() => killed = true;
 }
@@ -160,6 +193,19 @@ void main() {
       expect(ch.sent.last, encodeCertAnswer(true));
     });
 
+    test('обрив зв\'язку: reconnecting, ввід не йде; відновився — знову connected', () async {
+      ch.emit(Msg.evtState, [2]);
+      ch.emit(Msg.evtState, [3]);
+      await settle();
+      expect(s.state, SessionState.reconnecting);
+      expect(s.isActive, isTrue); // сеанс живий — не «відключено»
+      s.sendKey(0x1E, true);
+      expect(ch.sentTypes, [Msg.connect]);
+      ch.emit(Msg.evtState, [2]);
+      await settle();
+      expect(s.state, SessionState.connected);
+    });
+
     test('невірний пароль → failed з причиною', () async {
       ch.emit(Msg.evtDisconnected, [DisconnectReason.authFailed.index, ...u32s([0x20009])]);
       await settle();
@@ -251,6 +297,107 @@ void main() {
       // Типові пристрої ПК: буфер увімкнено, звук тут, мікрофон вимкнено.
       expect([json['clipboard'], json['sound'], json['microphone']], [true, 'local', false]);
       expect(json.containsKey('nativeWindow'), isFalse);
+    });
+
+    test('маршрут: проксі й шлюз із паролями зі сховища; тунель — відмова, а не тихо напряму', () async {
+      await repo.saveProxy(const ProxyProfile(id: 'px', name: '', host: 'proxy.lan', port: 3128, type: ProxyType.http,
+          username: 'pu'), password: 'pp');
+      await repo.saveCredential(const Credential(id: 'gc', name: '', username: 'CORP\\gw'), password: 'gp');
+      repo.saveGateway(const Gateway(id: 'gw', name: '', host: 'rdgw.lan', credentialMode: GatewayCredentialMode.own,
+          credentialId: 'gc'));
+      final c = pc().copyWith(route: RouteKind.proxy, routeRefId: () => 'px', gatewayId: () => 'gw');
+      await m.start(c, username: 'u', password: 'p', width: 800, height: 600);
+      final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
+      expect(json['proxy'], {'type': 'http', 'host': 'proxy.lan', 'port': 3128, 'username': 'pu', 'password': 'pp'});
+      expect(json['gateway'], {
+        'host': 'rdgw.lan', 'port': 443, 'bypassLocal': false, 'sameCredentials': false,
+        'username': 'CORP\\gw', 'password': 'gp',
+      });
+      expect(m.gatewayAccountToAsk(c), isNull); // пароль збережено — не питаємо
+
+      final viaTunnel = pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 't1');
+      expect(() => m.tunnelRequest(viaTunnel),
+          throwsA(isA<RouteException>().having((e) => e.error, 'error', RouteError.tunnelMissing)));
+      final noProxy = pc().copyWith(route: RouteKind.proxy, routeRefId: () => 'gone');
+      expect(() => m.routeConfig(noProxy),
+          throwsA(isA<RouteException>().having((e) => e.error, 'error', RouteError.proxyMissing)));
+      expect(await m.routeConfig(pc()), isEmpty); // напряму — нічого зайвого
+    });
+
+    group('тунелі', () {
+      late FakeTunnel tun;
+      setUp(() {
+        tun = FakeTunnel();
+        m = SessionManager(repo,
+            enginePath: 'mhrd-session.exe',
+            channelFactory: (_) async => ch,
+            tunnelPath: 'mhrd-tunnel.exe',
+            tunnelFactory: (_) async => tun);
+      });
+
+      test('WireGuard: ключ зі сховища йде лише в stdin тунелю, сеанс — на 127.0.0.1:порт', () async {
+        await repo.saveTunnel(
+            const TunnelProfile(id: 'wg', name: 'WG', type: TunnelType.wireguard, config: {
+              'addresses': ['10.8.0.2/24'],
+              'endpoint': 'vpn.example.com:51820',
+              'peerPublicKey': 'PUB',
+              'extraPeersIgnored': false,
+            }, secretFields: ['privateKey']),
+            secretValues: {'privateKey': 'PRIV'});
+        tun.script = [
+          {'event': 'listening', 'port': 50123}
+        ];
+        await m.start(pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg'),
+            username: 'u', password: 'p', width: 800, height: 600);
+        final req = tun.sent.first;
+        expect(req['type'], 'wireguard');
+        expect(req['target'], '10.0.0.5:3389');
+        expect((req['wireguard'] as Map)['privateKey'], 'PRIV');
+        expect((req['wireguard'] as Map).containsKey('extraPeersIgnored'), isFalse);
+        expect(tun.sent.last, {'watchPid': 4242}); // тунель житиме, поки живе сеанс
+        final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
+        expect([json['host'], json['port']], ['127.0.0.1', 50123]);
+      });
+
+      test('SSH: новий ключ сервера — питаємо; довірились — відбиток у профілі', () async {
+        await repo.saveSsh(const SshProfile(id: 'j', name: '', host: 'jump.lan', username: 'me',
+            authKind: SshAuthKind.password), secret: 'sp');
+        tun.script = [
+          {'event': 'hostKey', 'fingerprint': 'SHA256:abc'},
+          {'event': 'listening', 'port': 50200},
+        ];
+        String? asked;
+        await m.start(pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j'),
+            username: 'u', password: 'p', width: 800, height: 600, confirmSshHostKey: (fp) async {
+          asked = fp;
+          return true;
+        });
+        expect(asked, 'SHA256:abc');
+        expect(tun.sent, contains(equals({'trustHostKey': true})));
+        expect((tun.sent.first['ssh'] as Map)['password'], 'sp');
+        expect(repo.ssh['j']!.hostKeyPin, 'SHA256:abc');
+      });
+
+      test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {
+        await repo.saveSsh(const SshProfile(id: 'j', name: '', host: 'jump.lan', username: 'me'), secret: 'KEY');
+        tun.script = [
+          {'event': 'error', 'code': 'auth', 'detail': 'unable to authenticate'}
+        ];
+        await expectLater(
+            m.start(pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j'),
+                username: 'u', password: 'p', width: 800, height: 600),
+            throwsA(isA<TunnelException>().having((e) => e.error, 'error', TunnelError.auth)));
+        expect(tun.killed, isTrue);
+        expect(m.sessions, isEmpty);
+        expect(ch.sent, isEmpty); // mhrd-session навіть не запускався
+      });
+
+      test('тунель разом із RD Gateway — відмова, бо шлюз пішов би в обхід тунелю', () async {
+        repo.saveGateway(const Gateway(id: 'gw', name: '', host: 'rdgw.lan'));
+        final c = pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j', gatewayId: () => 'gw');
+        expect(() => m.routeConfig(c),
+            throwsA(isA<RouteException>().having((e) => e.error, 'error', RouteError.gatewayWithTunnel)));
+      });
     });
 
     test('власне вікно: налаштування йдуть у connect, після виходу процесу сеанс зникає', () async {

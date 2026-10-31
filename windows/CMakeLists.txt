@@ -97,6 +97,16 @@ else()
   message(WARNING "mhrd-session.exe не знайдено: запустіть native/session/build.ps1")
 endif()
 
+# mhrd-tunnel.exe — вбудовані тунелі WireGuard і SSH (native/tunnels, Go, збирається build.ps1).
+# Без нього MHRD працює; ПК із маршрутом «через тунель» пояснюють, що модуля немає.
+set(MHRD_TUNNEL_EXE "${CMAKE_CURRENT_SOURCE_DIR}/../native/tunnels/out/mhrd-tunnel.exe")
+if(EXISTS "${MHRD_TUNNEL_EXE}")
+  install(FILES "${MHRD_TUNNEL_EXE}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "mhrd-tunnel.exe не знайдено: запустіть native/tunnels/build.ps1")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

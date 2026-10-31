@@ -80,6 +80,22 @@ docs/SPEC.md                   специфікація (джерело прав
   тег `v0.2-in-app-session`.
 - Журнал сеансів: `<AppSupport>/logs/session-ДАТА.log`, 7 днів (`lib/sessions/session_log.dart`) —
   stderr FreeRDP + рядок `audio: playback/remoteConsole/capture` і «channel connected: …».
+- **H.264 (AVC444/AVC420)** — через Media Foundation (`WITH_MEDIA_FOUNDATION=ON` в overlay-порті);
+  `h264_available()` у PreConnect перевіряє декодер і лише тоді вмикає GfxH264 (Windows N — без).
+- **Автоперепідключення:** `client_auto_reconnect_ex` у `run_session` (до 20 спроб по 3 с,
+  `mhrd_retry_dialog`); EVT_STATE 3 = reconnecting; ввід із вікна на час відновлення не йде;
+  вікно показує «Перепідключення…». FreeRDP сам не перепідключається після навмисного виходу.
+- **Проксі (SOCKS5/HTTP) і RD Gateway** — налаштування FreeRDP із `proxy`/`gateway` у MSG_CONNECT.
+  Латка `vcpkg-overlay/freerdp/mhrd-hostname-checks.patch`: FreeRDP 3.32 на Windows перевіряв
+  адреси через PathIsURLA (лише URL зі схемою) — проксі тихо не працював (і адреса проксі, і ціль
+  SOCKS5/HTTP), а перенаправлення брокером RDS-ферми падало. При оновленні FreeRDP — перевірити,
+  чи ще потрібна.
+- **Тунелі WireGuard і SSH** — окремий процес `native/tunnels` (Go: wireguard-go netstack,
+  x/crypto/ssh), `native/tunnels/build.ps1` → `out/mhrd-tunnel.exe`. Протокол — рядки JSON у
+  stdin/stdout (секрети лише там); відкриває `127.0.0.1:порт`, mhrd-session іде туди; живе, поки
+  живий процес сеансу (`watchPid`). Ключ SSH-сервера — як сертифікат RDP: новий — питаємо,
+  змінився — стоп. Маршрут, якого не вміємо, — помилка, ніколи не тихе підключення напряму.
+  Go — портативний у `C:\src\go`.
 - **Адміністративний сеанс (/admin) — без мікрофона:** Windows не відкриває `AUDIO_INPUT`, хоч клієнт
   його пропонує. Перевірено на сервері власника (mstsc без /admin — мікрофон є).
 

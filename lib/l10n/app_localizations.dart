@@ -1463,7 +1463,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunnelsHint.
   ///
   /// In uk, this message translates to:
-  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Підключення через тунелі запрацює на етапі 4.'**
+  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; OpenVPN, Tailscale та інші — далі.'**
   String get tunnelsHint;
 
   /// No description provided for @importWireGuard.
@@ -1483,6 +1483,240 @@ abstract class AppLocalizations {
   /// In uk, this message translates to:
   /// **'З\'являться на етапі 6.'**
   String get comingInStage6;
+
+  /// No description provided for @routeErrProxyMissing.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі цього ПК видалено. Виберіть маршрут у налаштуваннях ПК.'**
+  String get routeErrProxyMissing;
+
+  /// No description provided for @routeErrGatewayMissing.
+  ///
+  /// In uk, this message translates to:
+  /// **'Шлюз цього ПК видалено. Виберіть інший у налаштуваннях ПК.'**
+  String get routeErrGatewayMissing;
+
+  /// No description provided for @routeErrTunnel.
+  ///
+  /// In uk, this message translates to:
+  /// **'Цей тип тунелю ще не підтримується — поки працює WireGuard.'**
+  String get routeErrTunnel;
+
+  /// No description provided for @routeErrTunnelMissing.
+  ///
+  /// In uk, this message translates to:
+  /// **'Тунель цього ПК видалено. Виберіть маршрут у налаштуваннях ПК.'**
+  String get routeErrTunnelMissing;
+
+  /// No description provided for @routeErrSshMissing.
+  ///
+  /// In uk, this message translates to:
+  /// **'SSH-профіль цього ПК видалено. Виберіть маршрут у налаштуваннях ПК.'**
+  String get routeErrSshMissing;
+
+  /// No description provided for @routeErrTunnelEngine.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не знайдено модуль тунелів (mhrd-tunnel) поруч із програмою. Перевстановіть MHRD.'**
+  String get routeErrTunnelEngine;
+
+  /// No description provided for @routeErrGatewayTunnel.
+  ///
+  /// In uk, this message translates to:
+  /// **'RD Gateway разом із тунелем чи SSH поки не підтримується — приберіть шлюз або тунель у налаштуваннях ПК.'**
+  String get routeErrGatewayTunnel;
+
+  /// No description provided for @tunnelErrConfig.
+  ///
+  /// In uk, this message translates to:
+  /// **'Налаштування тунелю некоректні. Перевірте їх або імпортуйте .conf знову.'**
+  String get tunnelErrConfig;
+
+  /// No description provided for @tunnelErrEndpointDns.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося знайти сервер тунелю за іменем.'**
+  String get tunnelErrEndpointDns;
+
+  /// No description provided for @tunnelErrStart.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося запустити тунель.'**
+  String get tunnelErrStart;
+
+  /// No description provided for @tunnelErrUnreachable.
+  ///
+  /// In uk, this message translates to:
+  /// **'Тунель піднявся, але ПК не відповідає. Перевірте, чи працює сервер тунелю і чи ПК у його мережі.'**
+  String get tunnelErrUnreachable;
+
+  /// No description provided for @tunnelErrConnect.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося підключитися до SSH-сервера.'**
+  String get tunnelErrConnect;
+
+  /// No description provided for @tunnelErrAuth.
+  ///
+  /// In uk, this message translates to:
+  /// **'SSH-сервер не прийняв логін, пароль чи ключ.'**
+  String get tunnelErrAuth;
+
+  /// No description provided for @tunnelErrKeyPassphrase.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключ SSH захищено паролем — такі ключі поки не підтримуються.'**
+  String get tunnelErrKeyPassphrase;
+
+  /// No description provided for @tunnelErrBadKey.
+  ///
+  /// In uk, this message translates to:
+  /// **'Файл ключа SSH не розпізнано.'**
+  String get tunnelErrBadKey;
+
+  /// No description provided for @tunnelErrHostKeyChanged.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключ SSH-сервера змінився! Можлива підміна. Якщо його змінили навмисно — створіть SSH-профіль заново.'**
+  String get tunnelErrHostKeyChanged;
+
+  /// No description provided for @tunnelErrHostKeyRejected.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключу SSH-сервера не довірено — підключення скасовано.'**
+  String get tunnelErrHostKeyRejected;
+
+  /// No description provided for @tunnelErrListen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося відкрити локальний порт для тунелю.'**
+  String get tunnelErrListen;
+
+  /// No description provided for @tunnelErrFailed.
+  ///
+  /// In uk, this message translates to:
+  /// **'Тунель несподівано завершився.'**
+  String get tunnelErrFailed;
+
+  /// No description provided for @addSsh.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додати SSH'**
+  String get addSsh;
+
+  /// No description provided for @sshNew.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий SSH-тунель'**
+  String get sshNew;
+
+  /// No description provided for @sshTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'SSH-тунель'**
+  String get sshTitle;
+
+  /// No description provided for @sshAddress.
+  ///
+  /// In uk, this message translates to:
+  /// **'SSH-сервер'**
+  String get sshAddress;
+
+  /// No description provided for @sshAuth.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вхід'**
+  String get sshAuth;
+
+  /// No description provided for @sshAuthPassword.
+  ///
+  /// In uk, this message translates to:
+  /// **'Пароль'**
+  String get sshAuthPassword;
+
+  /// No description provided for @sshAuthKey.
+  ///
+  /// In uk, this message translates to:
+  /// **'Приватний ключ'**
+  String get sshAuthKey;
+
+  /// No description provided for @sshPickKey.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вибрати файл ключа…'**
+  String get sshPickKey;
+
+  /// No description provided for @sshKeyLoaded.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключ вибрано: {name}'**
+  String sshKeyLoaded(String name);
+
+  /// No description provided for @sshKeyKept.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключ збережено. Виберіть інший файл, щоб замінити.'**
+  String get sshKeyKept;
+
+  /// No description provided for @sshKeyRequired.
+  ///
+  /// In uk, this message translates to:
+  /// **'Виберіть файл приватного ключа'**
+  String get sshKeyRequired;
+
+  /// No description provided for @sshHostKeyTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий SSH-сервер'**
+  String get sshHostKeyTitle;
+
+  /// No description provided for @sshHostKeyBody.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перше підключення до {host}. Переконайтеся, що відбиток ключа збігається з ключем сервера.'**
+  String sshHostKeyBody(String host);
+
+  /// No description provided for @addProxy.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додати проксі'**
+  String get addProxy;
+
+  /// No description provided for @proxyNew.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий проксі'**
+  String get proxyNew;
+
+  /// No description provided for @proxyTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі'**
+  String get proxyTitle;
+
+  /// No description provided for @proxyType.
+  ///
+  /// In uk, this message translates to:
+  /// **'Тип'**
+  String get proxyType;
+
+  /// No description provided for @proxyAddress.
+  ///
+  /// In uk, this message translates to:
+  /// **'Адреса проксі'**
+  String get proxyAddress;
+
+  /// No description provided for @proxyLoginHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Логін і пароль — лише якщо проксі їх вимагає'**
+  String get proxyLoginHint;
+
+  /// No description provided for @sshHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Як ssh -L: RDP іде всередині SSH-з\'єднання до сервера, з якого видно ПК.'**
+  String get sshHint;
 
   /// No description provided for @groupNew.
   ///

@@ -271,6 +271,185 @@ class _RoutesTab extends StatelessWidget {
     ));
   }
 
+  /// Проксі SOCKS5 або HTTP. Пароль — лише в системному сховищі; під час редагування порожнє
+  /// поле пароля лишає збережений (прибрали логін — пароль видаляємо).
+  Future<void> _editProxy(BuildContext context, [ProxyProfile? p]) async {
+    final l = context.l10n;
+    final name = TextEditingController(text: p?.name ?? '');
+    final addr = TextEditingController(text: p == null ? '' : '${p.host}:${p.port}');
+    final user = TextEditingController(text: p?.username ?? '');
+    final pass = TextEditingController();
+    var type = p?.type ?? ProxyType.socks5;
+    String? err;
+    int defaultPort() => type == ProxyType.http ? 8080 : 1080;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text(p == null ? l.proxyNew : l.proxyTitle),
+          content: SizedBox(
+            width: 400,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<ProxyType>(
+                initialValue: type,
+                decoration: InputDecoration(labelText: l.proxyType),
+                items: const [
+                  DropdownMenuItem(value: ProxyType.socks5, child: Text('SOCKS5')),
+                  DropdownMenuItem(value: ProxyType.http, child: Text('HTTP')),
+                ],
+                onChanged: (v) => set(() => type = v ?? ProxyType.socks5),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: addr,
+                autofocus: p == null,
+                decoration: InputDecoration(
+                    labelText: l.proxyAddress, hintText: 'proxy.example.com:${defaultPort()}', errorText: err),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: name, decoration: InputDecoration(labelText: l.nameOptional)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: user,
+                decoration: InputDecoration(labelText: l.credUser, helperText: l.proxyLoginHint),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: pass, obscureText: true, decoration: InputDecoration(labelText: l.password)),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
+            FilledButton(
+              onPressed: () {
+                if (parseAddress(addr.text, defaultPort: defaultPort()) == null) {
+                  set(() => err = l.invalidAddress);
+                } else {
+                  Navigator.pop(c, true);
+                }
+              },
+              child: Text(l.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final a = parseAddress(addr.text, defaultPort: defaultPort())!;
+    final username = user.text.trim();
+    await repo.saveProxy(
+      ProxyProfile(id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username),
+      password: username.isEmpty ? '' : (pass.text.isEmpty ? null : pass.text),
+    );
+  }
+
+  /// SSH-тунель. Секрет (пароль або текст приватного ключа) — лише в системному сховищі.
+  /// Під час редагування порожній пароль / невибраний ключ лишає збережений секрет.
+  Future<void> _editSsh(BuildContext context, [SshProfile? s]) async {
+    final l = context.l10n;
+    final name = TextEditingController(text: s?.name ?? '');
+    final addr = TextEditingController(text: s == null ? '' : (s.port == 22 ? s.host : '${s.host}:${s.port}'));
+    final user = TextEditingController(text: s?.username ?? '');
+    final pass = TextEditingController();
+    var kind = s?.authKind ?? SshAuthKind.privateKey;
+    String? keyText, keyName;
+    String? addrErr, userErr, keyErr;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text(s == null ? l.sshNew : l.sshTitle),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                TextField(
+                  controller: addr,
+                  autofocus: s == null,
+                  decoration:
+                      InputDecoration(labelText: l.sshAddress, hintText: 'jump.example.com:22', errorText: addrErr),
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: name, decoration: InputDecoration(labelText: l.nameOptional)),
+                const SizedBox(height: 12),
+                TextField(controller: user, decoration: InputDecoration(labelText: l.credUser, errorText: userErr)),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<SshAuthKind>(
+                  initialValue: kind,
+                  decoration: InputDecoration(labelText: l.sshAuth),
+                  items: [
+                    DropdownMenuItem(value: SshAuthKind.privateKey, child: Text(l.sshAuthKey)),
+                    DropdownMenuItem(value: SshAuthKind.password, child: Text(l.sshAuthPassword)),
+                  ],
+                  onChanged: (v) => set(() => kind = v ?? SshAuthKind.privateKey),
+                ),
+                const SizedBox(height: 12),
+                if (kind == SshAuthKind.password)
+                  TextField(controller: pass, obscureText: true, decoration: InputDecoration(labelText: l.password))
+                else ...[
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.key_outlined),
+                    label: Text(l.sshPickKey),
+                    onPressed: () async {
+                      final f = await openBytes(sshKeyTypes(l));
+                      if (f == null) return;
+                      set(() {
+                        keyName = f.$1;
+                        keyText = utf8.decode(f.$2, allowMalformed: true);
+                        keyErr = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    keyErr ??
+                        (keyName != null
+                            ? l.sshKeyLoaded(keyName!)
+                            : (s?.authKind == SshAuthKind.privateKey ? l.sshKeyKept : '')),
+                    style: TextStyle(
+                        fontSize: 12, color: keyErr != null ? context.mhrd.error : context.mhrd.textMuted),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
+            FilledButton(
+              onPressed: () {
+                final needKey =
+                    kind == SshAuthKind.privateKey && keyText == null && s?.authKind != SshAuthKind.privateKey;
+                set(() {
+                  addrErr = parseAddress(addr.text, defaultPort: 22) == null ? l.invalidAddress : null;
+                  userErr = user.text.trim().isEmpty ? l.credUserRequired : null;
+                  keyErr = needKey ? l.sshKeyRequired : null;
+                });
+                if (addrErr == null && userErr == null && keyErr == null) Navigator.pop(c, true);
+              },
+              child: Text(l.save),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final a = parseAddress(addr.text, defaultPort: 22)!;
+    // Інший сервер — довіра до ключа старого не переноситься.
+    final samePlace = s != null && s.host == a.host && s.port == a.port;
+    final secret = kind == SshAuthKind.password ? (pass.text.isEmpty ? null : pass.text) : keyText;
+    await repo.saveSsh(
+      SshProfile(
+        id: s?.id ?? newId(),
+        name: name.text.trim(),
+        host: a.host,
+        port: a.port,
+        username: user.text.trim(),
+        authKind: kind,
+        hostKeyPin: samePlace ? s.hostKeyPin : null,
+      ),
+      secret: secret,
+    );
+  }
+
   Future<void> _importWireGuard(BuildContext context) async {
     final l = context.l10n;
     final f = await openBytes(wgTypes(l));
@@ -341,7 +520,35 @@ class _RoutesTab extends StatelessWidget {
         ),
       ]),
       _caption(context, l.proxyAndSsh),
-      Text(l.comingInStage6, style: TextStyle(color: t.textMuted, fontSize: 13)),
+      for (final p in repo.proxies.values)
+        ListTile(
+          leading: const Icon(Icons.swap_horiz),
+          title: Text(p.name.trim().isEmpty ? '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}' : p.name),
+          subtitle: Text('${p.host}:${p.port}${p.username.isEmpty ? '' : ' · ${p.username}'}', style: t.mono),
+          onTap: () => _editProxy(context, p),
+          trailing: IconButton(
+            tooltip: l.delete,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _guardedDelete(context, (force) => repo.deleteProxy(p.id, force: force)),
+          ),
+        ),
+      for (final s in repo.ssh.values)
+        ListTile(
+          leading: const Icon(Icons.terminal),
+          title: Text(s.name.trim().isEmpty ? 'SSH · ${s.host}' : s.name),
+          subtitle: Text('${s.username}@${s.host}${s.port == 22 ? '' : ':${s.port}'}', style: t.mono),
+          onTap: () => _editSsh(context, s),
+          trailing: IconButton(
+            tooltip: l.delete,
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _guardedDelete(context, (force) => repo.deleteSsh(s.id, force: force)),
+          ),
+        ),
+      Wrap(spacing: 8, children: [
+        TextButton.icon(icon: const Icon(Icons.add), label: Text(l.addProxy), onPressed: () => _editProxy(context)),
+        TextButton.icon(icon: const Icon(Icons.add), label: Text(l.addSsh), onPressed: () => _editSsh(context)),
+      ]),
+      Text(l.sshHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
     ]);
   }
 }
