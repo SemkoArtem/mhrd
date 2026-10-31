@@ -256,7 +256,7 @@
   "wgNoPrivateKey": "У файлі немає PrivateKey у секції [Interface].",
   "wgNoPeer": "У файлі немає секції [Peer] з PublicKey і Endpoint.",
   "builtInTunnels": "Вбудовані тунелі",
-  "tunnelsHint": "Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; Tailscale — далі. Для інших VPN увімкніть їх у системі й виберіть «Напряму».",
+  "tunnelsHint": "Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Підтримується WireGuard. Для Tailscale та інших VPN увімкніть їх у системі й виберіть «Напряму».",
   "importWireGuard": "Імпортувати WireGuard .conf",
   "proxies": "Проксі",
   "comingInStage6": "З'являться на етапі 6.",

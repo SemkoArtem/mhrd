@@ -232,7 +232,7 @@
   "wgNoPrivateKey": "The file has no PrivateKey in the [Interface] section.",
   "wgNoPeer": "The file has no [Peer] section with PublicKey and Endpoint.",
   "builtInTunnels": "Built-in tunnels",
-  "tunnelsHint": "The tunnel runs inside MHRD: no administrator rights, and it doesn't interfere with another VPN. WireGuard is supported for now; Tailscale comes later. For other VPNs, turn them on in the system and choose \"Direct\".",
+  "tunnelsHint": "The tunnel runs inside MHRD: no administrator rights, and it doesn't interfere with another VPN. WireGuard is supported. For Tailscale and other VPNs, turn them on in the system and choose \"Direct\".",
   "importWireGuard": "Import WireGuard .conf",
   "proxies": "Proxy",
   "comingInStage6": "Coming in stage 6.",

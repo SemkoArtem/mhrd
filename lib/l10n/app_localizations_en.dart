@@ -764,7 +764,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tunnelsHint =>
-      'The tunnel runs inside MHRD: no administrator rights, and it doesn\'t interfere with another VPN. WireGuard is supported for now; Tailscale comes later. For other VPNs, turn them on in the system and choose \"Direct\".';
+      'The tunnel runs inside MHRD: no administrator rights, and it doesn\'t interfere with another VPN. WireGuard is supported. For Tailscale and other VPNs, turn them on in the system and choose \"Direct\".';
 
   @override
   String get importWireGuard => 'Import WireGuard .conf';

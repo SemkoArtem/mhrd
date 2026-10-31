@@ -1445,7 +1445,7 @@ abstract class AppLocalizations {
   /// No description provided for @tunnelsHint.
   ///
   /// In uk, this message translates to:
-  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; Tailscale — далі. Для інших VPN увімкніть їх у системі й виберіть «Напряму».'**
+  /// **'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Підтримується WireGuard. Для Tailscale та інших VPN увімкніть їх у системі й виберіть «Напряму».'**
   String get tunnelsHint;
 
   /// No description provided for @importWireGuard.

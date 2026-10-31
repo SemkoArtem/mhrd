@@ -111,7 +111,7 @@ class Gateway {
       );
 }
 
-enum TunnelType { wireguard, tailscale }
+enum TunnelType { wireguard }
 
 /// Профіль вбудованого тунелю. [config] — лише несекретні поля;
 /// секрети (приватний ключ, PSK, паролі) — у сховищі під [secretKey].

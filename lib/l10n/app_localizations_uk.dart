@@ -764,7 +764,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tunnelsHint =>
-      'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Поки підтримується WireGuard; Tailscale — далі. Для інших VPN увімкніть їх у системі й виберіть «Напряму».';
+      'Тунель працює всередині MHRD: без прав адміністратора і не заважає іншому VPN. Підтримується WireGuard. Для Tailscale та інших VPN увімкніть їх у системі й виберіть «Напряму».';
 
   @override
   String get importWireGuard => 'Імпортувати WireGuard .conf';
