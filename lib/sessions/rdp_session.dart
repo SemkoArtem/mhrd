@@ -207,12 +207,45 @@ class RdpSession extends ChangeNotifier {
     if (_canInput) _channel.send(encodeKey(scancode, down));
   }
 
+  /// Рух миші — не частіше разу на кадр: миша дає до 1000 подій/с, і через інтернет
+  /// кожна окремим пакетом забиває канал. Перший рух іде одразу, решта в межах 16 мс —
+  /// одним повідомленням з останньою позицією.
+  static const moveInterval = Duration(milliseconds: 16);
+  (int, int)? _pendingMove;
+  Timer? _moveTimer;
+
   void sendMouseMove(int x, int y) {
-    if (_canInput) _channel.send(encodeMouseMove(x, y));
+    if (!_canInput) return;
+    if (_moveTimer != null) {
+      _pendingMove = (x, y);
+      return;
+    }
+    _channel.send(encodeMouseMove(x, y));
+    _moveTimer = Timer(moveInterval, _flushMove);
+  }
+
+  void _flushMove() {
+    _moveTimer = null;
+    final p = _pendingMove;
+    _pendingMove = null;
+    if (p != null && _canInput) {
+      _channel.send(encodeMouseMove(p.$1, p.$2));
+      _moveTimer = Timer(moveInterval, _flushMove);
+    }
+  }
+
+  /// Перед кліком чи прокруткою — відкладений рух, щоб подія влучила в правильне місце.
+  void _sendPendingMove() {
+    _moveTimer?.cancel();
+    _moveTimer = null;
+    final p = _pendingMove;
+    _pendingMove = null;
+    if (p != null) _channel.send(encodeMouseMove(p.$1, p.$2));
   }
 
   void sendMouseButton(RemoteButton b, bool down, int x, int y) {
     if (!_canInput) return;
+    _sendPendingMove();
     final swapped = !swapMouseButtons
         ? b
         : switch (b) {
@@ -224,7 +257,9 @@ class RdpSession extends ChangeNotifier {
   }
 
   void sendWheel(int delta, {bool horizontal = false, required int x, required int y}) {
-    if (_canInput && delta != 0) _channel.send(encodeMouseWheel(delta, horizontal: horizontal, x: x, y: y));
+    if (!_canInput || delta == 0) return;
+    _sendPendingMove();
+    _channel.send(encodeMouseWheel(delta, horizontal: horizontal, x: x, y: y));
   }
 
   /// Просить процес відключитись сам; за 5 с — закриває примусово (SPEC → «Архітектура»).
@@ -245,6 +280,7 @@ class RdpSession extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _killTimer?.cancel();
+    _moveTimer?.cancel();
     _sub?.cancel();
     _frame?.close();
     image?.dispose();

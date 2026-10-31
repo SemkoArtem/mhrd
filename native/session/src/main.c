@@ -199,27 +199,49 @@ static BOOL mhrd_desktop_resize(rdpContext* ctx)
 	                     freerdp_settings_get_uint32(s, FreeRDP_DesktopHeight), TRUE);
 }
 
-/* Звук і мікрофон канали обслуговують самі; нам потрібен лише буфер обміну. */
+/* Буфер обміну — наш модуль; решту (GFX → малювання в GDI тощо) робить стандартний обробник. */
 static void mhrd_channel_connected(void* context, const ChannelConnectedEventArgs* e)
 {
 	MhrdContext* m = (MhrdContext*)context;
-	if (m->clipboard && strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
-		clipboard_attach(m->clipboard, (CliprdrClientContext*)e->pInterface);
+	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
+	{
+		if (m->clipboard)
+			clipboard_attach(m->clipboard, (CliprdrClientContext*)e->pInterface);
+	}
+	else
+		freerdp_client_OnChannelConnectedEventHandler(context, e);
 }
 
 static void mhrd_channel_disconnected(void* context, const ChannelDisconnectedEventArgs* e)
 {
 	MhrdContext* m = (MhrdContext*)context;
-	if (m->clipboard && strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
-		clipboard_detach(m->clipboard);
+	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
+	{
+		if (m->clipboard)
+			clipboard_detach(m->clipboard);
+	}
+	else
+		freerdp_client_OnChannelDisconnectedEventHandler(context, e);
 }
 
 static BOOL mhrd_pre_connect(freerdp* instance)
 {
 	rdpContext* ctx = instance->context;
 	rdpSettings* s = ctx->settings;
-	/* Картинка — класичними оновленнями, без GFX (GFX і кодеки — пізніше). */
-	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
+	/* Графічний конвеєр (GFX): RemoteFX progressive, planar, ClearCodec — у рази менше трафіку,
+	 * ніж класичні бітмапи. H.264 вимкнено: у цій збірці FreeRDP немає декодера (потрібен
+	 * Media Foundation або ffmpeg). */
+	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxH264, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxAVC444v2, FALSE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressive, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxProgressiveV2, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_GfxPlanar, TRUE);
+	freerdp_settings_set_bool(s, FreeRDP_RemoteFxCodec, TRUE);
+	/* Сервер сам міряє канал і на повільному вимикає шпалери, анімації тощо. */
+	freerdp_set_connection_type(s, CONNECTION_TYPE_AUTODETECT);
+	freerdp_settings_set_bool(s, FreeRDP_NetworkAutoDetect, TRUE);
 	freerdp_settings_set_uint32(s, FreeRDP_OsMajorType, OSMAJORTYPE_WINDOWS);
 	freerdp_settings_set_uint32(s, FreeRDP_OsMinorType, OSMINORTYPE_WINDOWS_NT);
 
@@ -229,10 +251,11 @@ static BOOL mhrd_pre_connect(freerdp* instance)
 	if (!m->clipboard)
 		freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
 
+	/* Самі канали (cliprdr, rdpsnd, audin, rdpgfx — за налаштуваннями) завантажує FreeRDP
+	 * після PreConnect через instance->LoadChannels; тут лише підписка на їхнє підключення. */
 	PubSub_SubscribeChannelConnected(ctx->pubSub, mhrd_channel_connected);
 	PubSub_SubscribeChannelDisconnected(ctx->pubSub, mhrd_channel_disconnected);
-	/* Канали за налаштуваннями: cliprdr (буфер), rdpsnd (звук), audin (мікрофон). */
-	return freerdp_client_load_addins(ctx->channels, s);
+	return TRUE;
 }
 
 static BOOL mhrd_post_connect(freerdp* instance)

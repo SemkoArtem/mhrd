@@ -83,7 +83,9 @@ docs/SPEC.md                   специфікація (джерело прав
       застосунку). Уже зроблено: `INTERNET` у основному маніфесті, системний бекап вимкнено;
       `minSdk` = 24 (вимога Flutter і flutter_secure_storage 11).
 - [ ] Linux: у README згадати залежність `libsecret-1-0` (сховище паролів).
-- [ ] Іконка застосунку (своя, без символіки Microsoft).
+- [x] Іконка застосунку — монітор у лаймовій касці (власника). Вихідні: `assets/branding/`
+      (SVG, ICO з 16–256 px, PNG 256). Встановлено: Windows `app_icon.ico`, Android `mipmap-*`.
+      Linux/macOS — згенерувати з `assets/branding/mhrd-icon.svg`, коли дійдемо.
 - [x] Автобекап у вибрану теку (`lib/backup/auto_backup.dart`). Налаштування — у meta `autoBackup`
       (лише для цього пристрою, не в бекапі), пароль — `SecretStore`. На Android запис у теку
       запрацює разом із задачею SAF (нижче).

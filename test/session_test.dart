@@ -116,6 +116,29 @@ void main() {
       expect(ch.sentTypes, [Msg.connect, Msg.key, Msg.mouseButton]);
     });
 
+    test('рух миші зливається: не частіше разу на кадр, остання позиція не губиться', () async {
+      ch.emit(Msg.evtState, [2]);
+      await settle();
+      for (var i = 0; i < 100; i++) {
+        s.sendMouseMove(i, i);
+      }
+      expect(ch.sentTypes.where((t) => t == Msg.mouseMove).length, 1); // лише перший — одразу
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      final moves = ch.sent.where((f) => f[4] == Msg.mouseMove).toList();
+      expect(moves.length, 2);
+      expect(moves.last, encodeMouseMove(99, 99));
+    });
+
+    test('перед кліком відкладений рух надсилається одразу', () async {
+      ch.emit(Msg.evtState, [2]);
+      await settle();
+      s.sendMouseMove(1, 1);
+      s.sendMouseMove(50, 60);
+      s.sendMouseButton(RemoteButton.left, true, 50, 60);
+      expect(ch.sentTypes.sublist(1), [Msg.mouseMove, Msg.mouseMove, Msg.mouseButton]);
+      expect(ch.sent[2], encodeMouseMove(50, 60));
+    });
+
     test('сертифікат: питання, відповідь у канал', () async {
       ch.emit(Msg.evtCertificate, utf8.encode(jsonEncode({'host': 'h', 'fingerprint': 'AB:CD', 'changed': true})));
       await settle();
