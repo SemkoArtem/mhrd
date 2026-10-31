@@ -342,114 +342,6 @@ class _RoutesTab extends StatelessWidget {
     );
   }
 
-  /// SSH-тунель. Секрет (пароль або текст приватного ключа) — лише в системному сховищі.
-  /// Під час редагування порожній пароль / невибраний ключ лишає збережений секрет.
-  Future<void> _editSsh(BuildContext context, [SshProfile? s]) async {
-    final l = context.l10n;
-    final name = TextEditingController(text: s?.name ?? '');
-    final addr = TextEditingController(text: s == null ? '' : (s.port == 22 ? s.host : '${s.host}:${s.port}'));
-    final user = TextEditingController(text: s?.username ?? '');
-    final pass = TextEditingController();
-    var kind = s?.authKind ?? SshAuthKind.privateKey;
-    String? keyText, keyName;
-    String? addrErr, userErr, keyErr;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: Text(s == null ? l.sshNew : l.sshTitle),
-          content: SizedBox(
-            width: 420,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                TextField(
-                  controller: addr,
-                  autofocus: s == null,
-                  decoration:
-                      InputDecoration(labelText: l.sshAddress, hintText: 'jump.example.com:22', errorText: addrErr),
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: name, decoration: InputDecoration(labelText: l.nameOptional)),
-                const SizedBox(height: 12),
-                TextField(controller: user, decoration: InputDecoration(labelText: l.credUser, errorText: userErr)),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<SshAuthKind>(
-                  initialValue: kind,
-                  decoration: InputDecoration(labelText: l.sshAuth),
-                  items: [
-                    DropdownMenuItem(value: SshAuthKind.privateKey, child: Text(l.sshAuthKey)),
-                    DropdownMenuItem(value: SshAuthKind.password, child: Text(l.sshAuthPassword)),
-                  ],
-                  onChanged: (v) => set(() => kind = v ?? SshAuthKind.privateKey),
-                ),
-                const SizedBox(height: 12),
-                if (kind == SshAuthKind.password)
-                  TextField(controller: pass, obscureText: true, decoration: InputDecoration(labelText: l.password))
-                else ...[
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.key_outlined),
-                    label: Text(l.sshPickKey),
-                    onPressed: () async {
-                      final f = await openBytes(sshKeyTypes(l));
-                      if (f == null) return;
-                      set(() {
-                        keyName = f.$1;
-                        keyText = utf8.decode(f.$2, allowMalformed: true);
-                        keyErr = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    keyErr ??
-                        (keyName != null
-                            ? l.sshKeyLoaded(keyName!)
-                            : (s?.authKind == SshAuthKind.privateKey ? l.sshKeyKept : '')),
-                    style: TextStyle(
-                        fontSize: 12, color: keyErr != null ? context.mhrd.error : context.mhrd.textMuted),
-                  ),
-                ],
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(l.cancel)),
-            FilledButton(
-              onPressed: () {
-                final needKey =
-                    kind == SshAuthKind.privateKey && keyText == null && s?.authKind != SshAuthKind.privateKey;
-                set(() {
-                  addrErr = parseAddress(addr.text, defaultPort: 22) == null ? l.invalidAddress : null;
-                  userErr = user.text.trim().isEmpty ? l.credUserRequired : null;
-                  keyErr = needKey ? l.sshKeyRequired : null;
-                });
-                if (addrErr == null && userErr == null && keyErr == null) Navigator.pop(c, true);
-              },
-              child: Text(l.save),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
-    final a = parseAddress(addr.text, defaultPort: 22)!;
-    // Інший сервер — довіра до ключа старого не переноситься.
-    final samePlace = s != null && s.host == a.host && s.port == a.port;
-    final secret = kind == SshAuthKind.password ? (pass.text.isEmpty ? null : pass.text) : keyText;
-    await repo.saveSsh(
-      SshProfile(
-        id: s?.id ?? newId(),
-        name: name.text.trim(),
-        host: a.host,
-        port: a.port,
-        username: user.text.trim(),
-        authKind: kind,
-        hostKeyPin: samePlace ? s.hostKeyPin : null,
-      ),
-      secret: secret,
-    );
-  }
-
   Future<void> _importWireGuard(BuildContext context) async {
     final l = context.l10n;
     final f = await openBytes(wgTypes(l));
@@ -519,7 +411,7 @@ class _RoutesTab extends StatelessWidget {
           onPressed: () => _importWireGuard(context),
         ),
       ]),
-      _caption(context, l.proxyAndSsh),
+      _caption(context, l.proxies),
       for (final p in repo.proxies.values)
         ListTile(
           leading: const Icon(Icons.swap_horiz),
@@ -532,23 +424,9 @@ class _RoutesTab extends StatelessWidget {
             onPressed: () => _guardedDelete(context, (force) => repo.deleteProxy(p.id, force: force)),
           ),
         ),
-      for (final s in repo.ssh.values)
-        ListTile(
-          leading: const Icon(Icons.terminal),
-          title: Text(s.name.trim().isEmpty ? 'SSH · ${s.host}' : s.name),
-          subtitle: Text('${s.username}@${s.host}${s.port == 22 ? '' : ':${s.port}'}', style: t.mono),
-          onTap: () => _editSsh(context, s),
-          trailing: IconButton(
-            tooltip: l.delete,
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _guardedDelete(context, (force) => repo.deleteSsh(s.id, force: force)),
-          ),
-        ),
       Wrap(spacing: 8, children: [
         TextButton.icon(icon: const Icon(Icons.add), label: Text(l.addProxy), onPressed: () => _editProxy(context)),
-        TextButton.icon(icon: const Icon(Icons.add), label: Text(l.addSsh), onPressed: () => _editSsh(context)),
       ]),
-      Text(l.sshHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
     ]);
   }
 }

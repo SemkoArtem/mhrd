@@ -44,24 +44,20 @@ class FakeTunnel implements TunnelChannel {
   final _events = StreamController<Map<String, Object?>>();
   final sent = <Map<String, Object?>>[];
   List<Map<String, Object?>> script = [];
-  var _next = 0;
   bool killed = false;
 
   @override
   Stream<Map<String, Object?>> get events => _events.stream;
 
-  void _play() {
-    while (_next < script.length) {
-      final e = script[_next++];
-      scheduleMicrotask(() => _events.add(e));
-      if (e['event'] == 'hostKey') return;
-    }
-  }
-
+  /// Відповідь тунелю ([script]) — на перший запит.
   @override
   void send(Map<String, Object?> message) {
     sent.add(message);
-    if (sent.length == 1 || message.containsKey('trustHostKey')) _play();
+    if (sent.length == 1) {
+      for (final e in script) {
+        scheduleMicrotask(() => _events.add(e));
+      }
+    }
   }
 
   @override
@@ -359,34 +355,15 @@ void main() {
         expect([json['host'], json['port']], ['127.0.0.1', 50123]);
       });
 
-      test('SSH: новий ключ сервера — питаємо; довірились — відбиток у профілі', () async {
-        await repo.saveSsh(const SshProfile(id: 'j', name: '', host: 'jump.lan', username: 'me',
-            authKind: SshAuthKind.password), secret: 'sp');
-        tun.script = [
-          {'event': 'hostKey', 'fingerprint': 'SHA256:abc'},
-          {'event': 'listening', 'port': 50200},
-        ];
-        String? asked;
-        await m.start(pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j'),
-            username: 'u', password: 'p', width: 800, height: 600, confirmSshHostKey: (fp) async {
-          asked = fp;
-          return true;
-        });
-        expect(asked, 'SHA256:abc');
-        expect(tun.sent, contains(equals({'trustHostKey': true})));
-        expect((tun.sent.first['ssh'] as Map)['password'], 'sp');
-        expect(repo.ssh['j']!.hostKeyPin, 'SHA256:abc');
-      });
-
       test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {
-        await repo.saveSsh(const SshProfile(id: 'j', name: '', host: 'jump.lan', username: 'me'), secret: 'KEY');
+        await repo.saveTunnel(const TunnelProfile(id: 'wg', name: 'WG', type: TunnelType.wireguard));
         tun.script = [
-          {'event': 'error', 'code': 'auth', 'detail': 'unable to authenticate'}
+          {'event': 'error', 'code': 'unreachable', 'detail': 'i/o timeout'}
         ];
         await expectLater(
-            m.start(pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j'),
+            m.start(pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg'),
                 username: 'u', password: 'p', width: 800, height: 600),
-            throwsA(isA<TunnelException>().having((e) => e.error, 'error', TunnelError.auth)));
+            throwsA(isA<TunnelException>().having((e) => e.error, 'error', TunnelError.unreachable)));
         expect(tun.killed, isTrue);
         expect(m.sessions, isEmpty);
         expect(ch.sent, isEmpty); // mhrd-session навіть не запускався
@@ -394,7 +371,7 @@ void main() {
 
       test('тунель разом із RD Gateway — відмова, бо шлюз пішов би в обхід тунелю', () async {
         repo.saveGateway(const Gateway(id: 'gw', name: '', host: 'rdgw.lan'));
-        final c = pc().copyWith(route: RouteKind.ssh, routeRefId: () => 'j', gatewayId: () => 'gw');
+        final c = pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg', gatewayId: () => 'gw');
         expect(() => m.routeConfig(c),
             throwsA(isA<RouteException>().having((e) => e.error, 'error', RouteError.gatewayWithTunnel)));
       });

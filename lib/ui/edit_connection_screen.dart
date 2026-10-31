@@ -156,7 +156,6 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final routeOptions = <RouteKind, List<(String, String)>>{
       RouteKind.tunnel: repo.tunnels.values.map((x) => (x.id, x.name)).toList(),
       RouteKind.proxy: repo.proxies.values.map((x) => (x.id, x.name)).toList(),
-      RouteKind.ssh: repo.ssh.values.map((x) => (x.id, x.name)).toList(),
     };
 
     return [
@@ -246,7 +245,6 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           DropdownMenuItem(value: RouteKind.direct, child: Text(l.routeDirect)),
           DropdownMenuItem(value: RouteKind.tunnel, child: Text(l.routeViaTunnel)),
           DropdownMenuItem(value: RouteKind.proxy, child: Text(l.routeViaProxy)),
-          DropdownMenuItem(value: RouteKind.ssh, child: Text(l.routeViaSsh)),
         ],
         onChanged: (v) => _set(_c.copyWith(route: v, routeRefId: () => null)),
       ),

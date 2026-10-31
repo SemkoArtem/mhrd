@@ -10,7 +10,11 @@ import 'package:sqlite3/sqlite3.dart';
 class MhrdDatabase {
   MhrdDatabase._(this._db);
 
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
+
+  /// Ключі в системному сховищі, які лишились без запису після міграції (JSON-список у `meta`).
+  /// Сховище асинхронне, тож видаляє їх [Repository] після відкриття бази.
+  static const orphanSecretsKey = 'orphanSecrets';
 
   final Database _db;
 
@@ -48,9 +52,31 @@ class MhrdDatabase {
       throw StateError(
           'База створена новішою версією MHRD (схема $current). Оновіть застосунок.');
     }
-    // Тут з'являтимуться кроки міграції: if (current < 2) {...}
-    setMeta('schemaVersion', '$schemaVersion');
+    transaction(() {
+      if (current < 2) _dropSsh();
+      setMeta('schemaVersion', '$schemaVersion');
+    });
   }
+
+  /// Схема 2: SSH-тунель прибрано (рішення власника, 2026-10-31). Профілі SSH видаляємо, їхні
+  /// секрети — у [orphanSecretsKey]; ПК з маршрутом SSH стають «тунель без профілю», щоб
+  /// підключення дало зрозумілу помилку, а не пішло напряму.
+  void _dropSsh() {
+    final orphans = <String>[
+      ...((jsonDecode(getMeta(orphanSecretsKey) ?? '[]') as List).whereType<String>()),
+      for (final r in _db.select("SELECT id FROM entities WHERE kind = 'ssh'")) 'mhrd.ssh.${r['id']}',
+    ];
+    for (final r in _db.select("SELECT id, json FROM entities WHERE kind = 'connection'")) {
+      final j = jsonDecode(r['json'] as String);
+      if (j is Map<String, dynamic> && j['route'] == 'ssh') {
+        put('connection', r['id'] as String, {...j, 'route': 'tunnel', 'routeRefId': null});
+      }
+    }
+    _db.execute("DELETE FROM entities WHERE kind = 'ssh'");
+    if (orphans.isNotEmpty) setMeta(orphanSecretsKey, jsonEncode(orphans));
+  }
+
+  void deleteMeta(String key) => _db.execute('DELETE FROM meta WHERE key = ?', [key]);
 
   String? getMeta(String key) {
     final r = _db.select('SELECT value FROM meta WHERE key = ?', [key]);

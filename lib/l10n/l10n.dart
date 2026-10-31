@@ -49,7 +49,6 @@ extension L10nMessages on AppLocalizations {
         RouteError.proxyMissing => routeErrProxyMissing,
         RouteError.gatewayMissing => routeErrGatewayMissing,
         RouteError.tunnelMissing => routeErrTunnelMissing,
-        RouteError.sshMissing => routeErrSshMissing,
         RouteError.tunnelUnsupported => routeErrTunnel,
         RouteError.tunnelEngineMissing => routeErrTunnelEngine,
         RouteError.gatewayWithTunnel => routeErrGatewayTunnel,
@@ -61,11 +60,6 @@ extension L10nMessages on AppLocalizations {
         TunnelError.start => tunnelErrStart,
         TunnelError.unreachable => tunnelErrUnreachable,
         TunnelError.connect => tunnelErrConnect,
-        TunnelError.auth => tunnelErrAuth,
-        TunnelError.keyPassphrase => tunnelErrKeyPassphrase,
-        TunnelError.badKey => tunnelErrBadKey,
-        TunnelError.hostKeyChanged => tunnelErrHostKeyChanged,
-        TunnelError.hostKeyRejected => tunnelErrHostKeyRejected,
         TunnelError.listen => tunnelErrListen,
         TunnelError.failed => tunnelErrFailed,
       };
@@ -75,7 +69,6 @@ extension L10nMessages on AppLocalizations {
         InUseKind.gateway => inUseGateway,
         InUseKind.tunnel => inUseTunnel,
         InUseKind.proxy => inUseProxy,
-        InUseKind.ssh => inUseSsh,
       };
 
   /// «ПК 1, ПК 2, шлюз gw.example.com».

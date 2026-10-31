@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mhrd/sessions/tunnel.dart';
 
 /// Справжній mhrd-tunnel.exe без серверів: протокол рядків JSON і коди помилок доходять до
-/// застосунку. Повний WireGuard/SSH перевіряє native/tunnels/tunnel_test.go (go test).
+/// застосунку. Повний WireGuard перевіряє native/tunnels/tunnel_test.go (go test).
 /// Пропускається, якщо модуль не зібрано (native/tunnels/build.ps1).
 const _exe = 'native/tunnels/out/mhrd-tunnel.exe';
 final Object _skip = Platform.isWindows && File(_exe).existsSync() ? false : 'mhrd-tunnel.exe не зібрано';
@@ -31,12 +31,13 @@ void main() {
     expect(e.error, TunnelError.config);
   }, skip: _skip);
 
-  test('SSH-сервер не відповідає → connect', () async {
+  test('сервер WireGuard не знаходиться за іменем → endpointDns', () async {
+    const key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
     final e = await _fail({
-      'type': 'ssh',
+      'type': 'wireguard',
       'target': '10.0.0.5:3389',
-      'ssh': {'host': '127.0.0.1', 'port': 1, 'username': 'u', 'password': 'p'},
+      'wireguard': {'privateKey': key, 'addresses': ['10.8.0.2/24'], 'peerPublicKey': key, 'endpoint': 'vpn.invalid:51820'},
     });
-    expect(e.error, TunnelError.connect);
+    expect(e.error, TunnelError.endpointDns);
   }, skip: _skip);
 }

@@ -1,14 +1,12 @@
-// mhrd-tunnel — вбудований тунель до одного ПК (SPEC → «Вбудовані тунелі», «Інші маршрути»).
+// mhrd-tunnel — вбудований тунель до одного ПК (SPEC → «Вбудовані тунелі»).
 //
 // Застосунок запускає процес і пише в stdin рядки JSON (секрети — лише сюди, ніколи в аргументи):
 //
-//	{"type":"wireguard"|"ssh","target":"host:port", "wireguard":{...} | "ssh":{...}}
-//	{"trustHostKey":true|false}   — відповідь на подію hostKey (SSH, ключ ще не довірений)
+//	{"type":"wireguard","target":"host:port","wireguard":{...}}
 //	{"watchPid":1234}             — процес mhrd-session; коли він завершиться, тунель теж
 //
 // У stdout — рядки JSON-подій:
 //
-//	{"event":"hostKey","fingerprint":"SHA256:..."}
 //	{"event":"listening","port":54321}   — можна підключатися до 127.0.0.1:port
 //	{"event":"error","code":"...","detail":"..."}
 //
@@ -32,8 +30,6 @@ type request struct {
 	Type      string          `json:"type"`
 	Target    string          `json:"target"`
 	WireGuard *wireGuardConf  `json:"wireguard"`
-	SSH       *sshConf        `json:"ssh"`
-	Trust     *bool           `json:"trustHostKey"`
 	WatchPid  int             `json:"watchPid"`
 }
 
@@ -72,17 +68,13 @@ func main() {
 		fail("config", err)
 	}
 
-	// Подальші повідомлення: відповідь про ключ SSH і PID сеансу.
-	trust := make(chan bool, 1)
+	// Подальші повідомлення: PID сеансу.
 	watch := make(chan int, 1)
 	go func() {
 		for in.Scan() {
 			var m request
 			if json.Unmarshal(in.Bytes(), &m) != nil {
 				continue
-			}
-			if m.Trust != nil {
-				trust <- *m.Trust
 			}
 			if m.WatchPid > 0 {
 				watch <- m.WatchPid
@@ -99,11 +91,6 @@ func main() {
 			fail("config", fmt.Errorf("no wireguard section"))
 		}
 		d, err = startWireGuard(req.WireGuard)
-	case "ssh":
-		if req.SSH == nil {
-			fail("config", fmt.Errorf("no ssh section"))
-		}
-		d, err = startSSH(req.SSH, trust)
 	default:
 		fail("config", fmt.Errorf("unknown type %q", req.Type))
 	}

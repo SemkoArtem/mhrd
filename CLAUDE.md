@@ -36,7 +36,7 @@ MHRD (MacroHard Remote Desktop, робоча назва) — безкоштов�
 ```
 lib/
   main.dart, app.dart          запуск, AppScope (repo + sessions), тема
-  models/                      Connection, Credential, Group, Gateway, TunnelProfile, ProxyProfile, SshProfile, AppSettings
+  models/                      Connection, Credential, Group, Gateway, TunnelProfile, ProxyProfile, AppSettings
   storage/                     MhrdDatabase (SQLite, JSON-сутності), SecretStore, Repository (ChangeNotifier)
   backup/backup_service.dart   .rdpbackup v2 (Argon2id + AES-256-GCM), читання v1, експорт без секретів
   theme/mhrd_theme.dart        токени тем, вбудовані теми, контраст, (де)серіалізація
@@ -90,12 +90,14 @@ docs/SPEC.md                   специфікація (джерело прав
   адреси через PathIsURLA (лише URL зі схемою) — проксі тихо не працював (і адреса проксі, і ціль
   SOCKS5/HTTP), а перенаправлення брокером RDS-ферми падало. При оновленні FreeRDP — перевірити,
   чи ще потрібна.
-- **Тунелі WireGuard і SSH** — окремий процес `native/tunnels` (Go: wireguard-go netstack,
-  x/crypto/ssh), `native/tunnels/build.ps1` → `out/mhrd-tunnel.exe`. Протокол — рядки JSON у
-  stdin/stdout (секрети лише там); відкриває `127.0.0.1:порт`, mhrd-session іде туди; живе, поки
-  живий процес сеансу (`watchPid`). Ключ SSH-сервера — як сертифікат RDP: новий — питаємо,
-  змінився — стоп. Маршрут, якого не вміємо, — помилка, ніколи не тихе підключення напряму.
+- **Тунель WireGuard** — окремий процес `native/tunnels` (Go: wireguard-go netstack),
+  `native/tunnels/build.ps1` → `out/mhrd-tunnel.exe`. Протокол — рядки JSON у stdin/stdout
+  (секрети лише там); відкриває `127.0.0.1:порт`, mhrd-session іде туди; живе, поки живий процес
+  сеансу (`watchPid`). Маршрут, якого не вміємо, — помилка, ніколи не тихе підключення напряму.
   Go — портативний у `C:\src\go`.
+- **SSH-тунель прибрано** (рішення власника, 2026-10-31): схема БД 2 видаляє SSH-профілі й їхні
+  секрети; ПК зі старим маршрутом `ssh` (база чи бекап) стають «тунель без профілю» — помилка
+  при підключенні, а не тихо напряму (`Connection.fromJson`).
 - **Адміністративний сеанс (/admin) — без мікрофона:** Windows не відкриває `AUDIO_INPUT`, хоч клієнт
   його пропонує. Перевірено на сервері власника (mstsc без /admin — мікрофон є).
 
@@ -127,7 +129,7 @@ docs/SPEC.md                   специфікація (джерело прав
 3. Екран сеансу: ~~вкладки~~ окремі вікна (зроблено), повний екран, зміна розміру, перепідключення.
 4. Вбудований WireGuard (wireguard-go netstack) + менеджер тунелів і переадресація портів.
 5. Android: збірка FreeRDP і Go-модулів через NDK, сенсорне керування, фонова служба.
-6. Проксі, SSH, RD Gateway. Уже зроблено раніше (на прохання власника):
+6. Проксі, RD Gateway. Уже зроблено раніше (на прохання власника):
    - буфер обміну (`native/session/src/clipboard_win.c`): текст, зображення, **файли в обидва боки**
      (звідси — FileGroupDescriptorW із CF_HDROP; із сервера — власний OLE `IDataObject` + `IStream`);
    - звук (rdpsnd), мікрофон (audin), спільні папки з режимами доступу (доповнений канал drive у

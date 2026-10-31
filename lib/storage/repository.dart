@@ -12,7 +12,7 @@ import 'secret_store.dart';
 const _uuid = Uuid();
 String newId() => _uuid.v4();
 
-enum InUseKind { credential, gateway, tunnel, proxy, ssh }
+enum InUseKind { credential, gateway, tunnel, proxy }
 
 /// Що саме посилається на об'єкт, який збираються видалити. Текст складає UI (переклади).
 class InUse implements Exception {
@@ -36,6 +36,19 @@ class GroupCycleError extends StateError {
 class Repository extends ChangeNotifier {
   Repository(this.db, this.secrets) {
     _load();
+    orphansCleaned = _deleteOrphanSecrets();
+  }
+
+  /// Завершується, коли видалено секрети, що лишились після міграції бази (див. [MhrdDatabase]).
+  late final Future<void> orphansCleaned;
+
+  Future<void> _deleteOrphanSecrets() async {
+    final raw = db.getMeta(MhrdDatabase.orphanSecretsKey);
+    if (raw == null) return;
+    for (final key in (jsonDecode(raw) as List).whereType<String>()) {
+      await secrets.delete(key);
+    }
+    db.deleteMeta(MhrdDatabase.orphanSecretsKey);
   }
 
   final MhrdDatabase db;
@@ -47,7 +60,6 @@ class Repository extends ChangeNotifier {
   static const kGateway = 'gateway';
   static const kTunnel = 'tunnel';
   static const kProxy = 'proxy';
-  static const kSsh = 'ssh';
   static const kTheme = 'theme';
 
   final Map<String, Connection> connections = {};
@@ -56,7 +68,6 @@ class Repository extends ChangeNotifier {
   final Map<String, Gateway> gateways = {};
   final Map<String, TunnelProfile> tunnels = {};
   final Map<String, ProxyProfile> proxies = {};
-  final Map<String, SshProfile> ssh = {};
   final Map<String, MhrdTokens> customThemes = {};
   AppSettings settings = const AppSettings();
 
@@ -84,10 +95,6 @@ class Repository extends ChangeNotifier {
     for (final j in db.all(kProxy)) {
       final p = ProxyProfile.fromJson(j);
       proxies[p.id] = p;
-    }
-    for (final j in db.all(kSsh)) {
-      final s = SshProfile.fromJson(j);
-      ssh[s.id] = s;
     }
     for (final j in db.all(kTheme)) {
       try {
@@ -299,21 +306,6 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveSsh(SshProfile s, {String? secret}) async {
-    await _writeSecret(s.secretKey, secret);
-    db.put(kSsh, s.id, s.toJson());
-    ssh[s.id] = s;
-    notifyListeners();
-  }
-
-  Future<void> deleteSsh(String id, {bool force = false}) async {
-    final s = ssh[id];
-    _deleteRoute(InUseKind.ssh, RouteKind.ssh, kSsh, id, force);
-    ssh.remove(id);
-    if (s != null) await secrets.delete(s.secretKey);
-    notifyListeners();
-  }
-
   /// null = не змінювати, порожній рядок = видалити, інакше записати.
   Future<void> _writeSecret(String key, String? value) async {
     if (value == null) return;
@@ -324,7 +316,7 @@ class Repository extends ChangeNotifier {
     }
   }
 
-  /// Спільне для тунелів, проксі й SSH: якщо профіль використовують ПК і [force] = false,
+  /// Спільне для тунелів і проксі: якщо профіль використовують ПК і [force] = false,
   /// кидає [InUse]; інакше переводить ці ПК на «Напряму» і видаляє запис — атомарно.
   void _deleteRoute(InUseKind what, RouteKind kind, String dbKind, String id, bool force) {
     final users = connections.values.where((c) => c.route == kind && c.routeRefId == id).toList();

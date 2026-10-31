@@ -1,7 +1,7 @@
 import 'json_util.dart';
 
 /// Як дістатися до ПК. Див. SPEC.md → «Вбудовані тунелі», «Інші маршрути».
-enum RouteKind { direct, tunnel, proxy, ssh }
+enum RouteKind { direct, tunnel, proxy }
 
 /// Поведінка при зміні розміру вікна сеансу.
 enum ResizeMode { changeResolution, scale, none }
@@ -213,7 +213,7 @@ class Connection {
   final List<String> credentialIds;
   final RouteKind route;
 
-  /// id профілю тунелю, проксі або SSH — залежно від [route].
+  /// id профілю тунелю або проксі — залежно від [route].
   final String? routeRefId;
   final String? gatewayId;
   final bool gatewayBypassLocal;
@@ -311,6 +311,9 @@ class Connection {
 
   factory Connection.fromJson(Map<String, dynamic> j) {
     final now = DateTime.now();
+    // SSH-тунель прибрано (рішення власника, 2026-10-31). Такий ПК (старий бекап чи база)
+    // отримує «тунель без профілю»: підключення дасть зрозумілу помилку, а не піде напряму.
+    final legacySsh = j['route'] == 'ssh';
     return Connection(
       id: strOr(j['id'], ''),
       name: strOr(j['name'], ''),
@@ -319,8 +322,8 @@ class Connection {
       groupId: strOrNull(j['groupId']),
       tags: stringList(j['tags']),
       credentialIds: stringList(j['credentialIds']),
-      route: enumByName(RouteKind.values, j['route'], RouteKind.direct),
-      routeRefId: strOrNull(j['routeRefId']),
+      route: legacySsh ? RouteKind.tunnel : enumByName(RouteKind.values, j['route'], RouteKind.direct),
+      routeRefId: legacySsh ? null : strOrNull(j['routeRefId']),
       gatewayId: strOrNull(j['gatewayId']),
       gatewayBypassLocal: boolOr(j['gatewayBypassLocal'], false),
       adminSession: boolOr(j['adminSession'], false),

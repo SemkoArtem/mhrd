@@ -65,9 +65,6 @@ class BackupService {
       'proxies': [
         for (final p in repo.proxies.values) {...p.toJson(), 'password': await sec(p.secretKey)},
       ],
-      'ssh': [
-        for (final s in repo.ssh.values) {...s.toJson(), 'secret': await sec(s.secretKey)},
-      ],
       'themes': repo.customThemes.values.map((t) => t.toJson()).toList(),
       'settings': repo.settings.toJson(),
     };
@@ -301,9 +298,6 @@ class BackupService {
       for (final id in repo.proxies.keys.toList()) {
         await repo.deleteProxy(id, force: true);
       }
-      for (final id in repo.ssh.keys.toList()) {
-        await repo.deleteSsh(id, force: true);
-      }
       for (final id in repo.customThemes.keys.toList()) {
         repo.deleteTheme(id);
       }
@@ -344,10 +338,8 @@ class BackupService {
       final pw = j['password'];
       await repo.saveProxy(ProxyProfile.fromJson(j), password: pw is String ? pw : null);
     }
-    for (final j in list('ssh')) {
-      final sec = j['secret'];
-      await repo.saveSsh(SshProfile.fromJson(j), secret: sec is String ? sec : null);
-    }
+    // Розділ 'ssh' старих бекапів пропускаємо: SSH-тунель прибрано, а ПК з ним
+    // Connection.fromJson перетворює на «тунель без профілю».
     for (final j in list('themes')) {
       try {
         repo.saveTheme(MhrdTokens.fromJson(j));

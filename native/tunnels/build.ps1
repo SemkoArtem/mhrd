@@ -1,4 +1,4 @@
-# Збирає mhrd-tunnel.exe (Windows x64) — вбудовані тунелі WireGuard (netstack) і SSH.
+# Збирає mhrd-tunnel.exe (Windows x64) — вбудований тунель WireGuard (netstack).
 #   powershell -ExecutionPolicy Bypass -File native\tunnels\build.ps1
 # Потрібен Go (go.dev; портативний — у C:\src\go). Результат: native\tunnels\out\mhrd-tunnel.exe —
 # його забирає windows\CMakeLists.txt.

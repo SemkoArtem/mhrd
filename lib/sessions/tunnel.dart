@@ -50,11 +50,6 @@ enum TunnelError {
   start,
   unreachable,
   connect,
-  auth,
-  keyPassphrase,
-  badKey,
-  hostKeyChanged,
-  hostKeyRejected,
   listen,
   failed,
 }
@@ -70,22 +65,13 @@ class TunnelException implements Exception {
   String toString() => 'TunnelException(${error.name}: $detail)';
 }
 
-/// Надсилає [request] і чекає, доки тунель відкриє локальний порт. Невідомий ключ SSH-сервера —
-/// питає [confirmHostKey] (немає — не довіряємо). Повертає порт на 127.0.0.1.
-Future<int> openTunnel(
-  TunnelChannel channel,
-  Map<String, Object?> request, {
-  Future<bool> Function(String fingerprint)? confirmHostKey,
-}) {
+/// Надсилає [request] і чекає, доки тунель відкриє локальний порт. Повертає порт на 127.0.0.1.
+Future<int> openTunnel(TunnelChannel channel, Map<String, Object?> request) {
   final done = Completer<int>();
   late final StreamSubscription<Map<String, Object?>> sub;
   sub = channel.events.listen(
-    (e) async {
+    (e) {
       switch (e['event']) {
-        case 'hostKey':
-          final fp = e['fingerprint'] is String ? e['fingerprint'] as String : '';
-          final ok = confirmHostKey != null && await confirmHostKey(fp);
-          channel.send({'trustHostKey': ok});
         case 'listening':
           final port = e['port'];
           if (port is int && !done.isCompleted) done.complete(port);

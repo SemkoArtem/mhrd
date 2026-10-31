@@ -15,8 +15,6 @@ List<XTypeGroup> shareTypes(AppLocalizations l) => [XTypeGroup(label: l.fileType
 List<XTypeGroup> rdpTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeRdp, extensions: const ['rdp'])];
 List<XTypeGroup> wgTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeWireGuard, extensions: const ['conf'])];
 
-/// Ключ SSH — будь-який файл (id_ed25519, *.pem, *.key…).
-List<XTypeGroup> sshKeyTypes(AppLocalizations l) => [XTypeGroup(label: l.sshAuthKey)];
 List<XTypeGroup> themeTypes(AppLocalizations l) =>
     [XTypeGroup(label: l.fileTypeTheme, extensions: const ['mhrd-theme', 'json'])];
 

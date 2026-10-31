@@ -150,9 +150,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get routeProxyMissing => 'Проксі (не знайдено)';
 
   @override
-  String get routeSshMissing => 'SSH (не знайдено)';
-
-  @override
   String routeGateway(String name) {
     return 'RD Gateway · $name';
   }
@@ -508,9 +505,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get routeViaProxy => 'Через проксі';
 
   @override
-  String get routeViaSsh => 'Через SSH-тунель';
-
-  @override
   String get noRouteProfiles =>
       'Ще немає жодного профілю. Додайте його в Налаштування → Маршрути.';
 
@@ -693,9 +687,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get inUseProxy => 'Проксі';
 
   @override
-  String get inUseSsh => 'SSH-профіль';
-
-  @override
   String gatewayUser(String name) {
     return 'шлюз $name';
   }
@@ -779,7 +770,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get importWireGuard => 'Імпортувати WireGuard .conf';
 
   @override
-  String get proxyAndSsh => 'Проксі й SSH';
+  String get proxies => 'Проксі';
 
   @override
   String get comingInStage6 => 'З\'являться на етапі 6.';
@@ -801,16 +792,12 @@ class AppLocalizationsUk extends AppLocalizations {
       'Тунель цього ПК видалено. Виберіть маршрут у налаштуваннях ПК.';
 
   @override
-  String get routeErrSshMissing =>
-      'SSH-профіль цього ПК видалено. Виберіть маршрут у налаштуваннях ПК.';
-
-  @override
   String get routeErrTunnelEngine =>
       'Не знайдено модуль тунелів (mhrd-tunnel) поруч із програмою. Перевстановіть MHRD.';
 
   @override
   String get routeErrGatewayTunnel =>
-      'RD Gateway разом із тунелем чи SSH поки не підтримується — приберіть шлюз або тунель у налаштуваннях ПК.';
+      'RD Gateway разом із тунелем поки не підтримується — приберіть шлюз або тунель у налаштуваннях ПК.';
 
   @override
   String get tunnelErrConfig =>
@@ -828,25 +815,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Тунель піднявся, але ПК не відповідає. Перевірте, чи працює сервер тунелю і чи ПК у його мережі.';
 
   @override
-  String get tunnelErrConnect => 'Не вдалося підключитися до SSH-сервера.';
-
-  @override
-  String get tunnelErrAuth => 'SSH-сервер не прийняв логін, пароль чи ключ.';
-
-  @override
-  String get tunnelErrKeyPassphrase =>
-      'Ключ SSH захищено паролем — такі ключі поки не підтримуються.';
-
-  @override
-  String get tunnelErrBadKey => 'Файл ключа SSH не розпізнано.';
-
-  @override
-  String get tunnelErrHostKeyChanged =>
-      'Ключ SSH-сервера змінився! Можлива підміна. Якщо його змінили навмисно — створіть SSH-профіль заново.';
-
-  @override
-  String get tunnelErrHostKeyRejected =>
-      'Ключу SSH-сервера не довірено — підключення скасовано.';
+  String get tunnelErrConnect => 'Не вдалося підключитися до сервера тунелю.';
 
   @override
   String get tunnelErrListen =>
@@ -854,49 +823,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tunnelErrFailed => 'Тунель несподівано завершився.';
-
-  @override
-  String get addSsh => 'Додати SSH';
-
-  @override
-  String get sshNew => 'Новий SSH-тунель';
-
-  @override
-  String get sshTitle => 'SSH-тунель';
-
-  @override
-  String get sshAddress => 'SSH-сервер';
-
-  @override
-  String get sshAuth => 'Вхід';
-
-  @override
-  String get sshAuthPassword => 'Пароль';
-
-  @override
-  String get sshAuthKey => 'Приватний ключ';
-
-  @override
-  String get sshPickKey => 'Вибрати файл ключа…';
-
-  @override
-  String sshKeyLoaded(String name) {
-    return 'Ключ вибрано: $name';
-  }
-
-  @override
-  String get sshKeyKept => 'Ключ збережено. Виберіть інший файл, щоб замінити.';
-
-  @override
-  String get sshKeyRequired => 'Виберіть файл приватного ключа';
-
-  @override
-  String get sshHostKeyTitle => 'Новий SSH-сервер';
-
-  @override
-  String sshHostKeyBody(String host) {
-    return 'Перше підключення до $host. Переконайтеся, що відбиток ключа збігається з ключем сервера.';
-  }
 
   @override
   String get addProxy => 'Додати проксі';
@@ -915,10 +841,6 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get proxyLoginHint => 'Логін і пароль — лише якщо проксі їх вимагає';
-
-  @override
-  String get sshHint =>
-      'Як ssh -L: RDP іде всередині SSH-з\'єднання до сервера, з якого видно ПК.';
 
   @override
   String get groupNew => 'Нова група';

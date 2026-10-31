@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -79,26 +80,61 @@ void main() {
     expect(await dst.secrets.read('mhrd.tunnel.t.privateKey'), 'KEY');
   }, skip: _skip);
 
-  test('видалення проксі й SSH, якими користуються ПК', () async {
+  test('видалення проксі, яким користуються ПК', () async {
     final r = _repo();
     await r.saveProxy(const ProxyProfile(id: 'p', name: 'Офіс', host: 'proxy.lan', port: 1080), password: 'pp');
-    await r.saveSsh(const SshProfile(id: 's', name: 'Роутер', host: 'gw.lan', username: 'root'), secret: 'KEY');
     r.saveConnection(_pc('1').copyWith(route: RouteKind.proxy, routeRefId: () => 'p'));
-    r.saveConnection(_pc('2').copyWith(route: RouteKind.ssh, routeRefId: () => 's'));
 
     await expectLater(r.deleteProxy('p'), throwsA(isA<InUse>()));
     await r.deleteProxy('p', force: true);
-    await r.deleteSsh('s', force: true);
 
     expect(r.proxies, isEmpty);
-    expect(r.ssh, isEmpty);
     expect(r.connections['1']!.route, RouteKind.direct);
-    expect(r.connections['2']!.routeRefId, isNull);
     expect(await r.secrets.read('mhrd.proxy.p'), isNull);
+  }, skip: _skip);
+
+  test('схема 2: SSH прибрано — профілі й секрети видалено, ПК не йде тихо напряму', () async {
+    // База, як її лишила версія зі SSH (схема 1); повторне відкриття проганяє міграцію.
+    final dir = Directory.systemTemp.createTempSync('mhrd-db-');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final old = MhrdDatabase.open(dir)..setMeta('schemaVersion', '1');
+    old.put('ssh', 's', {'id': 's', 'name': 'Роутер', 'host': 'gw.lan', 'username': 'root'});
+    old.put('connection', '1', {..._pc('1').toJson(), 'route': 'ssh', 'routeRefId': 's'});
+    old.close();
+    final secrets = MemorySecretStore();
+    await secrets.write('mhrd.ssh.s', 'KEY');
+
+    final db = MhrdDatabase.open(dir);
+    addTearDown(db.close);
+    final r = Repository(db, secrets);
+    await r.orphansCleaned;
+    expect(db.all('ssh'), isEmpty);
+    expect(db.getMeta('schemaVersion'), '2');
+    expect(db.getMeta(MhrdDatabase.orphanSecretsKey), isNull);
+    expect(await secrets.read('mhrd.ssh.s'), isNull);
+    expect(r.connections['1']!.route, RouteKind.tunnel);
+    expect(r.connections['1']!.routeRefId, isNull);
+  }, skip: _skip);
+
+  test('старий бекап із SSH: розділ пропускається, ПК отримує «тунель без профілю»', () async {
+    final data = {
+      'schemaVersion': 1,
+      'kind': 'mhrd-backup',
+      'connections': [
+        {..._pc('1').toJson(), 'route': 'ssh', 'routeRefId': 's'},
+      ],
+      'ssh': [
+        {'id': 's', 'name': 'Роутер', 'host': 'gw.lan', 'username': 'root', 'secret': 'KEY'},
+      ],
+    };
+    final r = _repo();
+    await BackupService(r, memKiB: 64, iterations: 1).apply(data, replaceAll: false);
+    expect(r.connections['1']!.route, RouteKind.tunnel);
+    expect(r.connections['1']!.routeRefId, isNull);
     expect(await r.secrets.read('mhrd.ssh.s'), isNull);
   }, skip: _skip);
 
-  test('«Замінити все» прибирає й проксі, SSH і власні теми', () async {
+  test('«Замінити все» прибирає й проксі та власні теми', () async {
     final src = _repo();
     await src.saveProxy(const ProxyProfile(id: 'p-new', name: 'Новий', host: 'p.lan', port: 3128), password: 'np');
     final svc = BackupService(src, memKiB: 64, iterations: 1);
@@ -106,13 +142,11 @@ void main() {
 
     final dst = _repo();
     await dst.saveProxy(const ProxyProfile(id: 'p-old', name: 'Старий', host: 'old.lan', port: 1080), password: 'op');
-    await dst.saveSsh(const SshProfile(id: 's-old', name: 'Старий SSH', host: 'gw.lan', username: 'root'), secret: 'K');
     dst.saveTheme(MhrdTokens.light.copyWith(id: 'custom:old', name: 'Стара тема'));
 
     await BackupService(dst, memKiB: 64, iterations: 1).apply(data, replaceAll: true);
 
     expect(dst.proxies.keys, ['p-new']);
-    expect(dst.ssh, isEmpty);
     expect(dst.customThemes, isEmpty);
     expect(await dst.secrets.read('mhrd.proxy.p-old'), isNull);
     expect(await dst.secrets.read('mhrd.proxy.p-new'), 'np');

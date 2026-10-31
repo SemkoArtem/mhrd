@@ -21,7 +21,7 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # Тунелі: справжній WireGuard і SSH на loopback (native/tunnels/tunnel_test.go)
+      # Тунелі: справжній WireGuard на loopback (native/tunnels/tunnel_test.go)
       - uses: actions/setup-go@v5
         with:
           go-version-file: native/tunnels/go.mod
@@ -96,7 +96,7 @@ jobs:
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           $env:VCPKG_ROOT = "$env:RUNNER_TEMP\vcpkg"
           ./native/session/build.ps1 -Config Release
-      # Модуль тунелів mhrd-tunnel (Go: WireGuard netstack, SSH)
+      # Модуль тунелів mhrd-tunnel (Go: WireGuard netstack)
       - if: matrix.platform == 'windows'
         uses: actions/setup-go@v5
         with:

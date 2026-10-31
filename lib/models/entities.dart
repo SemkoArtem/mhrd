@@ -193,50 +193,6 @@ class ProxyProfile {
       );
 }
 
-enum SshAuthKind { password, privateKey }
-
-class SshProfile {
-  const SshProfile({
-    required this.id,
-    required this.name,
-    required this.host,
-    this.port = 22,
-    required this.username,
-    this.authKind = SshAuthKind.privateKey,
-    this.hostKeyPin,
-  });
-
-  final String id;
-  final String name;
-  final String host;
-  final int port;
-  final String username;
-  final SshAuthKind authKind;
-  final String? hostKeyPin;
-
-  String get secretKey => 'mhrd.ssh.$id';
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'host': host,
-        'port': port,
-        'username': username,
-        'authKind': authKind.name,
-        'hostKeyPin': hostKeyPin,
-      };
-
-  factory SshProfile.fromJson(Map<String, dynamic> j) => SshProfile(
-        id: strOr(j['id'], ''),
-        name: strOr(j['name'], ''),
-        host: strOr(j['host'], ''),
-        port: intOr(j['port'], 22),
-        username: strOr(j['username'], ''),
-        authKind: enumByName(SshAuthKind.values, j['authKind'], SshAuthKind.privateKey),
-        hostKeyPin: strOrNull(j['hostKeyPin']),
-      );
-}
-
 enum PcListView { tiles, list }
 
 /// Куди йдуть Win, Alt+Tab тощо.

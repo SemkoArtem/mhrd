@@ -150,9 +150,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routeProxyMissing => 'Proxy (not found)';
 
   @override
-  String get routeSshMissing => 'SSH (not found)';
-
-  @override
   String routeGateway(String name) {
     return 'RD Gateway · $name';
   }
@@ -508,9 +505,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routeViaProxy => 'Through a proxy';
 
   @override
-  String get routeViaSsh => 'Through an SSH tunnel';
-
-  @override
   String get noRouteProfiles =>
       'No profiles yet. Add one in Settings → Routes.';
 
@@ -691,9 +685,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get inUseProxy => 'Proxy';
 
   @override
-  String get inUseSsh => 'SSH profile';
-
-  @override
   String gatewayUser(String name) {
     return 'gateway $name';
   }
@@ -779,7 +770,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importWireGuard => 'Import WireGuard .conf';
 
   @override
-  String get proxyAndSsh => 'Proxy and SSH';
+  String get proxies => 'Proxy';
 
   @override
   String get comingInStage6 => 'Coming in stage 6.';
@@ -801,16 +792,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'This PC\'s tunnel was deleted. Pick a route in the PC settings.';
 
   @override
-  String get routeErrSshMissing =>
-      'This PC\'s SSH profile was deleted. Pick a route in the PC settings.';
-
-  @override
   String get routeErrTunnelEngine =>
       'The tunnel module (mhrd-tunnel) wasn\'t found next to the app. Reinstall MHRD.';
 
   @override
   String get routeErrGatewayTunnel =>
-      'RD Gateway together with a tunnel or SSH isn\'t supported yet — remove the gateway or the tunnel in the PC settings.';
+      'RD Gateway together with a tunnel isn\'t supported yet — remove the gateway or the tunnel in the PC settings.';
 
   @override
   String get tunnelErrConfig =>
@@ -828,75 +815,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'The tunnel is up, but the PC doesn\'t respond. Check that the tunnel server works and the PC is in its network.';
 
   @override
-  String get tunnelErrConnect => 'Couldn\'t connect to the SSH server.';
-
-  @override
-  String get tunnelErrAuth =>
-      'The SSH server rejected the login, password or key.';
-
-  @override
-  String get tunnelErrKeyPassphrase =>
-      'The SSH key is protected with a passphrase — such keys aren\'t supported yet.';
-
-  @override
-  String get tunnelErrBadKey => 'The SSH key file wasn\'t recognized.';
-
-  @override
-  String get tunnelErrHostKeyChanged =>
-      'The SSH server key has changed! This may be an attack. If it was changed on purpose, create the SSH profile again.';
-
-  @override
-  String get tunnelErrHostKeyRejected =>
-      'The SSH server key wasn\'t trusted — connection cancelled.';
+  String get tunnelErrConnect => 'Couldn\'t connect to the tunnel server.';
 
   @override
   String get tunnelErrListen => 'Couldn\'t open a local port for the tunnel.';
 
   @override
   String get tunnelErrFailed => 'The tunnel stopped unexpectedly.';
-
-  @override
-  String get addSsh => 'Add SSH';
-
-  @override
-  String get sshNew => 'New SSH tunnel';
-
-  @override
-  String get sshTitle => 'SSH tunnel';
-
-  @override
-  String get sshAddress => 'SSH server';
-
-  @override
-  String get sshAuth => 'Sign-in';
-
-  @override
-  String get sshAuthPassword => 'Password';
-
-  @override
-  String get sshAuthKey => 'Private key';
-
-  @override
-  String get sshPickKey => 'Choose key file…';
-
-  @override
-  String sshKeyLoaded(String name) {
-    return 'Key selected: $name';
-  }
-
-  @override
-  String get sshKeyKept => 'Key saved. Choose another file to replace it.';
-
-  @override
-  String get sshKeyRequired => 'Choose a private key file';
-
-  @override
-  String get sshHostKeyTitle => 'New SSH server';
-
-  @override
-  String sshHostKeyBody(String host) {
-    return 'First connection to $host. Make sure the key fingerprint matches the server\'s key.';
-  }
 
   @override
   String get addProxy => 'Add proxy';
@@ -916,10 +841,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get proxyLoginHint =>
       'Login and password — only if the proxy requires them';
-
-  @override
-  String get sshHint =>
-      'Like ssh -L: RDP goes inside an SSH connection to a server that can reach the PC.';
 
   @override
   String get groupNew => 'New group';

@@ -32,7 +32,6 @@ String routeLabel(AppLocalizations l, Repository repo, Connection c) {
     RouteKind.direct => l.routeDirect,
     RouteKind.tunnel => repo.tunnels[c.routeRefId]?.name ?? l.routeTunnelMissing,
     RouteKind.proxy => repo.proxies[c.routeRefId]?.name ?? l.routeProxyMissing,
-    RouteKind.ssh => repo.ssh[c.routeRefId]?.name ?? l.routeSshMissing,
   };
   final gw = repo.gateways[c.gatewayId];
   return gw == null ? base : (c.route == RouteKind.direct ? l.routeGateway(gw.label) : l.routeWithGateway(base));

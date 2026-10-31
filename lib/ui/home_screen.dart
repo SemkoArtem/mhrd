@@ -130,37 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Перше підключення до SSH-сервера: показуємо відбиток ключа і питаємо, чи довіряти.
-  Future<bool> _confirmSshHostKey(Connection c, String fingerprint) async {
-    await _bringToFront();
-    if (!mounted) return false;
-    final l = context.l10n;
-    final t = context.mhrd;
-    final host = repo.ssh[c.routeRefId]?.host ?? '';
-    final ok = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dc) => AlertDialog(
-        icon: Icon(Icons.key_outlined, color: t.accent),
-        title: Text(l.sshHostKeyTitle),
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(l.sshHostKeyBody(host)),
-            const SizedBox(height: 10),
-            Text(l.certFingerprint, style: TextStyle(color: t.textMuted, fontSize: 12)),
-            SelectableText(fingerprint, style: t.mono.copyWith(color: t.text)),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.certReject)),
-          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(l.certAccept)),
-        ],
-      ),
-    );
-    return ok == true;
-  }
-
   /// Мобільні: сеанс на екрані всередині застосунку.
   Future<void> _startInApp(Connection c, String user, String password,
       {String? credentialId, String? gatewayPassword}) async {
@@ -176,8 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         width: even(size.width * dpr, 640, 8192),
         height: even((size.height - 40) * dpr, 480, 8192),
         scale: (dpr * 100).round(),
-        gatewayPassword: gatewayPassword,
-        confirmSshHostKey: (fp) => _confirmSshHostKey(c, fp));
+        gatewayPassword: gatewayPassword);
     if (mounted) _openSession(s, c, credentialId: credentialId);
   }
 
@@ -202,7 +170,6 @@ class _HomeScreenState extends State<HomeScreen> {
       height: c.display.height ?? even(display.size.height * k, 480, 8192),
       scale: (display.devicePixelRatio * 100).round(),
       gatewayPassword: gatewayPassword,
-      confirmSshHostKey: (fp) => _confirmSshHostKey(c, fp),
       window: {
         'title': '${c.displayName} — MHRD',
         // Шрифт плашки — той самий, що в застосунку (лежить поруч у flutter_assets).

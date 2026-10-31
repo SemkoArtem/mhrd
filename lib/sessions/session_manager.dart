@@ -30,12 +30,11 @@ enum RouteError {
   proxyMissing,
   gatewayMissing,
   tunnelMissing,
-  sshMissing,
   /// Тип тунелю, якого ще не вміємо (поки є лише WireGuard).
   tunnelUnsupported,
   /// Немає mhrd-tunnel поруч із програмою.
   tunnelEngineMissing,
-  /// RD Gateway разом із тунелем чи SSH: шлюз пішов би в обхід тунелю.
+  /// RD Gateway разом із тунелем: шлюз пішов би в обхід тунелю.
   gatewayWithTunnel,
 }
 
@@ -62,7 +61,7 @@ class SessionManager extends ChangeNotifier {
 
   final Repository repo;
 
-  /// Шлях до `mhrd-tunnel` (WireGuard, SSH); null — модуля тунелів немає.
+  /// Шлях до `mhrd-tunnel` (WireGuard); null — модуля тунелів немає.
   final String? tunnelPath;
   final TunnelFactory _tunnelFactory;
 
@@ -118,13 +117,12 @@ class SessionManager extends ChangeNotifier {
           'password': p.username.isEmpty ? '' : (await repo.secrets.read(p.secretKey) ?? ''),
         };
       case RouteKind.tunnel:
-      case RouteKind.ssh:
         break; // тунель відкриває mhrd-tunnel — див. [tunnelRequest]
     }
     if (c.gatewayId != null) {
       final g = repo.gateways[c.gatewayId];
       if (g == null) throw const RouteException(RouteError.gatewayMissing);
-      if (c.route == RouteKind.tunnel || c.route == RouteKind.ssh) {
+      if (c.route == RouteKind.tunnel) {
         throw const RouteException(RouteError.gatewayWithTunnel);
       }
       final own = g.credentialMode == GatewayCredentialMode.own ? repo.credentials[g.credentialId] : null;
@@ -156,43 +154,10 @@ class SessionManager extends ChangeNotifier {
           wg[f] = await repo.secrets.read(t.secretKey(f)) ?? '';
         }
         return {'type': 'wireguard', 'target': target, 'wireguard': wg};
-      case RouteKind.ssh:
-        final s = repo.ssh[c.routeRefId];
-        if (s == null) throw const RouteException(RouteError.sshMissing);
-        final secret = await repo.secrets.read(s.secretKey) ?? '';
-        return {
-          'type': 'ssh',
-          'target': target,
-          'ssh': {
-            'host': s.host,
-            'port': s.port,
-            'username': s.username,
-            if (s.authKind == SshAuthKind.password) 'password': secret else 'privateKey': secret,
-            'hostKeyPin': s.hostKeyPin ?? '',
-          },
-        };
       case RouteKind.direct:
       case RouteKind.proxy:
         return null;
     }
-  }
-
-  /// Новий ключ SSH-сервера: питаємо користувача; довірився — запам'ятовуємо відбиток у профілі.
-  Future<bool> _confirmSshKey(Connection c, String fingerprint, Future<bool> Function(String)? ask) async {
-    final ok = ask != null && await ask(fingerprint);
-    final s = repo.ssh[c.routeRefId];
-    if (ok && s != null) {
-      await repo.saveSsh(SshProfile(
-        id: s.id,
-        name: s.name,
-        host: s.host,
-        port: s.port,
-        username: s.username,
-        authKind: s.authKind,
-        hostKeyPin: fingerprint,
-      ));
-    }
-    return ok;
   }
 
   /// Акаунт шлюзу, для якого треба спитати пароль (свій акаунт без збереженого пароля), або null.
@@ -215,7 +180,6 @@ class SessionManager extends ChangeNotifier {
     int scale = 100,
     Map<String, Object?>? window,
     String? gatewayPassword,
-    Future<bool> Function(String fingerprint)? confirmSshHostKey,
   }) async {
     final exe = enginePath;
     if (exe == null) throw StateError('mhrd-session not found');
@@ -230,8 +194,7 @@ class SessionManager extends ChangeNotifier {
       if (texe == null) throw const RouteException(RouteError.tunnelEngineMissing);
       tunnel = await _tunnelFactory(texe);
       try {
-        port = await openTunnel(tunnel, tunnelReq,
-            confirmHostKey: (fp) => _confirmSshKey(c, fp, confirmSshHostKey));
+        port = await openTunnel(tunnel, tunnelReq);
       } catch (_) {
         tunnel.kill();
         rethrow;

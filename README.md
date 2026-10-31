@@ -26,7 +26,6 @@
 **Маршрути до ПК**
 - Вбудований **WireGuard** (імпорт `.conf`): без прав адміністратора й драйвера, не заважає
   іншому VPN.
-- **SSH-тунель** (пароль або ключ) з перевіркою ключа сервера.
 - **Проксі** SOCKS5 і HTTP, **RD Gateway**.
 
 **Пристрої**
@@ -62,7 +61,7 @@
 # 1. Модуль сеансу mhrd-session (FreeRDP, OpenSSL, SDL3 — статично; перший раз ~30 хв)
 powershell -ExecutionPolicy Bypass -File native\session\build.ps1
 
-# 2. Модуль тунелів mhrd-tunnel (WireGuard, SSH)
+# 2. Модуль тунелів mhrd-tunnel (WireGuard)
 powershell -ExecutionPolicy Bypass -File native\tunnels\build.ps1
 
 # 3. Застосунок (кладе mhrd-session.exe і mhrd-tunnel.exe поруч із mhrd.exe)
@@ -81,7 +80,7 @@ Linux, macOS і Android з'являться в цьому запуску → **A
 ```
 lib/               Flutter: список ПК, налаштування, бекап, теми, керування сеансами
 native/session/    mhrd-session (C): FreeRDP 3 + власне вікно на SDL3, буфер обміну, папки
-native/tunnels/    mhrd-tunnel (Go): WireGuard (netstack) і SSH-тунелі
+native/tunnels/    mhrd-tunnel (Go): WireGuard (netstack)
 docs/SPEC.md       специфікація: функції, архітектура, модель даних, тест-план, етапи
 ```
 
@@ -101,7 +100,7 @@ SIL OFL (див. `assets/fonts/licenses/`).
 
 **MHRD** is a free, open-source RDP client built on FreeRDP 3 and Flutter. Every remote desktop
 opens in its own window and process. Already working on Windows: connections with certificate
-pinning, auto-reconnect, H.264, built-in WireGuard and SSH tunnels without admin rights,
+pinning, auto-reconnect, H.264, a built-in WireGuard tunnel without admin rights,
 SOCKS5/HTTP proxy and RD Gateway, HiDPI-exact rendering with dynamic resolution, full screen with a hideable bar,
 clipboard (text, images, files) both ways, shared folders with access modes (full /
 add-only / read-only), sound and microphone, an encrypted backup, themes, Ukrainian and
