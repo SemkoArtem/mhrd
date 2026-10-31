@@ -198,6 +198,30 @@ enum PcListView { tiles, list }
 /// Куди йдуть Win, Alt+Tab тощо.
 enum KeyboardCapture { fullscreenOnly, always, never }
 
+/// Край вікна сеансу, до якого притулена плашка. Порядок = номери в native/session (barEdge).
+enum BarEdge { top, bottom, left, right }
+
+/// Де плашка у вікні сеансу: користувач перетягує її сам, MHRD запам'ятовує для всіх сеансів.
+class BarPlacement {
+  const BarPlacement({this.edge = BarEdge.top, this.pos = 5000, this.length = 0});
+
+  final BarEdge edge;
+
+  /// Центр уздовж краю: 0..10000 (5000 — посередині).
+  final int pos;
+
+  /// Довжина в одиницях інтерфейсу; 0 — типова.
+  final int length;
+
+  Map<String, dynamic> toJson() => {'edge': edge.index, 'pos': pos, 'length': length};
+
+  factory BarPlacement.fromJson(Map<String, dynamic> j) => BarPlacement(
+        edge: BarEdge.values[intOr(j['edge'], 0).clamp(0, BarEdge.values.length - 1)],
+        pos: intOr(j['pos'], 5000).clamp(0, 10000),
+        length: intOr(j['length'], 0).clamp(0, 10000),
+      );
+}
+
 class AppSettings {
   const AppSettings({
     this.language = 'system',
@@ -205,9 +229,9 @@ class AppSettings {
     this.listView = PcListView.tiles,
     this.showPreviews = true,
     this.startFullscreen = false,
-    this.newWindowPerSession = false,
     this.keepScreenAwake = true,
     this.keyboardCapture = KeyboardCapture.fullscreenOnly,
+    this.bar = const BarPlacement(),
     this.lastBackupAt,
   });
 
@@ -219,9 +243,9 @@ class AppSettings {
   final PcListView listView;
   final bool showPreviews;
   final bool startFullscreen;
-  final bool newWindowPerSession;
   final bool keepScreenAwake;
   final KeyboardCapture keyboardCapture;
+  final BarPlacement bar;
   final DateTime? lastBackupAt;
 
   AppSettings copyWith({
@@ -230,9 +254,9 @@ class AppSettings {
     PcListView? listView,
     bool? showPreviews,
     bool? startFullscreen,
-    bool? newWindowPerSession,
     bool? keepScreenAwake,
     KeyboardCapture? keyboardCapture,
+    BarPlacement? bar,
     DateTime? lastBackupAt,
   }) =>
       AppSettings(
@@ -241,9 +265,9 @@ class AppSettings {
         listView: listView ?? this.listView,
         showPreviews: showPreviews ?? this.showPreviews,
         startFullscreen: startFullscreen ?? this.startFullscreen,
-        newWindowPerSession: newWindowPerSession ?? this.newWindowPerSession,
         keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
         keyboardCapture: keyboardCapture ?? this.keyboardCapture,
+        bar: bar ?? this.bar,
         lastBackupAt: lastBackupAt ?? this.lastBackupAt,
       );
 
@@ -253,9 +277,9 @@ class AppSettings {
         'listView': listView.name,
         'showPreviews': showPreviews,
         'startFullscreen': startFullscreen,
-        'newWindowPerSession': newWindowPerSession,
         'keepScreenAwake': keepScreenAwake,
         'keyboardCapture': keyboardCapture.name,
+        'bar': bar.toJson(),
         'lastBackupAt': lastBackupAt?.toIso8601String(),
       };
 
@@ -265,10 +289,10 @@ class AppSettings {
         listView: enumByName(PcListView.values, j['listView'], PcListView.tiles),
         showPreviews: boolOr(j['showPreviews'], true),
         startFullscreen: boolOr(j['startFullscreen'], false),
-        newWindowPerSession: boolOr(j['newWindowPerSession'], false),
         keepScreenAwake: boolOr(j['keepScreenAwake'], true),
         keyboardCapture:
             enumByName(KeyboardCapture.values, j['keyboardCapture'], KeyboardCapture.fullscreenOnly),
+        bar: BarPlacement.fromJson(mapOr(j['bar'])),
         lastBackupAt: dateOrNull(j['lastBackupAt']),
       );
 }

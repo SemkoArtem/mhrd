@@ -51,6 +51,8 @@ enum TunnelError {
   unreachable,
   connect,
   listen,
+  /// Перевірка: сервер WireGuard не відповів на рукостискання.
+  handshake,
   failed,
 }
 
@@ -66,15 +68,23 @@ class TunnelException implements Exception {
 }
 
 /// Надсилає [request] і чекає, доки тунель відкриє локальний порт. Повертає порт на 127.0.0.1.
-Future<int> openTunnel(TunnelChannel channel, Map<String, Object?> request) {
+Future<int> openTunnel(TunnelChannel channel, Map<String, Object?> request) =>
+    _request(channel, request, 'listening', 'port');
+
+/// Перевірка, чи тунель живий ([request] з `"check": true`). Повертає, за скільки мс сервер
+/// відповів на рукостискання.
+Future<int> checkTunnel(TunnelChannel channel, Map<String, Object?> request) =>
+    _request(channel, request, 'ok', 'handshakeMs');
+
+Future<int> _request(TunnelChannel channel, Map<String, Object?> request, String okEvent, String field) {
   final done = Completer<int>();
   late final StreamSubscription<Map<String, Object?>> sub;
   sub = channel.events.listen(
     (e) {
       switch (e['event']) {
-        case 'listening':
-          final port = e['port'];
-          if (port is int && !done.isCompleted) done.complete(port);
+        case final String ev when ev == okEvent:
+          final v = e[field];
+          if (v is int && !done.isCompleted) done.complete(v);
         case 'error':
           final code = e['code'] is String ? e['code'] as String : '';
           final err = TunnelError.values.where((x) => x.name == code).firstOrNull ?? TunnelError.failed;

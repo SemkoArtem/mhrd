@@ -43,6 +43,25 @@ func (d *wgDialer) Close() error {
 	return nil
 }
 
+// waitHandshake чекає першого рукостискання з сервером — перевірка, що тунель живий (сам по собі
+// WireGuard мовчить, доки нема трафіку; рукостискання запускає keepalive при Up).
+func (d *wgDialer) waitHandshake(timeout time.Duration) (time.Duration, error) {
+	start := time.Now()
+	for time.Since(start) < timeout {
+		cfg, err := d.dev.IpcGet()
+		if err != nil {
+			return 0, err
+		}
+		for _, line := range strings.Split(cfg, "\n") {
+			if v, ok := strings.CutPrefix(line, "last_handshake_time_sec="); ok && v != "0" {
+				return time.Since(start), nil
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return 0, fmt.Errorf("no handshake in %s", timeout)
+}
+
 // Ключ WireGuard: base64 у .conf, hex — у налаштуваннях wireguard-go (UAPI).
 func keyHex(b64 string) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(b64))

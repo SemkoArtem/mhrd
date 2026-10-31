@@ -402,10 +402,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get computers => 'Computers';
 
   @override
-  String get activeTunnels => 'Active tunnels';
+  String get activeTunnels => 'Tunnels & proxies';
 
   @override
-  String get noTunnelsYet => 'None. Tunnels arrive in stage 4.';
+  String get noTunnelsYet => 'None yet. Add them in Settings → Routes.';
+
+  @override
+  String healthOk(int ms) {
+    return 'Working · replied in $ms ms';
+  }
+
+  @override
+  String get healthChecking => 'Checking…';
+
+  @override
+  String get healthUnknown => 'Not checked yet';
+
+  @override
+  String healthCheckedAt(String time) {
+    return 'Checked at $time';
+  }
+
+  @override
+  String get checkNow => 'Check now';
 
   @override
   String get searchHint => 'Name, address, tag';
@@ -693,12 +712,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startSessionsFullscreen => 'Start sessions in full screen';
 
   @override
-  String get sessionPerWindow => 'Each session in its own window';
-
-  @override
-  String get sessionPerWindowHint => 'Otherwise — tabs in the main window';
-
-  @override
   String get keepScreenAwake => 'Keep the screen on during a session';
 
   @override
@@ -822,6 +835,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tunnelErrFailed => 'The tunnel stopped unexpectedly.';
+
+  @override
+  String get tunnelErrHandshake =>
+      'The WireGuard server doesn\'t respond. Check the server address, the keys and whether the network blocks UDP.';
+
+  @override
+  String get proxyErrUnreachable =>
+      'The proxy is unreachable: couldn\'t connect. Check the address and port.';
+
+  @override
+  String get proxyErrProtocol =>
+      'This address isn\'t a proxy of the selected type. Check the type (SOCKS5 or HTTP) and the port.';
+
+  @override
+  String get proxyErrAuth => 'The proxy rejected the username or password.';
+
+  @override
+  String get proxyErrRefused =>
+      'The proxy works but won\'t let you through to the PC. Such proxies often allow only websites (port 443) and block RDP (3389).';
 
   @override
   String get addProxy => 'Add proxy';

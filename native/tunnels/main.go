@@ -5,9 +5,12 @@
 //	{"type":"wireguard","target":"host:port","wireguard":{...}}
 //	{"watchPid":1234}             — процес mhrd-session; коли він завершиться, тунель теж
 //
+// Або перевірка, чи тунель живий (без цілі): {"type":"wireguard","check":true,"wireguard":{...}}.
+//
 // У stdout — рядки JSON-подій:
 //
 //	{"event":"listening","port":54321}   — можна підключатися до 127.0.0.1:port
+//	{"event":"ok","handshakeMs":120}     — відповідь на перевірку: сервер відповів
 //	{"event":"error","code":"...","detail":"..."}
 //
 // WireGuard працює в програмному мережевому стеку (wireguard-go netstack): без драйвера, без
@@ -31,7 +34,11 @@ type request struct {
 	Target    string          `json:"target"`
 	WireGuard *wireGuardConf  `json:"wireguard"`
 	WatchPid  int             `json:"watchPid"`
+	Check     bool            `json:"check"`
 }
+
+// Скільки чекати рукостискання під час перевірки (wireguard-go повторює спробу кожні 5 с).
+var handshakeTimeout = 15 * time.Second
 
 // dialer — те, що вміє тунель: відкрити TCP-з'єднання до цілі зсередини.
 type dialer interface {
@@ -90,6 +97,9 @@ func main() {
 		if req.WireGuard == nil {
 			fail("config", fmt.Errorf("no wireguard section"))
 		}
+		if req.Check && req.WireGuard.Keepalive <= 0 {
+			req.WireGuard.Keepalive = 25 // keepalive при Up одразу запускає рукостискання
+		}
 		d, err = startWireGuard(req.WireGuard)
 	default:
 		fail("config", fmt.Errorf("unknown type %q", req.Type))
@@ -101,6 +111,16 @@ func main() {
 		fail("connect", err)
 	}
 	defer d.Close()
+
+	if req.Check {
+		took, err := d.(*wgDialer).waitHandshake(handshakeTimeout)
+		if err != nil {
+			d.Close()
+			fail("handshake", err)
+		}
+		emit(map[string]any{"event": "ok", "handshakeMs": took.Milliseconds()})
+		return
+	}
 
 	// Перевіряємо, що ПК справді досяжний через тунель, — інакше користувач бачив би
 	// загадкову помилку RDP замість зрозумілої «тунель є, а ПК не відповідає».

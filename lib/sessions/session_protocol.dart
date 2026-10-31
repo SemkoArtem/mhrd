@@ -20,6 +20,7 @@ abstract final class Msg {
   static const evtFrame = 0x83;
   static const evtCertificate = 0x84;
   static const evtDisconnected = 0x85;
+  static const evtBar = 0x86;
 }
 
 /// Кнопки миші в протоколі.
@@ -131,6 +132,20 @@ class DisconnectedEvent extends SessionEvent {
   final String details;
 }
 
+/// Плашку у вікні сеансу перетягнули чи змінили її довжину.
+class BarEvent extends SessionEvent {
+  const BarEvent(this.edge, this.pos, this.length);
+
+  /// 0 — верх, 1 — низ, 2 — ліво, 3 — право.
+  final int edge;
+
+  /// Центр уздовж краю, 0..10000.
+  final int pos;
+
+  /// Довжина в одиницях інтерфейсу.
+  final int length;
+}
+
 /// Перетворює байти з stdout процесу на події. Незнайомі типи пропускає.
 class SessionEventDecoder extends StreamTransformerBase<List<int>, SessionEvent> {
   const SessionEventDecoder();
@@ -186,6 +201,8 @@ class SessionEventDecoder extends StreamTransformerBase<List<int>, SessionEvent>
       case Msg.evtDisconnected when d.length >= 5:
         final r = d[0] < DisconnectReason.values.length ? DisconnectReason.values[d[0]] : DisconnectReason.other;
         return DisconnectedEvent(r, u32(1), utf8.decode(d.sublist(5), allowMalformed: true));
+      case Msg.evtBar when d.length >= 5:
+        return BarEvent(d[0], bd.getUint16(1, Endian.little), bd.getUint16(3, Endian.little));
       default:
         return null;
     }

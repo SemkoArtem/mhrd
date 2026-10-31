@@ -279,6 +279,15 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Налаштування WireGuard для mhrd-tunnel разом із ключами зі сховища — лише для stdin тунелю.
+  Future<Map<String, Object?>> wireGuardConfig(TunnelProfile t) async {
+    final wg = <String, Object?>{...t.config}..remove('extraPeersIgnored');
+    for (final f in t.secretFields) {
+      wg[f] = await secrets.read(t.secretKey(f)) ?? '';
+    }
+    return wg;
+  }
+
   Future<void> deleteTunnel(String id, {bool force = false}) async {
     final t = tunnels[id];
     _deleteRoute(InUseKind.tunnel, RouteKind.tunnel, kTunnel, id, force);

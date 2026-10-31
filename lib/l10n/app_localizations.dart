@@ -773,14 +773,44 @@ abstract class AppLocalizations {
   /// No description provided for @activeTunnels.
   ///
   /// In uk, this message translates to:
-  /// **'Активні тунелі'**
+  /// **'Тунелі й проксі'**
   String get activeTunnels;
 
   /// No description provided for @noTunnelsYet.
   ///
   /// In uk, this message translates to:
-  /// **'Немає. Тунелі запрацюють на етапі 4.'**
+  /// **'Ще немає. Додайте в Налаштуваннях → Маршрути.'**
   String get noTunnelsYet;
+
+  /// No description provided for @healthOk.
+  ///
+  /// In uk, this message translates to:
+  /// **'Працює · відповідь за {ms} мс'**
+  String healthOk(int ms);
+
+  /// No description provided for @healthChecking.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевіряю…'**
+  String get healthChecking;
+
+  /// No description provided for @healthUnknown.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ще не перевірено'**
+  String get healthUnknown;
+
+  /// No description provided for @healthCheckedAt.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевірено о {time}'**
+  String healthCheckedAt(String time);
+
+  /// No description provided for @checkNow.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевірити зараз'**
+  String get checkNow;
 
   /// No description provided for @searchHint.
   ///
@@ -1316,18 +1346,6 @@ abstract class AppLocalizations {
   /// **'Запускати сеанси на весь екран'**
   String get startSessionsFullscreen;
 
-  /// No description provided for @sessionPerWindow.
-  ///
-  /// In uk, this message translates to:
-  /// **'Кожен сеанс в окремому вікні'**
-  String get sessionPerWindow;
-
-  /// No description provided for @sessionPerWindowHint.
-  ///
-  /// In uk, this message translates to:
-  /// **'Інакше — вкладки в головному вікні'**
-  String get sessionPerWindowHint;
-
   /// No description provided for @keepScreenAwake.
   ///
   /// In uk, this message translates to:
@@ -1543,6 +1561,36 @@ abstract class AppLocalizations {
   /// In uk, this message translates to:
   /// **'Тунель несподівано завершився.'**
   String get tunnelErrFailed;
+
+  /// No description provided for @tunnelErrHandshake.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сервер WireGuard не відповідає. Перевірте адресу сервера, ключі й чи не блокує мережа UDP.'**
+  String get tunnelErrHandshake;
+
+  /// No description provided for @proxyErrUnreachable.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі недоступний: не вдалося з\'єднатися. Перевірте адресу й порт.'**
+  String get proxyErrUnreachable;
+
+  /// No description provided for @proxyErrProtocol.
+  ///
+  /// In uk, this message translates to:
+  /// **'За цією адресою не проксі вибраного типу. Перевірте тип (SOCKS5 чи HTTP) і порт.'**
+  String get proxyErrProtocol;
+
+  /// No description provided for @proxyErrAuth.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі відхилив логін або пароль.'**
+  String get proxyErrAuth;
+
+  /// No description provided for @proxyErrRefused.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.'**
+  String get proxyErrRefused;
 
   /// No description provided for @addProxy.
   ///

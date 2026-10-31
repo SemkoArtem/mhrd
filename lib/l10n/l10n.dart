@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
-import '../sessions/session_manager.dart' show RouteError, TunnelError;
+import '../sessions/session_manager.dart' show ProxyError, RouteError, TunnelError;
 import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
@@ -61,7 +61,23 @@ extension L10nMessages on AppLocalizations {
         TunnelError.unreachable => tunnelErrUnreachable,
         TunnelError.connect => tunnelErrConnect,
         TunnelError.listen => tunnelErrListen,
+        TunnelError.handshake => tunnelErrHandshake,
         TunnelError.failed => tunnelErrFailed,
+      };
+
+  String proxyError(ProxyError e) => switch (e) {
+        ProxyError.unreachable => proxyErrUnreachable,
+        ProxyError.protocol => proxyErrProtocol,
+        ProxyError.auth => proxyErrAuth,
+        ProxyError.refused => proxyErrRefused,
+      };
+
+  /// Чому маршрут не пройшов перевірку.
+  String healthError(Object e) => switch (e) {
+        final TunnelError t => tunnelError(t),
+        final ProxyError p => proxyError(p),
+        final RouteError r => routeError(r),
+        _ => tunnelErrFailed,
       };
 
   String inUseKind(InUseKind k) => switch (k) {

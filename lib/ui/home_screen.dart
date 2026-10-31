@@ -206,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'accent': rgb(t.accent),
           'error': rgb(t.error),
         },
+        'radius': t.radius.round(), // кути плашки — як в усьому інтерфейсі
         'startFullscreen': fullscreen,
         'keyboardCapture': repo.settings.keyboardCapture.index, // 0 лише на весь екран, 1 завжди, 2 ніколи
         'resizeMode': c.display.resizeMode.index, // 0 змінювати роздільність, 1 масштабувати, 2 ні
@@ -623,11 +624,121 @@ class _HomeScreenState extends State<HomeScreen> {
         if (repo.groups.isNotEmpty) caption(l.groups),
         ...tree(null, 0),
         caption(l.activeTunnels),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(l.noTunnelsYet, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
-        ),
+        if (repo.tunnels.isEmpty && repo.proxies.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(l.noTunnelsYet, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
+          )
+        else
+          _routes(context),
       ]),
+    );
+  }
+
+  /// Тунелі й проксі зі станом: зелена — працює, червона — варто глянути. Стан оновлюється при
+  /// запуску, кожні 5 хв і кнопкою поруч.
+  Widget _routes(BuildContext context) {
+    final health = AppScope.of(context).sessions.health;
+    int byName(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+    final tunnels = repo.tunnels.values.toList()..sort((a, b) => byName(a.name, b.name));
+    final proxies = repo.proxies.values.toList()..sort((a, b) => byName(a.name, b.name));
+    return ListenableBuilder(
+      listenable: health,
+      builder: (context, _) => Column(children: [
+        for (final x in tunnels)
+          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.config['endpoint'] ?? 'WireGuard'}',
+              Icons.shield_outlined),
+        for (final x in proxies)
+          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.host}:${x.port}', Icons.alt_route),
+      ]),
+    );
+  }
+
+  Widget _routeItem(BuildContext context, RouteHealth health, String id, String name, IconData icon) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final s = health.statusOf(id);
+    final checking = s.state == HealthState.checking;
+    final color = switch (s.state) {
+      HealthState.ok => t.ok,
+      HealthState.failed => t.error,
+      _ => t.textMuted,
+    };
+    return Tooltip(
+      message: _healthText(context, s),
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(t.radius * 0.7),
+        onTap: () => _showHealth(context, name, s),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(children: [
+            SizedBox.square(
+              dimension: 10,
+              child: checking
+                  ? CircularProgressIndicator(strokeWidth: 1.6, color: t.textMuted)
+                  : DecoratedBox(decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            ),
+            const SizedBox(width: 10),
+            Icon(icon, size: 15, color: t.textMuted),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: s.state == HealthState.failed ? t.error : t.text, fontSize: 13.5)),
+            ),
+            IconButton(
+              tooltip: l.checkNow,
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              color: t.textMuted,
+              onPressed: checking ? null : () => health.check(id),
+              icon: const Icon(Icons.refresh),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  String _healthText(BuildContext context, RouteStatus s) {
+    final l = context.l10n;
+    final text = switch (s.state) {
+      HealthState.ok => l.healthOk(s.latencyMs ?? 0),
+      HealthState.failed => l.healthError(s.error ?? TunnelError.failed),
+      HealthState.checking => l.healthChecking,
+      HealthState.unknown => l.healthUnknown,
+    };
+    final at = s.checkedAt;
+    if (at == null) return text;
+    final time = MaterialLocalizations.of(context)
+        .formatTimeOfDay(TimeOfDay.fromDateTime(at), alwaysUse24HourFormat: true);
+    return '$text\n${l.healthCheckedAt(time)}';
+  }
+
+  /// Подробиці — щоб скопіювати технічну причину, якщо щось не так.
+  Future<void> _showHealth(BuildContext context, String name, RouteStatus s) async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    await showDialog<void>(
+      context: context,
+      builder: (dc) => AlertDialog(
+        icon: Icon(s.state == HealthState.failed ? Icons.error_outline : Icons.check_circle_outline,
+            color: s.state == HealthState.failed ? t.error : t.ok),
+        title: Text(name),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(_healthText(context, s), textAlign: TextAlign.center),
+            if (s.detail.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SelectableText(s.detail, textAlign: TextAlign.center, style: t.mono),
+            ],
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dc), child: Text(l.close))],
+      ),
     );
   }
 

@@ -28,6 +28,7 @@ enum
 	EVT_FRAME = 0x83,        /* u32 x, y, w, h — ділянка оновилась */
 	EVT_CERTIFICATE = 0x84,  /* JSON: host, port, commonName, subject, issuer, fingerprint, flags, changed */
 	EVT_DISCONNECTED = 0x85, /* u8 категорія, u32 код FreeRDP, текст помилки */
+	EVT_BAR = 0x86,          /* u8 край (0 верх, 1 низ, 2 ліво, 3 право), u16 центр 0..10000, u16 довжина */
 };
 
 /* Категорії відключення — однакові з DisconnectReason у Dart. */

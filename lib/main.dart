@@ -22,6 +22,7 @@ Future<void> main() async {
   final db = MhrdDatabase.open(dir);
   final repo = Repository(db, SystemSecretStore());
   final sessions = SessionManager(repo, log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')));
+  sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }
 

@@ -403,10 +403,29 @@ class AppLocalizationsUk extends AppLocalizations {
   String get computers => 'Комп\'ютери';
 
   @override
-  String get activeTunnels => 'Активні тунелі';
+  String get activeTunnels => 'Тунелі й проксі';
 
   @override
-  String get noTunnelsYet => 'Немає. Тунелі запрацюють на етапі 4.';
+  String get noTunnelsYet => 'Ще немає. Додайте в Налаштуваннях → Маршрути.';
+
+  @override
+  String healthOk(int ms) {
+    return 'Працює · відповідь за $ms мс';
+  }
+
+  @override
+  String get healthChecking => 'Перевіряю…';
+
+  @override
+  String get healthUnknown => 'Ще не перевірено';
+
+  @override
+  String healthCheckedAt(String time) {
+    return 'Перевірено о $time';
+  }
+
+  @override
+  String get checkNow => 'Перевірити зараз';
 
   @override
   String get searchHint => 'Назва, адреса, тег';
@@ -695,12 +714,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get startSessionsFullscreen => 'Запускати сеанси на весь екран';
 
   @override
-  String get sessionPerWindow => 'Кожен сеанс в окремому вікні';
-
-  @override
-  String get sessionPerWindowHint => 'Інакше — вкладки в головному вікні';
-
-  @override
   String get keepScreenAwake => 'Не вимикати екран під час сеансу';
 
   @override
@@ -823,6 +836,25 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get tunnelErrFailed => 'Тунель несподівано завершився.';
+
+  @override
+  String get tunnelErrHandshake =>
+      'Сервер WireGuard не відповідає. Перевірте адресу сервера, ключі й чи не блокує мережа UDP.';
+
+  @override
+  String get proxyErrUnreachable =>
+      'Проксі недоступний: не вдалося з\'єднатися. Перевірте адресу й порт.';
+
+  @override
+  String get proxyErrProtocol =>
+      'За цією адресою не проксі вибраного типу. Перевірте тип (SOCKS5 чи HTTP) і порт.';
+
+  @override
+  String get proxyErrAuth => 'Проксі відхилив логін або пароль.';
+
+  @override
+  String get proxyErrRefused =>
+      'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.';
 
   @override
   String get addProxy => 'Додати проксі';

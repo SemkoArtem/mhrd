@@ -386,8 +386,15 @@ void main() {
       expect(json['nativeWindow'], isTrue);
       expect(json['title'], 'Офіс — MHRD');
       expect((json['labels'] as Map)['disconnect'], 'Відключитись');
+      expect(json['bar'], {'edge': 0, 'pos': 5000, 'length': 0}); // плашка — типово вгорі посередині
       ch.emit(Msg.evtState, [2]);
+      // Плашку перетягнули ліворуч і вкоротили — запам'ятовується для наступних сеансів.
+      ch.emit(Msg.evtBar, [2, 0x10, 0x27, 200, 0]); // край 2, центр 10000, довжина 200
       await settle();
+      expect(repo.settings.bar.edge, BarEdge.left);
+      expect(repo.settings.bar.pos, 10000);
+      expect(repo.settings.bar.length, 200);
+      expect(AppSettings.fromJson(repo.settings.toJson()).bar.edge, BarEdge.left);
       expect(m.forConnection('pc'), same(s));
       s.focusWindow();
       expect(ch.sentTypes.last, Msg.focus);

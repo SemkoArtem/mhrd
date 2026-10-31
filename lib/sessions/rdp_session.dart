@@ -114,6 +114,9 @@ class RdpSession extends ChangeNotifier {
   /// Чому сеанс закрився (для стану failed/disconnected).
   DisconnectedEvent? ended;
 
+  /// Плашку у власному вікні сеансу перемістили — щоб запам'ятати для наступних сеансів.
+  void Function(BarEvent e)? onBarMoved;
+
   /// Поточна картинка віддаленого екрана.
   ui.Image? image;
   int width = 0, height = 0;
@@ -170,6 +173,9 @@ class RdpSession extends ChangeNotifier {
       case DisconnectedEvent():
         ended = e;
         state = e.reason == DisconnectReason.userRequest ? SessionState.disconnected : SessionState.failed;
+      case BarEvent():
+        onBarMoved?.call(e);
+        return;
     }
     _notify();
   }

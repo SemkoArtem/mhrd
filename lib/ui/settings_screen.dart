@@ -124,12 +124,6 @@ class _GeneralTab extends StatelessWidget {
         onChanged: (v) => set(s.copyWith(startFullscreen: v)),
       ),
       SwitchListTile(
-        value: s.newWindowPerSession,
-        title: Text(l.sessionPerWindow),
-        subtitle: Text(l.sessionPerWindowHint),
-        onChanged: (v) => set(s.copyWith(newWindowPerSession: v)),
-      ),
-      SwitchListTile(
         value: s.keepScreenAwake,
         title: Text(l.keepScreenAwake),
         onChanged: (v) => set(s.copyWith(keepScreenAwake: v)),

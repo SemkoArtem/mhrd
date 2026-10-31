@@ -15,9 +15,12 @@
 #endif
 
 #define RESIZE_DELAY_MS 300 /* SPEC: нова роздільність — через 300 мс після останньої зміни розміру */
-#define BAR_W 520
-#define BAR_H 40
-#define ICON_PX 20          /* розмір піктограм кнопок плашки */
+#define BAR_W 520            /* типова довжина плашки (одиниці інтерфейсу; × масштаб ОС = пікселі) */
+#define BAR_H 40             /* товщина плашки */
+#define BAR_MARGIN 6         /* відступ плашки від краю вікна */
+#define BAR_PAD 6            /* поле на кінцях плашки — за нього тягнуть, щоб змінити довжину */
+#define GRIP_W 14            /* «ручка» на початку плашки — за неї (і за назву ПК) перетягують */
+#define ICON_PX 20           /* розмір піктограм кнопок плашки */
 #define TOOLTIP_DELAY_MS 500 /* підказка кнопки — через пів секунди наведення */
 #define BAR_HIDE_DELAY_MS 3500 /* плашка ховається через 3,5 с після того, як мишу прибрали */
 #define HANDLE_W 120
@@ -48,6 +51,31 @@ enum
 	BTN_NONE = -1
 };
 
+/* Край вікна, до якого притулена плашка (номери — як у barEdge і EVT_BAR). */
+enum
+{
+	EDGE_TOP,
+	EDGE_BOTTOM,
+	EDGE_LEFT,
+	EDGE_RIGHT
+};
+
+/* Що робить миша з плашкою: нічого, перетягує, змінює довжину. */
+enum
+{
+	DRAG_NONE,
+	DRAG_MOVE,
+	DRAG_RESIZE
+};
+
+/* Подія миші для плашки. */
+enum
+{
+	MOUSE_MOVE,
+	MOUSE_DOWN,
+	MOUSE_UP
+};
+
 static struct
 {
 	WindowConfig cfg;
@@ -69,7 +97,16 @@ static struct
 	Uint64 barHideAt; /* коли сховати плашку (0 — не ховати) */
 	int hoverButton;
 	SDL_FRect buttons[BTN_COUNT];
-	SDL_FRect barRect, handleRect;
+	SDL_FRect barRect, handleRect, gripRect, titleRect;
+	SDL_FRect hotRect; /* плашка разом зі смужкою між нею й краєм вікна — тут миша «на плашці» */
+
+	/* Де плашка: край, центр уздовж краю (0..1), довжина в одиницях інтерфейсу. */
+	int barEdge;
+	float barPos, barLen;
+	int drag;              /* DRAG_* */
+	float dragFrom, dragLen, dragSign; /* зміна довжини: звідки тягнуть, довжина на старті, кінець */
+	SDL_Cursor* cursors[SDL_SYSTEM_CURSOR_COUNT];
+	SDL_SystemCursor cursorShown;
 
 	Uint64 resizeAt; /* коли просити нову роздільність (0 — не треба) */
 	uint32_t lastRequestedW, lastRequestedH;
@@ -80,7 +117,6 @@ static struct
 	SDL_Texture* labels[BTN_COUNT + 1]; /* + назва ПК; BTN_PIN — «закріпити», окремо «відкріпити» */
 	SDL_Texture* unpinLabel;
 	SDL_Texture* fullscreenLabel; /* BTN_FULLSCREEN у вікні; labels[BTN_FULLSCREEN] — «у вікно» */
-	float titleRight;             /* де закінчується місце для назви ПК на плашці */
 
 	/* Піктограми (білі; колір задається при малюванні). Як і з підписами: окремо «відкріпити»
 	 * і «на весь екран» (icons[BTN_FULLSCREEN] — «у вікно»). */
@@ -269,6 +305,66 @@ static void set_color(uint32_t rgb, Uint8 a)
 	SDL_SetRenderDrawColor(W.renderer, (Uint8)(rgb >> 16), (Uint8)(rgb >> 8), (Uint8)rgb, a);
 }
 
+/* Контур прямокутника із заокругленими кутами: 4 дуги по ROUND_STEPS відрізків. */
+#define ROUND_STEPS 8
+#define ROUND_POINTS (4 * (ROUND_STEPS + 1))
+
+static float round_outline(const SDL_FRect* r, float radius, SDL_FPoint* out)
+{
+	radius = SDL_min(radius, SDL_min(r->w, r->h) / 2.0f);
+	const float cx[4] = { r->x + radius, r->x + r->w - radius, r->x + r->w - radius, r->x + radius };
+	const float cy[4] = { r->y + radius, r->y + radius, r->y + r->h - radius, r->y + r->h - radius };
+	int n = 0;
+	for (int c = 0; c < 4; c++)
+	{
+		const float a0 = SDL_PI_F * (1.0f + 0.5f * (float)c); /* лівий верхній кут починається з 180° */
+		for (int i = 0; i <= ROUND_STEPS; i++)
+		{
+			const float a = a0 + 0.5f * SDL_PI_F * (float)i / (float)ROUND_STEPS;
+			out[n++] = (SDL_FPoint){ cx[c] + radius * SDL_cosf(a), cy[c] + radius * SDL_sinf(a) };
+		}
+	}
+	return radius;
+}
+
+static void fill_round(const SDL_FRect* r, float radius, uint32_t rgb, Uint8 alpha)
+{
+	SDL_FPoint p[ROUND_POINTS];
+	round_outline(r, radius, p);
+	SDL_Vertex v[ROUND_POINTS + 1];
+	int idx[ROUND_POINTS * 3];
+	const SDL_FColor c = { (float)((rgb >> 16) & 0xFF) / 255.0f, (float)((rgb >> 8) & 0xFF) / 255.0f,
+		                   (float)(rgb & 0xFF) / 255.0f, (float)alpha / 255.0f };
+	v[0] = (SDL_Vertex){ { r->x + r->w / 2.0f, r->y + r->h / 2.0f }, c, { 0, 0 } };
+	for (int i = 0; i < ROUND_POINTS; i++)
+	{
+		v[i + 1] = (SDL_Vertex){ p[i], c, { 0, 0 } };
+		idx[i * 3] = 0;
+		idx[i * 3 + 1] = i + 1;
+		idx[i * 3 + 2] = (i + 1) % ROUND_POINTS + 1;
+	}
+	SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
+	SDL_RenderGeometry(W.renderer, NULL, v, ROUND_POINTS + 1, idx, ROUND_POINTS * 3);
+}
+
+static void stroke_round(const SDL_FRect* r, float radius, uint32_t rgb)
+{
+	/* Лінія — по центру крайнього ряду пікселів, щоб не розмивалась. */
+	const SDL_FRect in = { r->x + 0.5f, r->y + 0.5f, r->w - 1.0f, r->h - 1.0f };
+	SDL_FPoint p[ROUND_POINTS + 1];
+	round_outline(&in, radius, p);
+	p[ROUND_POINTS] = p[0];
+	set_color(rgb, 255);
+	SDL_RenderLines(W.renderer, p, ROUND_POINTS + 1);
+}
+
+/* Панель у стилі MHRD: заливка, рамка, кути як у темі. */
+static void draw_panel(const SDL_FRect* r, float radius)
+{
+	fill_round(r, radius, W.cfg.colorSurface, 255);
+	stroke_round(r, radius, W.cfg.colorBorder);
+}
+
 static SDL_Texture* make_label(const char* text)
 {
 	if (!W.font || !text || !text[0])
@@ -372,19 +468,55 @@ static float button_width(int i, float s)
 	return (tw > 0 ? tw : 60 * s) + 20 * s;
 }
 
-/* Розкладка плашки й кнопок у пікселях вікна. */
+static BOOL bar_vertical(void)
+{
+	return W.barEdge == EDGE_LEFT || W.barEdge == EDGE_RIGHT;
+}
+
+/* Прямокутник у координатах плашки (уздовж краю, впоперек) → пікселі вікна. */
+static SDL_FRect place(float along, float across, float length, float thickness)
+{
+	return bar_vertical() ? (SDL_FRect){ across, along, thickness, length } : (SDL_FRect){ along, across, length, thickness };
+}
+
+/* Розкладка плашки й кнопок у пікселях вікна. Уздовж плашки: ручка, «Закріпити», назва ПК
+ * (лише на горизонтальній і якщо вміщається), «Клавіатура», «Згорнути», «На весь екран»/«У вікно»,
+ * «Відключитись». Найкоротша плашка — самі піктограми. */
 static void layout_bar(void)
 {
 	int pw = 0, ph = 0;
 	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
 	const float s = ui_scale();
-	const float bw = SDL_min(BAR_W * s, (float)pw), bh = BAR_H * s;
-	W.barRect = (SDL_FRect){ ((float)pw - bw) / 2.0f, 0, bw, bh };
-	W.handleRect = (SDL_FRect){ ((float)pw - HANDLE_W * s) / 2.0f, 0, HANDLE_W * s, HANDLE_H * s };
-	/* Справа наліво: «Відключитись», «На весь екран»/«У вікно», «Згорнути», «Клавіатура»;
-	 * зліва — «Закріпити», між ними — назва ПК. */
-	float x = W.barRect.x + W.barRect.w - 6 * s;
+	const BOOL vertical = bar_vertical();
+	const float extent = (float)(vertical ? ph : pw), cross = (float)(vertical ? pw : ph);
+	const float thick = BAR_H * s, margin = BAR_MARGIN * s, pad = BAR_PAD * s, gap = 2 * s;
 	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD };
+
+	float minLen = 2 * pad + GRIP_W * s + gap + button_width(BTN_PIN, s);
+	for (size_t i = 0; i < SDL_arraysize(order); i++)
+	{
+		if (button_shown(order[i]))
+			minLen += gap + button_width(order[i], s);
+	}
+	const float maxLen = SDL_max(minLen, extent - 2 * margin);
+	const float len = SDL_clamp(W.barLen * s, minLen, maxLen);
+	const float start = SDL_clamp(W.barPos * extent - len / 2.0f, margin, SDL_max(margin, extent - margin - len));
+	const BOOL nearSide = W.barEdge == EDGE_TOP || W.barEdge == EDGE_LEFT;
+	const float across = nearSide ? margin : cross - margin - thick;
+
+	W.barRect = place(start, across, len, thick);
+	W.hotRect = place(start, nearSide ? 0 : across, len, thick + margin);
+	W.handleRect = place(start + (len - HANDLE_W * s) / 2.0f, nearSide ? 0 : cross - HANDLE_H * s, HANDLE_W * s,
+	                     HANDLE_H * s);
+
+	const float bAcross = across + 4 * s, bThick = thick - 8 * s;
+	float a = start + pad;
+	W.gripRect = place(a, bAcross, GRIP_W * s, bThick);
+	a += GRIP_W * s + gap;
+	const float pinLen = button_width(BTN_PIN, s);
+	W.buttons[BTN_PIN] = place(a, bAcross, pinLen, bThick);
+	a += pinLen;
+	float b = start + len - pad;
 	for (size_t i = 0; i < SDL_arraysize(order); i++)
 	{
 		if (!button_shown(order[i]))
@@ -393,12 +525,12 @@ static void layout_bar(void)
 			continue;
 		}
 		const float w = button_width(order[i], s);
-		x -= w;
-		W.buttons[order[i]] = (SDL_FRect){ x, 4 * s, w, bh - 8 * s };
-		x -= 2 * s;
+		b -= w;
+		W.buttons[order[i]] = place(b, bAcross, w, bThick);
+		b -= gap;
 	}
-	W.titleRight = x;
-	W.buttons[BTN_PIN] = (SDL_FRect){ W.barRect.x + 6 * s, 4 * s, button_width(BTN_PIN, s), bh - 8 * s };
+	const float titleLen = vertical ? 0 : b - a - 18 * s;
+	W.titleRect = titleLen >= 24 * s ? place(a + 10 * s, across, titleLen, thick) : (SDL_FRect){ 0, 0, 0, 0 };
 }
 
 static void draw_label(SDL_Texture* t, const SDL_FRect* box, BOOL left)
@@ -434,40 +566,73 @@ static void draw_tooltip(void)
 	float tw = 0, th = 0;
 	SDL_GetTextureSize(t, &tw, &th);
 	const SDL_FRect* b = &W.buttons[W.hoverButton];
-	SDL_FRect box = { 0, W.barRect.y + W.barRect.h + 6 * s, tw + 16 * s, th + 10 * s };
-	box.x = SDL_clamp(b->x + (b->w - box.w) / 2.0f, 4 * s, (float)pw - box.w - 4 * s);
-	set_color(W.cfg.colorSurface, 255);
-	SDL_RenderFillRect(W.renderer, &box);
-	set_color(W.cfg.colorBorder, 255);
-	SDL_RenderRect(W.renderer, &box);
+	const SDL_FRect* bar = &W.barRect;
+	SDL_FRect box = { 0, 0, tw + 16 * s, th + 10 * s };
+	/* Підказка — з боку вікна, протилежного краю плашки. */
+	switch (W.barEdge)
+	{
+		case EDGE_BOTTOM:
+			box.x = b->x + (b->w - box.w) / 2.0f;
+			box.y = bar->y - box.h - 6 * s;
+			break;
+		case EDGE_LEFT:
+			box.x = bar->x + bar->w + 6 * s;
+			box.y = b->y + (b->h - box.h) / 2.0f;
+			break;
+		case EDGE_RIGHT:
+			box.x = bar->x - box.w - 6 * s;
+			box.y = b->y + (b->h - box.h) / 2.0f;
+			break;
+		default:
+			box.x = b->x + (b->w - box.w) / 2.0f;
+			box.y = bar->y + bar->h + 6 * s;
+			break;
+	}
+	box.x = SDL_clamp(box.x, 4 * s, SDL_max(4 * s, (float)pw - box.w - 4 * s));
+	box.y = SDL_clamp(box.y, 4 * s, SDL_max(4 * s, (float)ph - box.h - 4 * s));
+	draw_panel(&box, (float)W.cfg.radius * 0.7f * s);
 	draw_label(t, &box, FALSE);
+}
+
+/* Ручка для перетягування: 2×3 крапки (на вертикальній плашці — 3×2). */
+static void draw_grip(void)
+{
+	const float s = ui_scale(), dot = SDL_max(2.0f, floorf(2 * s)), step = floorf(5 * s);
+	const SDL_FRect* g = &W.gripRect;
+	const int cols = bar_vertical() ? 3 : 2, rows = bar_vertical() ? 2 : 3;
+	const float x0 = floorf(g->x + (g->w - (float)(cols - 1) * step - dot) / 2.0f);
+	const float y0 = floorf(g->y + (g->h - (float)(rows - 1) * step - dot) / 2.0f);
+	set_color(W.cfg.colorText, W.drag == DRAG_MOVE ? 230 : 120);
+	SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
+	for (int r = 0; r < rows; r++)
+	{
+		for (int c = 0; c < cols; c++)
+		{
+			const SDL_FRect d = { x0 + (float)c * step, y0 + (float)r * step, dot, dot };
+			SDL_RenderFillRect(W.renderer, &d);
+		}
+	}
 }
 
 static void draw_bar(void)
 {
 	layout_bar();
-	set_color(W.cfg.colorSurface, 255);
+	const float s = ui_scale(), radius = (float)W.cfg.radius * s;
 	if (!bar_visible())
 	{
-		SDL_RenderFillRect(W.renderer, &W.handleRect); /* тонка плашка вгорі по центру */
-		set_color(W.cfg.colorBorder, 255);
-		SDL_RenderRect(W.renderer, &W.handleRect);
+		draw_panel(&W.handleRect, radius); /* тонка смужка біля краю */
 		return;
 	}
-	SDL_RenderFillRect(W.renderer, &W.barRect);
-	set_color(W.cfg.colorBorder, 255);
-	SDL_RenderRect(W.renderer, &W.barRect);
+	draw_panel(&W.barRect, radius);
+	draw_grip();
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
 		if (!button_shown(i))
 			continue;
 		const BOOL accent = i == BTN_DISCONNECT || (i == BTN_PIN && W.barPinned);
 		if (W.hoverButton == i || accent)
-		{
-			set_color(i == BTN_DISCONNECT ? W.cfg.colorError : W.cfg.colorAccent, W.hoverButton == i ? 90 : 40);
-			SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
-			SDL_RenderFillRect(W.renderer, &W.buttons[i]);
-		}
+			fill_round(&W.buttons[i], radius * 0.6f, i == BTN_DISCONNECT ? W.cfg.colorError : W.cfg.colorAccent,
+			           W.hoverButton == i ? 90 : 40);
 		SDL_Texture* icon = button_icon(i);
 		if (icon)
 			draw_icon(icon, &W.buttons[i],
@@ -477,15 +642,13 @@ static void draw_bar(void)
 		else
 			draw_label(button_label(i), &W.buttons[i], FALSE);
 	}
-	/* Назва ПК — між «Закріпити» і правими кнопками. */
-	const float s = ui_scale();
-	const float nameX = W.buttons[BTN_PIN].x + W.buttons[BTN_PIN].w + 12 * s;
-	SDL_FRect name = { nameX, 0, W.titleRight - nameX - 8 * s, W.barRect.h };
-	if (name.w > 0 && W.labels[BTN_COUNT])
+	/* Назва ПК — між «Закріпити» і правими кнопками, якщо вміщається. */
+	const SDL_FRect* name = &W.titleRect;
+	if (name->w > 0 && W.labels[BTN_COUNT])
 	{
-		SDL_Rect clip = { (int)name.x, (int)name.y, (int)name.w, (int)name.h };
+		SDL_Rect clip = { (int)name->x, (int)name->y, (int)name->w, (int)name->h };
 		SDL_SetRenderClipRect(W.renderer, &clip);
-		draw_label(W.labels[BTN_COUNT], &name, TRUE);
+		draw_label(W.labels[BTN_COUNT], name, TRUE);
 		SDL_SetRenderClipRect(W.renderer, NULL);
 	}
 	draw_tooltip();
@@ -507,10 +670,8 @@ static void draw_reconnecting(void)
 	SDL_GetTextureSize(W.reconnectLabel, &tw, &th);
 	const SDL_FRect box = { floorf(((float)pw - tw) / 2.0f - 20 * s), floorf(((float)ph - th) / 2.0f - 12 * s),
 		                    tw + 40 * s, th + 24 * s };
-	set_color(W.cfg.colorSurface, 255);
-	SDL_RenderFillRect(W.renderer, &box);
-	set_color(W.cfg.colorAccent, 255);
-	SDL_RenderRect(W.renderer, &box);
+	fill_round(&box, (float)W.cfg.radius * s, W.cfg.colorSurface, 255);
+	stroke_round(&box, (float)W.cfg.radius * s, W.cfg.colorAccent);
 	draw_label(W.reconnectLabel, &box, FALSE);
 }
 
@@ -740,13 +901,87 @@ static BOOL in_rect(const SDL_FRect* r, float px, float py)
 	return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
 }
 
-/* Плашка вгорі по центру: повертає TRUE, якщо подія миші — її (на ПК не йде). */
-static BOOL bar_mouse(float x, float y, BOOL click)
+static void set_cursor(SDL_SystemCursor c)
+{
+	if (W.cursorShown == c)
+		return;
+	if (!W.cursors[c])
+		W.cursors[c] = SDL_CreateSystemCursor(c);
+	if (W.cursors[c])
+		SDL_SetCursor(W.cursors[c]);
+	W.cursorShown = c;
+}
+
+/* Поле на кінці плашки (за нього змінюють довжину): -1 — початок, 1 — кінець, 0 — ні. */
+static int resize_end(float px, float py)
+{
+	if (!in_rect(&W.barRect, px, py))
+		return 0;
+	const float pad = BAR_PAD * ui_scale();
+	const float along = bar_vertical() ? py : px;
+	const float start = bar_vertical() ? W.barRect.y : W.barRect.x;
+	const float len = bar_vertical() ? W.barRect.h : W.barRect.w;
+	return along < start + pad ? -1 : along >= start + len - pad ? 1 : 0;
+}
+
+/* Перетягування: плашка липне до найближчого краю вікна, центр — під мишею. */
+static void drag_move(float px, float py)
+{
+	int pw = 0, ph = 0;
+	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	if (pw <= 0 || ph <= 0)
+		return;
+	const float d[4] = { py, (float)ph - py, px, (float)pw - px }; /* до верху, низу, лівого, правого */
+	int edge = EDGE_TOP;
+	for (int i = 1; i < 4; i++)
+	{
+		if (d[i] < d[edge])
+			edge = i;
+	}
+	W.barEdge = edge;
+	W.barPos = SDL_clamp(bar_vertical() ? py / (float)ph : px / (float)pw, 0.0f, 1.0f);
+}
+
+/* Зміна довжини: плашка росте в обидва боки від центру. */
+static void drag_resize(float px, float py)
+{
+	const float along = bar_vertical() ? py : px;
+	const float len = W.dragLen + 2.0f * W.dragSign * (along - W.dragFrom);
+	W.barLen = SDL_max(0.0f, len) / ui_scale();
+}
+
+/* Плашку відпустили — застосунок запам'ятає, де вона. */
+static void drag_end(void)
+{
+	if (W.drag == DRAG_RESIZE)
+	{
+		layout_bar(); /* запам'ятовуємо довжину, що реально вмістилась */
+		W.barLen = (bar_vertical() ? W.barRect.h : W.barRect.w) / ui_scale();
+	}
+	W.drag = DRAG_NONE;
+	if (W.host.barMoved)
+		W.host.barMoved(W.host.ctx, W.barEdge, (int)(W.barPos * 10000.0f + 0.5f), (int)(W.barLen + 0.5f));
+}
+
+/* Плашка: повертає TRUE, якщо подія миші — її (на ПК не йде). [action] — MOUSE_*. */
+static BOOL bar_mouse(float x, float y, int action, Uint8 button)
 {
 	const float k = pixel_ratio();
 	const float px = x * k, py = y * k;
+	const BOOL click = action == MOUSE_DOWN;
+	if (W.drag != DRAG_NONE)
+	{
+		if (action == MOUSE_UP && button == SDL_BUTTON_LEFT)
+			drag_end();
+		else if (action == MOUSE_MOVE && W.drag == DRAG_MOVE)
+			drag_move(px, py);
+		else if (action == MOUSE_MOVE)
+			drag_resize(px, py);
+		render();
+		return TRUE;
+	}
 	layout_bar();
-	const BOOL inside = bar_visible() ? in_rect(&W.barRect, px, py) : in_rect(&W.handleRect, px, py);
+	const BOOL inside = bar_visible() ? in_rect(&W.hotRect, px, py) : in_rect(&W.handleRect, px, py);
 	const BOOL wasHover = W.barHover;
 	const int wasButton = W.hoverButton;
 	if (inside)
@@ -766,6 +1001,21 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 	{
 		W.tooltipShown = FALSE; /* натиснули — підказка знову лише після паузи */
 		W.hoverSince = SDL_GetTicks();
+	}
+	/* Курсор: на кінцях — змінити довжину, на ручці й назві — перетягнути. */
+	const int end = bar_visible() ? resize_end(px, py) : 0;
+	const BOOL movable = bar_visible() && W.hoverButton == BTN_NONE && in_rect(&W.barRect, px, py) && !end;
+	set_cursor(end ? (bar_vertical() ? SDL_SYSTEM_CURSOR_NS_RESIZE : SDL_SYSTEM_CURSOR_EW_RESIZE)
+	           : movable ? SDL_SYSTEM_CURSOR_MOVE
+	                     : SDL_SYSTEM_CURSOR_DEFAULT);
+	if (click && button == SDL_BUTTON_LEFT && (end || movable))
+	{
+		W.drag = end ? DRAG_RESIZE : DRAG_MOVE;
+		W.dragFrom = bar_vertical() ? py : px;
+		W.dragLen = bar_vertical() ? W.barRect.h : W.barRect.w;
+		W.dragSign = (float)end;
+		render();
+		return TRUE;
 	}
 	if (click && inside)
 	{
@@ -792,13 +1042,13 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 	}
 	if (wasHover != W.barHover || wasButton != W.hoverButton || click)
 		render();
-	return bar_visible() && in_rect(&W.barRect, px, py);
+	return bar_visible() && in_rect(&W.hotRect, px, py);
 }
 
 /* Час сховати плашку настав (мишу прибрали кілька секунд тому). */
 static void hide_bar_if_due(void)
 {
-	if (!W.barHideAt || SDL_GetTicks() < W.barHideAt)
+	if (!W.barHideAt || SDL_GetTicks() < W.barHideAt || W.drag != DRAG_NONE)
 		return;
 	W.barHideAt = 0;
 	W.barHover = FALSE;
@@ -828,7 +1078,7 @@ static void on_key(const SDL_KeyboardEvent* e)
 
 static void on_button(const SDL_MouseButtonEvent* e)
 {
-	if (bar_mouse(e->x, e->y, e->down))
+	if (bar_mouse(e->x, e->y, e->down ? MOUSE_DOWN : MOUSE_UP, e->button))
 		return;
 	uint16_t x = 0, y = 0;
 	if (!to_remote(e->x, e->y, &x, &y))
@@ -858,7 +1108,7 @@ static void on_button(const SDL_MouseButtonEvent* e)
 
 static void on_motion(const SDL_MouseMotionEvent* e)
 {
-	if (bar_mouse(e->x, e->y, FALSE))
+	if (bar_mouse(e->x, e->y, MOUSE_MOVE, 0))
 		return;
 	uint16_t x = 0, y = 0;
 	if (to_remote(e->x, e->y, &x, &y))
@@ -888,6 +1138,10 @@ BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 	W.cfg = *cfg;
 	W.host = *host;
 	W.hoverButton = BTN_NONE;
+	W.barEdge = SDL_clamp(cfg->barEdge, EDGE_TOP, EDGE_RIGHT);
+	W.barPos = (float)SDL_clamp(cfg->barPos, 0, 10000) / 10000.0f;
+	W.barLen = cfg->barLength > 0 ? (float)cfg->barLength : (float)BAR_W;
+	W.cursorShown = SDL_SYSTEM_CURSOR_DEFAULT;
 	init_scancodes();
 	/* Іконка вікна — з ресурсів mhrd-session.exe (mhrd-session.rc). */
 	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");
@@ -1065,6 +1319,11 @@ void window_shutdown(void)
 		SDL_DestroyTexture(W.unpinIcon);
 	if (W.fullscreenIcon)
 		SDL_DestroyTexture(W.fullscreenIcon);
+	for (int i = 0; i < SDL_SYSTEM_CURSOR_COUNT; i++)
+	{
+		if (W.cursors[i])
+			SDL_DestroyCursor(W.cursors[i]);
+	}
 	if (W.iconFont)
 		TTF_CloseFont(W.iconFont);
 	if (W.font)

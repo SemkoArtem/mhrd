@@ -7,10 +7,12 @@ import '../models/connection.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
 import 'rdp_session.dart';
+import 'route_health.dart';
 import 'session_log.dart';
 import 'tunnel.dart';
 
 export 'rdp_session.dart' show RdpSession, SessionState;
+export 'route_health.dart' show HealthState, ProxyError, RouteHealth, RouteStatus;
 export 'session_log.dart' show SessionLog;
 export 'tunnel.dart' show TunnelError, TunnelException;
 
@@ -60,6 +62,9 @@ class SessionManager extends ChangeNotifier {
         _tunnelFactory = tunnelFactory ?? TunnelProcess.start;
 
   final Repository repo;
+
+  /// Стан тунелів і проксі для лівої панелі (перевірки запускає main).
+  late final RouteHealth health = RouteHealth(repo, tunnelPath: tunnelPath, tunnelFactory: _tunnelFactory);
 
   /// Шлях до `mhrd-tunnel` (WireGuard); null — модуля тунелів немає.
   final String? tunnelPath;
@@ -149,11 +154,7 @@ class SessionManager extends ChangeNotifier {
         final t = repo.tunnels[c.routeRefId];
         if (t == null) throw const RouteException(RouteError.tunnelMissing);
         if (t.type != TunnelType.wireguard) throw const RouteException(RouteError.tunnelUnsupported);
-        final wg = <String, Object?>{...t.config}..remove('extraPeersIgnored');
-        for (final f in t.secretFields) {
-          wg[f] = await repo.secrets.read(t.secretKey(f)) ?? '';
-        }
-        return {'type': 'wireguard', 'target': target, 'wireguard': wg};
+        return {'type': 'wireguard', 'target': target, 'wireguard': await repo.wireGuardConfig(t)};
       case RouteKind.direct:
       case RouteKind.proxy:
         return null;
@@ -218,6 +219,8 @@ class SessionManager extends ChangeNotifier {
       swapMouseButtons: c.swapMouseButtons,
     );
     sessions.add(s);
+    s.onBarMoved = (e) => repo.updateSettings(repo.settings.copyWith(
+        bar: BarPlacement(edge: BarEdge.values[e.edge.clamp(0, 3)], pos: e.pos, length: e.length)));
     s.start({
       'host': host,
       'port': port,
@@ -240,7 +243,7 @@ class SessionManager extends ChangeNotifier {
         for (final f in c.devices.folders) {'name': f.name, 'path': f.path, 'access': f.access.name},
       ],
       ...route,
-      if (window != null) ...{'nativeWindow': true, ...window},
+      if (window != null) ...{'nativeWindow': true, 'bar': repo.settings.bar.toJson(), ...window},
     });
     final log = this.log;
     if (log != null) s.done.then((_) => log.write(s));

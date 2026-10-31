@@ -22,6 +22,8 @@ typedef struct
 	void (*wheel)(void* ctx, int delta, BOOL horizontal, uint16_t x, uint16_t y);
 	void (*resize)(void* ctx, uint32_t width, uint32_t height);
 	void (*close)(void* ctx); /* користувач закрив вікно / «Відключитись» */
+	/* Плашку перетягнули або змінили довжину (див. barEdge/barPos/barLength). */
+	void (*barMoved)(void* ctx, int edge, int pos, int length);
 } WindowHost;
 
 /* Налаштування з MSG_CONNECT. Рядки належать викликачу до window_run включно. */
@@ -48,6 +50,9 @@ typedef struct
 	int keyboardCapture; /* 0 — лише на весь екран, 1 — завжди, 2 — ніколи */
 	int resizeMode;      /* 0 — змінювати роздільність, 1 — масштабувати, 2 — без змін */
 	BOOL swapMouseButtons;
+	/* Плашка: край вікна (0 верх, 1 низ, 2 ліво, 3 право), центр уздовж краю (0..10000),
+	 * довжина в одиницях інтерфейсу (0 — типова); радіус заокруглення, як у темі MHRD. */
+	int barEdge, barPos, barLength, radius;
 } WindowConfig;
 
 BOOL window_init(const WindowConfig* cfg, const WindowHost* host);

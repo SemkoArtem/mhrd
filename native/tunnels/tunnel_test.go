@@ -59,21 +59,20 @@ func roundTrip(t *testing.T, d dialer, target string) {
 	}
 }
 
-// Сервер WireGuard на loopback (теж netstack) з ехо-сервісом на 10.9.0.1:3389; клієнт —
-// наш startWireGuard із конфігом, як після імпорту .conf.
-func TestWireGuardThroughNetstack(t *testing.T) {
+// Сервер WireGuard на loopback (теж netstack) з ехо-сервісом на 10.9.0.1:3389, що знає клієнта
+// з ключем cPub. Повертає публічний ключ і UDP-порт сервера.
+func wgServer(t *testing.T, cPub []byte) (sPub []byte, port int) {
 	sPriv, sPub := wgKeys(t)
-	cPriv, cPub := wgKeys(t)
 
 	sTun, sNet, err := netstack.CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.9.0.1")}, nil, 1420)
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := device.NewDevice(sTun, conn.NewDefaultBind(), device.NewLogger(device.LogLevelSilent, ""))
-	defer server.Close()
+	t.Cleanup(server.Close)
 	// Порт сервера — вільний UDP на loopback.
 	probe, _ := net.ListenPacket("udp4", "127.0.0.1:0")
-	port := probe.LocalAddr().(*net.UDPAddr).Port
+	port = probe.LocalAddr().(*net.UDPAddr).Port
 	probe.Close()
 	cfg := fmt.Sprintf("private_key=%x\nlisten_port=%d\npublic_key=%x\nallowed_ip=10.9.0.2/32\n", sPriv, port, cPub)
 	if err := server.IpcSet(cfg); err != nil {
@@ -85,8 +84,11 @@ func TestWireGuardThroughNetstack(t *testing.T) {
 		t.Fatal(err)
 	}
 	go echo(ln)
+	return sPub, port
+}
 
-	d, err := startWireGuard(&wireGuardConf{
+func clientConf(cPriv, sPub []byte, port int) *wireGuardConf {
+	return &wireGuardConf{
 		PrivateKey:    base64.StdEncoding.EncodeToString(cPriv),
 		Addresses:     []string{"10.9.0.2/24"},
 		MTU:           1420,
@@ -94,10 +96,41 @@ func TestWireGuardThroughNetstack(t *testing.T) {
 		Endpoint:      fmt.Sprintf("localhost:%d", port), // ім'я — перевіряємо й резолв
 		AllowedIPs:    []string{"10.9.0.0/24"},
 		Keepalive:     25,
-	})
+	}
+}
+
+// Клієнт — наш startWireGuard із конфігом, як після імпорту .conf.
+func TestWireGuardThroughNetstack(t *testing.T) {
+	cPriv, cPub := wgKeys(t)
+	sPub, port := wgServer(t, cPub)
+	d, err := startWireGuard(clientConf(cPriv, sPub, port))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer d.Close()
 	roundTrip(t, d, "10.9.0.1:3389")
+}
+
+// Перевірка стану: сервер, що знає клієнта, відповідає на рукостискання; чужий — ні.
+func TestWireGuardHandshakeCheck(t *testing.T) {
+	cPriv, cPub := wgKeys(t)
+	sPub, port := wgServer(t, cPub)
+	d, err := startWireGuard(clientConf(cPriv, sPub, port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if _, err := d.(*wgDialer).waitHandshake(10 * time.Second); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+
+	stranger, _ := wgKeys(t)
+	d2, err := startWireGuard(clientConf(stranger, sPub, port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d2.Close()
+	if _, err := d2.(*wgDialer).waitHandshake(2 * time.Second); err == nil {
+		t.Fatal("handshake with unknown client key should fail")
+	}
 }

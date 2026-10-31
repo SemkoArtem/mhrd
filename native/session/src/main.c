@@ -750,6 +750,11 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.keyboardCapture = jint(j, "keyboardCapture", 0);
 		m->win.resizeMode = jint(j, "resizeMode", 0);
 		m->win.swapMouseButtons = jbool(j, "swapMouse", FALSE);
+		const cJSON* bar = cJSON_GetObjectItemCaseSensitive(j, "bar");
+		m->win.barEdge = jint(bar, "edge", 0);
+		m->win.barPos = jint(bar, "pos", 5000);
+		m->win.barLength = jint(bar, "length", 0);
+		m->win.radius = jint(j, "radius", 8);
 	}
 out:
 	wipe_string(j, "password");
@@ -836,6 +841,14 @@ static void host_close(void* ctx)
 	MhrdContext* m = (MhrdContext*)ctx;
 	m->userDisconnect = TRUE;
 	freerdp_abort_connect_context(&m->common.context);
+}
+
+/* Плашку перетягнули чи змінили її довжину — застосунок запам'ятає для наступних сеансів. */
+static void host_bar_moved(void* ctx, int edge, int pos, int length)
+{
+	WINPR_UNUSED(ctx);
+	uint8_t buf[5] = { (uint8_t)edge, (uint8_t)pos, (uint8_t)(pos >> 8), (uint8_t)length, (uint8_t)(length >> 8) };
+	proto_send(EVT_BAR, buf, sizeof(buf));
 }
 
 /* Повідомлення від застосунку (режим без вікна — увесь ввід; з вікном — лише керування). */
@@ -1052,7 +1065,7 @@ int main(void)
 	{
 		/* Вікно — у головному потоці (вимога SDL), FreeRDP — у своєму. */
 		const WindowHost host = { m, host_lock, host_unlock, host_buffer, host_key,
-			                      host_mouse, host_wheel, host_resize, host_close };
+			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved };
 		if (window_init(&m->win, &host))
 		{
 			HANDLE t = CreateThread(NULL, 0, rdp_thread, m, 0, NULL);
