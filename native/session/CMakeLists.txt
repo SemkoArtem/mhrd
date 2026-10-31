@@ -13,7 +13,13 @@ find_package(FreeRDP CONFIG REQUIRED)
 find_package(WinPR CONFIG REQUIRED)
 find_package(cJSON CONFIG REQUIRED)
 
-add_executable(mhrd-session src/main.c src/proto.c src/shm.c)
+if(WIN32)
+  set(MHRD_CLIPBOARD src/clipboard_win.c)
+else()
+  set(MHRD_CLIPBOARD src/clipboard_stub.c)
+endif()
+
+add_executable(mhrd-session src/main.c src/proto.c src/shm.c ${MHRD_CLIPBOARD})
 target_link_libraries(mhrd-session PRIVATE freerdp-client freerdp winpr cjson)
 
 if(MSVC)

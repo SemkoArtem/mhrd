@@ -358,6 +358,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get certAccept => 'Довіряти й підключитись';
 
   @override
+  String get certRemember => 'Запам\'ятати для цього ПК і більше не питати';
+
+  @override
   String credPromptTitle(String name) {
     return 'Вхід на $name';
   }

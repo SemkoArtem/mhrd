@@ -83,6 +83,10 @@ class SessionManager extends ChangeNotifier {
       'adminSession': c.adminSession,
       'reconnect': c.reconnectOnDrop,
       'certPin': c.certPin,
+      // Пристрої (SPEC → «Перенаправлення пристроїв»)
+      'clipboard': c.devices.clipboard,
+      'sound': c.devices.sound.name, // local | remote | off
+      'microphone': c.devices.microphone,
     });
     notifyListeners();
     return s;

@@ -64,15 +64,16 @@ class _SessionScreenState extends State<SessionScreen> {
 
   Future<void> _askCertificate(CertificateEvent cert) async {
     _certDialogOpen = true;
-    final ok = await showDialog<bool>(
+    final r = await showDialog<(bool, bool)>(
       context: context,
       barrierDismissible: false,
-      builder: (c) => _CertificateDialog(cert: cert),
+      builder: (c) => _CertificateDialog(cert: cert, canRemember: _manager.repo.connections.containsKey(s.connection.id)),
     );
     _certDialogOpen = false;
     if (!mounted) return;
-    if (ok == true) _manager.trustCertificate(s, cert.fingerprint);
-    s.answerCertificate(ok == true);
+    final (accept, remember) = r ?? (false, false);
+    if (accept && remember) _manager.trustCertificate(s, cert.fingerprint);
+    s.answerCertificate(accept);
     _focus.requestFocus();
   }
 
@@ -302,12 +303,24 @@ class _Message extends StatelessWidget {
 }
 
 /// «Довіряти сертифікату?» — для зміненого сертифіката червоне попередження й без тихої згоди.
-class _CertificateDialog extends StatelessWidget {
-  const _CertificateDialog({required this.cert});
+/// Повертає (довіряти, запам'ятати).
+class _CertificateDialog extends StatefulWidget {
+  const _CertificateDialog({required this.cert, required this.canRemember});
   final CertificateEvent cert;
+
+  /// ПК збережено в списку — є де запам'ятати відбиток.
+  final bool canRemember;
+
+  @override
+  State<_CertificateDialog> createState() => _CertificateDialogState();
+}
+
+class _CertificateDialogState extends State<_CertificateDialog> {
+  bool _remember = true;
 
   @override
   Widget build(BuildContext context) {
+    final cert = widget.cert;
     final t = context.mhrd;
     final l = context.l10n;
     Widget row(String label, String value) => Padding(
@@ -341,14 +354,25 @@ class _CertificateDialog extends StatelessWidget {
             row(l.certSubject, cert.subject),
             row(l.certIssuer, cert.issuer),
             row(l.certFingerprint, cert.fingerprint),
+            if (widget.canRemember)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _remember,
+                  title: Text(l.certRemember),
+                  onChanged: (v) => setState(() => _remember = v ?? false),
+                ),
+              ),
           ]),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l.certReject)),
+        TextButton(onPressed: () => Navigator.pop(context, (false, false)), child: Text(l.certReject)),
         FilledButton(
           style: cert.changed ? FilledButton.styleFrom(backgroundColor: t.error, foregroundColor: t.background) : null,
-          onPressed: () => Navigator.pop(context, true),
+          onPressed: () => Navigator.pop(context, (true, widget.canRemember && _remember)),
           child: Text(l.certAccept),
         ),
       ],

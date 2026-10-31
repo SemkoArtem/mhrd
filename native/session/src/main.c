@@ -11,8 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <freerdp/addin.h>
+#include <freerdp/channels/cliprdr.h>
 #include <freerdp/client.h>
+#include <freerdp/client/channels.h>
+#include <freerdp/client/cmdline.h>
 #include <freerdp/error.h>
+#include <freerdp/event.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/input.h>
@@ -24,6 +29,7 @@
 
 #include <cjson/cJSON.h>
 
+#include "clipboard.h"
 #include "proto.h"
 #include "shm.h"
 
@@ -35,6 +41,7 @@ typedef struct
 	BOOL noCredentials;     /* пароля немає — застосунок має спитати сам */
 	BOOL userDisconnect;    /* застосунок попросив відключитись */
 	ShmBuffer shm;
+	MhrdClipboard* clipboard; /* NULL — буфер обміну для цього ПК вимкнено */
 } MhrdContext;
 
 /* ── Події до застосунку ───────────────────────────────────────── */
@@ -192,15 +199,40 @@ static BOOL mhrd_desktop_resize(rdpContext* ctx)
 	                     freerdp_settings_get_uint32(s, FreeRDP_DesktopHeight), TRUE);
 }
 
+/* Звук і мікрофон канали обслуговують самі; нам потрібен лише буфер обміну. */
+static void mhrd_channel_connected(void* context, const ChannelConnectedEventArgs* e)
+{
+	MhrdContext* m = (MhrdContext*)context;
+	if (m->clipboard && strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
+		clipboard_attach(m->clipboard, (CliprdrClientContext*)e->pInterface);
+}
+
+static void mhrd_channel_disconnected(void* context, const ChannelDisconnectedEventArgs* e)
+{
+	MhrdContext* m = (MhrdContext*)context;
+	if (m->clipboard && strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
+		clipboard_detach(m->clipboard);
+}
+
 static BOOL mhrd_pre_connect(freerdp* instance)
 {
-	rdpSettings* s = instance->context->settings;
-	/* Без каналів на етапі 2: класичні оновлення картинки, без GFX. */
+	rdpContext* ctx = instance->context;
+	rdpSettings* s = ctx->settings;
+	/* Картинка — класичними оновленнями, без GFX (GFX і кодеки — пізніше). */
 	freerdp_settings_set_bool(s, FreeRDP_SupportGraphicsPipeline, FALSE);
-	freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
 	freerdp_settings_set_uint32(s, FreeRDP_OsMajorType, OSMAJORTYPE_WINDOWS);
 	freerdp_settings_set_uint32(s, FreeRDP_OsMinorType, OSMINORTYPE_WINDOWS_NT);
-	return TRUE;
+
+	MhrdContext* m = (MhrdContext*)ctx;
+	if (freerdp_settings_get_bool(s, FreeRDP_RedirectClipboard))
+		m->clipboard = clipboard_new();
+	if (!m->clipboard)
+		freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, FALSE);
+
+	PubSub_SubscribeChannelConnected(ctx->pubSub, mhrd_channel_connected);
+	PubSub_SubscribeChannelDisconnected(ctx->pubSub, mhrd_channel_disconnected);
+	/* Канали за налаштуваннями: cliprdr (буфер), rdpsnd (звук), audin (мікрофон). */
+	return freerdp_client_load_addins(ctx->channels, s);
 }
 
 static BOOL mhrd_post_connect(freerdp* instance)
@@ -322,6 +354,8 @@ static void mhrd_client_free(freerdp* instance, rdpContext* context)
 	MhrdContext* m = (MhrdContext*)context;
 	free(m->certPin);
 	m->certPin = NULL;
+	clipboard_free(m->clipboard);
+	m->clipboard = NULL;
 	shm_free(&m->shm);
 }
 
@@ -379,7 +413,16 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_uint32(s, FreeRDP_DesktopHeight, (UINT32)jint(j, "height", 800)) &&
 	     freerdp_settings_set_uint32(s, FreeRDP_ColorDepth, (UINT32)jint(j, "colorDepth", 32)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_ConsoleSession, jbool(j, "adminSession", FALSE)) &&
-	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE));
+	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE)) &&
+	     freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, jbool(j, "clipboard", TRUE)) &&
+	     freerdp_settings_set_bool(s, FreeRDP_AudioCapture, jbool(j, "microphone", FALSE));
+	/* Звук: "local" — тут, "remote" — на віддаленому ПК, "off" — ніде. */
+	const char* sound = jstr(j, "sound");
+	if (ok && sound && strcmp(sound, "remote") == 0)
+		ok = freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, FALSE) &&
+		     freerdp_settings_set_bool(s, FreeRDP_RemoteConsoleAudio, TRUE);
+	else if (ok)
+		ok = freerdp_settings_set_bool(s, FreeRDP_AudioPlayback, !(sound && strcmp(sound, "off") == 0));
 	/* Довіру сертифікатам пам'ятає застосунок (certPin): колбек повертає 2 («лише цей сеанс»),
 	 * тож власне сховище відомих сертифікатів FreeRDP ніколи не заповнюється. */
 	free(user);
@@ -494,6 +537,8 @@ int main(void)
 		return 1;
 	if (!proto_init())
 		return 1;
+	/* Канали FreeRDP вбудовані в цей .exe (статична збірка). */
+	freerdp_register_addin_provider(freerdp_channels_load_static_addin_entry, 0);
 
 	ProtoMsg* connect = NULL;
 	while (!connect)

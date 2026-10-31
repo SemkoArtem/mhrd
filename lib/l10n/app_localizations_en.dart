@@ -357,6 +357,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get certAccept => 'Trust and connect';
 
   @override
+  String get certRemember => 'Remember for this PC and don\'t ask again';
+
+  @override
   String credPromptTitle(String name) {
     return 'Sign in to $name';
   }

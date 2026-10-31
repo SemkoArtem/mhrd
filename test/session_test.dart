@@ -193,6 +193,8 @@ void main() {
       final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
       expect(json['certPin'], 'AB:CD');
       expect(json['width'], 800);
+      // Типові пристрої ПК: буфер увімкнено, звук тут, мікрофон вимкнено.
+      expect([json['clipboard'], json['sound'], json['microphone']], [true, 'local', false]);
     });
   });
 }

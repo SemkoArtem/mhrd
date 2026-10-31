@@ -104,6 +104,7 @@
   "certFingerprint": "Fingerprint",
   "certReject": "Don't trust",
   "certAccept": "Trust and connect",
+  "certRemember": "Remember for this PC and don't ask again",
   "credPromptTitle": "Sign in to {name}",
   "credPromptHint": "These details are used for this connection only.",
   "allPcs": "All PCs",

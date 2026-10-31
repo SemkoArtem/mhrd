@@ -122,6 +122,7 @@
   "certFingerprint": "Відбиток",
   "certReject": "Не довіряти",
   "certAccept": "Довіряти й підключитись",
+  "certRemember": "Запам'ятати для цього ПК і більше не питати",
   "credPromptTitle": "Вхід на {name}",
   "@credPromptTitle": {"placeholders": {"name": {"type": "String"}}},
   "credPromptHint": "Дані використовуються лише для цього підключення.",

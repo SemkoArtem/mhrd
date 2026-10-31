@@ -56,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _connect(Connection c, {String? credentialId, bool askPassword = false}) async {
     final l = context.l10n;
     final sessions = AppScope.of(context).sessions;
+    // Найсвіжіша версія ПК: після «Довіряти сертифікату» в ній уже є certPin.
+    c = repo.connections[c.id] ?? c;
     if (!sessions.engineAvailable) {
       toast(context, l.engineMissing);
       return;

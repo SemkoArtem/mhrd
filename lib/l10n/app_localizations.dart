@@ -686,6 +686,12 @@ abstract class AppLocalizations {
   /// **'Довіряти й підключитись'**
   String get certAccept;
 
+  /// No description provided for @certRemember.
+  ///
+  /// In uk, this message translates to:
+  /// **'Запам\'ятати для цього ПК і більше не питати'**
+  String get certRemember;
+
   /// No description provided for @credPromptTitle.
   ///
   /// In uk, this message translates to:
