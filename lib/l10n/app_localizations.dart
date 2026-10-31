@@ -560,41 +560,11 @@ abstract class AppLocalizations {
   /// **'Відкріпити панель'**
   String get unpinBar;
 
-  /// No description provided for @barPin.
-  ///
-  /// In uk, this message translates to:
-  /// **'Закріпити'**
-  String get barPin;
-
-  /// No description provided for @barUnpin.
-  ///
-  /// In uk, this message translates to:
-  /// **'Відкріпити'**
-  String get barUnpin;
-
   /// No description provided for @barMinimize.
   ///
   /// In uk, this message translates to:
   /// **'Згорнути'**
   String get barMinimize;
-
-  /// No description provided for @barWindowed.
-  ///
-  /// In uk, this message translates to:
-  /// **'У вікно'**
-  String get barWindowed;
-
-  /// No description provided for @barFullscreen.
-  ///
-  /// In uk, this message translates to:
-  /// **'На весь екран'**
-  String get barFullscreen;
-
-  /// No description provided for @barKeyboard.
-  ///
-  /// In uk, this message translates to:
-  /// **'Клавіатура'**
-  String get barKeyboard;
 
   /// No description provided for @onScreenKeyboard.
   ///
@@ -1163,38 +1133,50 @@ abstract class AppLocalizations {
   /// No description provided for @clipboardHint.
   ///
   /// In uk, this message translates to:
-  /// **'Текст і зображення в обидва боки'**
+  /// **'Текст, зображення й файли в обидва боки'**
   String get clipboardHint;
 
   /// No description provided for @microphone.
   ///
   /// In uk, this message translates to:
-  /// **'Мікрофон'**
+  /// **'Мікрофон цього пристрою — на віддалений ПК'**
   String get microphone;
+
+  /// No description provided for @microphoneHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Програми на віддаленому ПК чутимуть ваш мікрофон. Windows Server за замовчуванням це забороняє — дозволяє адміністратор сервера в груповій політиці.'**
+  String get microphoneHint;
 
   /// No description provided for @sound.
   ///
   /// In uk, this message translates to:
-  /// **'Звук'**
+  /// **'Звук віддаленого ПК'**
   String get sound;
 
   /// No description provided for @soundLocal.
   ///
   /// In uk, this message translates to:
-  /// **'На цьому пристрої'**
+  /// **'Чути тут, на цьому пристрої'**
   String get soundLocal;
 
   /// No description provided for @soundRemote.
   ///
   /// In uk, this message translates to:
-  /// **'На віддаленому ПК'**
+  /// **'Лишати на віддаленому ПК (тут не чути)'**
   String get soundRemote;
 
   /// No description provided for @soundOff.
   ///
   /// In uk, this message translates to:
-  /// **'Не відтворювати'**
+  /// **'Вимкнути'**
   String get soundOff;
+
+  /// No description provided for @soundRemoteHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Звук гратиме з колонок самого віддаленого ПК. Якщо колонок у нього немає (сервер, VPS), звуку не буде ніде.'**
+  String get soundRemoteHint;
 
   /// No description provided for @folders.
   ///

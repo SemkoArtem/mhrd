@@ -15,8 +15,10 @@
 #endif
 
 #define RESIZE_DELAY_MS 300 /* SPEC: нова роздільність — через 300 мс після останньої зміни розміру */
-#define BAR_W 720
+#define BAR_W 520
 #define BAR_H 40
+#define ICON_PX 20          /* розмір піктограм кнопок плашки */
+#define TOOLTIP_DELAY_MS 500 /* підказка кнопки — через пів секунди наведення */
 #define HANDLE_W 120
 #define HANDLE_H 8
 #define RDP_EXT 0x100 /* скан-код із префіксом E0 */
@@ -76,6 +78,16 @@ static struct
 	SDL_Texture* unpinLabel;
 	SDL_Texture* fullscreenLabel; /* BTN_FULLSCREEN у вікні; labels[BTN_FULLSCREEN] — «у вікно» */
 	float titleRight;             /* де закінчується місце для назви ПК на плашці */
+
+	/* Піктограми (білі; колір задається при малюванні). Як і з підписами: окремо «відкріпити»
+	 * і «на весь екран» (icons[BTN_FULLSCREEN] — «у вікно»). */
+	TTF_Font* iconFont;
+	SDL_Texture* icons[BTN_COUNT];
+	SDL_Texture* unpinIcon;
+	SDL_Texture* fullscreenIcon;
+
+	Uint64 hoverSince; /* коли мишу навели на поточну кнопку */
+	BOOL tooltipShown;
 } W;
 
 /* ── Клавіші: SDL_Scancode (= USB HID usage) → скан-код RDP (PC/AT, набір 1) ── */
@@ -258,8 +270,38 @@ static SDL_Texture* make_label(const char* text)
 	return t;
 }
 
+static SDL_Texture* make_icon(uint32_t codepoint)
+{
+	if (!W.iconFont || !codepoint)
+		return NULL;
+	const SDL_Color white = { 255, 255, 255, 255 };
+	SDL_Surface* s = TTF_RenderGlyph_Blended(W.iconFont, codepoint, white);
+	if (!s)
+		return NULL;
+	SDL_Texture* t = SDL_CreateTextureFromSurface(W.renderer, s);
+	SDL_DestroySurface(s);
+	return t;
+}
+
+static void load_icons(void)
+{
+	if (!W.cfg.iconFontPath || !W.cfg.iconFontPath[0])
+		return;
+	W.iconFont = TTF_OpenFont(W.cfg.iconFontPath, ICON_PX * ui_scale());
+	if (!W.iconFont)
+		return;
+	W.icons[BTN_PIN] = make_icon(W.cfg.iconPin);
+	W.unpinIcon = make_icon(W.cfg.iconUnpin);
+	W.icons[BTN_KEYBOARD] = make_icon(W.cfg.iconKeyboard);
+	W.icons[BTN_MINIMIZE] = make_icon(W.cfg.iconMinimize);
+	W.icons[BTN_FULLSCREEN] = make_icon(W.cfg.iconExitFullscreen);
+	W.fullscreenIcon = make_icon(W.cfg.iconFullscreen);
+	W.icons[BTN_DISCONNECT] = make_icon(W.cfg.iconDisconnect);
+}
+
 static void load_labels(void)
 {
+	load_icons();
 	if (!W.cfg.fontPath || !W.cfg.fontPath[0])
 		return;
 	W.font = TTF_OpenFont(W.cfg.fontPath, 14.0f * ui_scale());
@@ -285,6 +327,7 @@ static BOOL button_shown(int i)
 	return i != BTN_MINIMIZE || W.fullscreen;
 }
 
+/* Підпис кнопки — для підказки (або замість піктограми, якщо шрифту піктограм немає). */
 static SDL_Texture* button_label(int i)
 {
 	if (i == BTN_PIN && W.barPinned && W.unpinLabel)
@@ -292,6 +335,28 @@ static SDL_Texture* button_label(int i)
 	if (i == BTN_FULLSCREEN && !W.fullscreen)
 		return W.fullscreenLabel;
 	return W.labels[i];
+}
+
+static SDL_Texture* button_icon(int i)
+{
+	if (i == BTN_PIN && W.barPinned && W.unpinIcon)
+		return W.unpinIcon;
+	if (i == BTN_FULLSCREEN && !W.fullscreen)
+		return W.fullscreenIcon;
+	return W.icons[i];
+}
+
+/* Ширина кнопки: квадрат під піктограму або підпис із полями. */
+static float button_width(int i, float s)
+{
+	float tw = 0, th = 0;
+	SDL_Texture* icon = button_icon(i);
+	if (icon)
+		return ICON_PX * s + 16 * s;
+	SDL_Texture* label = button_label(i);
+	if (label)
+		SDL_GetTextureSize(label, &tw, &th);
+	return (tw > 0 ? tw : 60 * s) + 20 * s;
 }
 
 /* Розкладка плашки й кнопок у пікселях вікна. */
@@ -305,7 +370,7 @@ static void layout_bar(void)
 	W.handleRect = (SDL_FRect){ ((float)pw - HANDLE_W * s) / 2.0f, 0, HANDLE_W * s, HANDLE_H * s };
 	/* Справа наліво: «Відключитись», «На весь екран»/«У вікно», «Згорнути», «Клавіатура»;
 	 * зліва — «Закріпити», між ними — назва ПК. */
-	float x = W.barRect.x + W.barRect.w - 8 * s;
+	float x = W.barRect.x + W.barRect.w - 6 * s;
 	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD };
 	for (size_t i = 0; i < SDL_arraysize(order); i++)
 	{
@@ -314,21 +379,13 @@ static void layout_bar(void)
 			W.buttons[order[i]] = (SDL_FRect){ 0, 0, 0, 0 };
 			continue;
 		}
-		float tw = 0, th = 0;
-		SDL_Texture* t = button_label(order[i]);
-		if (t)
-			SDL_GetTextureSize(t, &tw, &th);
-		const float w = (tw > 0 ? tw : 60 * s) + 20 * s;
+		const float w = button_width(order[i], s);
 		x -= w;
-		W.buttons[order[i]] = (SDL_FRect){ x, 6 * s, w, bh - 12 * s };
-		x -= 4 * s;
+		W.buttons[order[i]] = (SDL_FRect){ x, 4 * s, w, bh - 8 * s };
+		x -= 2 * s;
 	}
 	W.titleRight = x;
-	float tw = 0, th = 0;
-	SDL_Texture* pin = button_label(BTN_PIN);
-	if (pin)
-		SDL_GetTextureSize(pin, &tw, &th);
-	W.buttons[BTN_PIN] = (SDL_FRect){ W.barRect.x + 8 * s, 6 * s, (tw > 0 ? tw : 60 * s) + 20 * s, bh - 12 * s };
+	W.buttons[BTN_PIN] = (SDL_FRect){ W.barRect.x + 6 * s, 4 * s, button_width(BTN_PIN, s), bh - 8 * s };
 }
 
 static void draw_label(SDL_Texture* t, const SDL_FRect* box, BOOL left)
@@ -339,6 +396,38 @@ static void draw_label(SDL_Texture* t, const SDL_FRect* box, BOOL left)
 	SDL_GetTextureSize(t, &tw, &th);
 	const SDL_FRect dst = { left ? box->x : box->x + (box->w - tw) / 2.0f, box->y + (box->h - th) / 2.0f, tw, th };
 	SDL_RenderTexture(W.renderer, t, NULL, &dst);
+}
+
+static void draw_icon(SDL_Texture* t, const SDL_FRect* box, uint32_t rgb)
+{
+	float tw = 0, th = 0;
+	SDL_GetTextureSize(t, &tw, &th);
+	SDL_SetTextureColorMod(t, (Uint8)(rgb >> 16), (Uint8)(rgb >> 8), (Uint8)rgb);
+	const SDL_FRect dst = { floorf(box->x + (box->w - tw) / 2.0f), floorf(box->y + (box->h - th) / 2.0f), tw, th };
+	SDL_RenderTexture(W.renderer, t, NULL, &dst);
+}
+
+/* Підказка під кнопкою, на яку мишу навели щонайменше пів секунди. */
+static void draw_tooltip(void)
+{
+	if (!W.tooltipShown || W.hoverButton == BTN_NONE || !bar_visible())
+		return;
+	SDL_Texture* t = button_label(W.hoverButton);
+	if (!t)
+		return;
+	int pw = 0, ph = 0;
+	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	const float s = ui_scale();
+	float tw = 0, th = 0;
+	SDL_GetTextureSize(t, &tw, &th);
+	const SDL_FRect* b = &W.buttons[W.hoverButton];
+	SDL_FRect box = { 0, W.barRect.y + W.barRect.h + 6 * s, tw + 16 * s, th + 10 * s };
+	box.x = SDL_clamp(b->x + (b->w - box.w) / 2.0f, 4 * s, (float)pw - box.w - 4 * s);
+	set_color(W.cfg.colorSurface, 255);
+	SDL_RenderFillRect(W.renderer, &box);
+	set_color(W.cfg.colorBorder, 255);
+	SDL_RenderRect(W.renderer, &box);
+	draw_label(t, &box, FALSE);
 }
 
 static void draw_bar(void)
@@ -366,7 +455,14 @@ static void draw_bar(void)
 			SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
 			SDL_RenderFillRect(W.renderer, &W.buttons[i]);
 		}
-		draw_label(button_label(i), &W.buttons[i], FALSE);
+		SDL_Texture* icon = button_icon(i);
+		if (icon)
+			draw_icon(icon, &W.buttons[i],
+			          i == BTN_DISCONNECT                ? W.cfg.colorError
+			          : i == BTN_PIN && W.barPinned ? W.cfg.colorAccent
+			                                        : W.cfg.colorText);
+		else
+			draw_label(button_label(i), &W.buttons[i], FALSE);
 	}
 	/* Назва ПК — між «Закріпити» і правими кнопками. */
 	const float s = ui_scale();
@@ -379,6 +475,7 @@ static void draw_bar(void)
 		draw_label(W.labels[BTN_COUNT], &name, TRUE);
 		SDL_SetRenderClipRect(W.renderer, NULL);
 	}
+	draw_tooltip();
 }
 
 static void render(void)
@@ -615,6 +712,16 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 	const int wasButton = W.hoverButton;
 	W.barHover = over || (W.barHover && in_rect(&W.barRect, px, py));
 	W.hoverButton = W.barHover ? hit_button(px, py) : BTN_NONE;
+	if (W.hoverButton != wasButton)
+	{
+		W.hoverSince = SDL_GetTicks();
+		W.tooltipShown = FALSE;
+	}
+	if (click)
+	{
+		W.tooltipShown = FALSE; /* натиснули — підказка знову лише після паузи */
+		W.hoverSince = SDL_GetTicks();
+	}
 	if (click && W.barHover)
 	{
 		switch (W.hoverButton)
@@ -745,10 +852,14 @@ void window_run(void)
 	{
 		SDL_Event e;
 		Sint32 timeout = 100;
+		const Uint64 now = SDL_GetTicks();
 		if (W.resizeAt)
-		{
-			const Uint64 now = SDL_GetTicks();
 			timeout = W.resizeAt > now ? (Sint32)(W.resizeAt - now) : 0;
+		const BOOL tooltipPending = W.hoverButton != BTN_NONE && !W.tooltipShown;
+		if (tooltipPending)
+		{
+			const Uint64 at = W.hoverSince + TOOLTIP_DELAY_MS;
+			timeout = SDL_min(timeout, at > now ? (Sint32)(at - now) : 0);
 		}
 		BOOL got = SDL_WaitEventTimeout(&e, timeout);
 		while (got)
@@ -856,6 +967,12 @@ void window_run(void)
 		}
 		if (W.resizeAt && SDL_GetTicks() >= W.resizeAt && W.window)
 			request_resize_now();
+		if (W.window && W.hoverButton != BTN_NONE && !W.tooltipShown &&
+		    SDL_GetTicks() >= W.hoverSince + TOOLTIP_DELAY_MS)
+		{
+			W.tooltipShown = TRUE;
+			render();
+		}
 	}
 }
 
@@ -870,6 +987,17 @@ void window_shutdown(void)
 		SDL_DestroyTexture(W.unpinLabel);
 	if (W.fullscreenLabel)
 		SDL_DestroyTexture(W.fullscreenLabel);
+	for (int i = 0; i < BTN_COUNT; i++)
+	{
+		if (W.icons[i])
+			SDL_DestroyTexture(W.icons[i]);
+	}
+	if (W.unpinIcon)
+		SDL_DestroyTexture(W.unpinIcon);
+	if (W.fullscreenIcon)
+		SDL_DestroyTexture(W.fullscreenIcon);
+	if (W.iconFont)
+		TTF_CloseFont(W.iconFont);
 	if (W.font)
 		TTF_CloseFont(W.font);
 	if (W.texture)

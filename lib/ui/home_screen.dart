@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import '../app.dart';
@@ -111,7 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final k = fullscreen ? 1.0 : 0.8;
     int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
     int rgb(Color color) => color.toARGB32() & 0xFFFFFF;
-    final exe = sessions.enginePath!;
+    final assets = p.join(p.dirname(sessions.enginePath!), 'data', 'flutter_assets');
     toast(context, l.connectingTo(c.address));
     return sessions.start(
       c,
@@ -123,20 +124,30 @@ class _HomeScreenState extends State<HomeScreen> {
       window: {
         'title': '${c.displayName} — MHRD',
         // Шрифт плашки — той самий, що в застосунку (лежить поруч у flutter_assets).
-        'fontPath': '${File(exe).parent.path}${Platform.pathSeparator}data${Platform.pathSeparator}'
-            'flutter_assets${Platform.pathSeparator}assets${Platform.pathSeparator}fonts'
-            '${Platform.pathSeparator}IBMPlexSans-Medium.ttf',
+        'fontPath': p.join(assets, 'assets', 'fonts', 'IBMPlexSans-Medium.ttf'),
+        // Підказки кнопок плашки (через пів секунди наведення) і пункти системного меню вікна.
         'labels': {
-          'pin': l.barPin,
-          'unpin': l.barUnpin,
+          'pin': l.pinBar,
+          'unpin': l.unpinBar,
           'minimize': l.barMinimize,
-          'exitFullscreen': l.barWindowed,
-          'fullscreen': l.barFullscreen,
-          'keyboard': l.barKeyboard,
+          'exitFullscreen': l.exitFullscreen,
+          'fullscreen': l.fullscreen,
+          'keyboard': l.onScreenKeyboard,
           'disconnect': l.disconnectAction,
-          // Системне меню вікна (клік по іконці в заголовку)
-          'menuFullscreen': '${l.barFullscreen}\tCtrl+Alt+Enter',
+          'menuFullscreen': l.fullscreen,
           'menuKeyboard': l.onScreenKeyboard,
+        },
+        // Піктограми кнопок — зі шрифту Material Icons, який Flutter кладе поруч. Посилання на
+        // Icons.* тут потрібні ще й тому, що збірка лишає у шрифті лише використані піктограми.
+        'iconFontPath': p.join(assets, 'fonts', 'MaterialIcons-Regular.otf'),
+        'icons': {
+          'pin': Icons.push_pin_outlined.codePoint,
+          'unpin': Icons.push_pin.codePoint,
+          'keyboard': Icons.keyboard.codePoint,
+          'minimize': Icons.minimize.codePoint,
+          'fullscreen': Icons.fullscreen.codePoint,
+          'exitFullscreen': Icons.fullscreen_exit.codePoint,
+          'disconnect': Icons.power_settings_new.codePoint,
         },
         'colors': {
           'surface': rgb(t.surface),

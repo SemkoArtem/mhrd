@@ -284,22 +284,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unpinBar => 'Відкріпити панель';
 
   @override
-  String get barPin => 'Закріпити';
-
-  @override
-  String get barUnpin => 'Відкріпити';
-
-  @override
   String get barMinimize => 'Згорнути';
-
-  @override
-  String get barWindowed => 'У вікно';
-
-  @override
-  String get barFullscreen => 'На весь екран';
-
-  @override
-  String get barKeyboard => 'Клавіатура';
 
   @override
   String get onScreenKeyboard => 'Екранна клавіатура';
@@ -602,22 +587,30 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clipboard => 'Буфер обміну';
 
   @override
-  String get clipboardHint => 'Текст і зображення в обидва боки';
+  String get clipboardHint => 'Текст, зображення й файли в обидва боки';
 
   @override
-  String get microphone => 'Мікрофон';
+  String get microphone => 'Мікрофон цього пристрою — на віддалений ПК';
 
   @override
-  String get sound => 'Звук';
+  String get microphoneHint =>
+      'Програми на віддаленому ПК чутимуть ваш мікрофон. Windows Server за замовчуванням це забороняє — дозволяє адміністратор сервера в груповій політиці.';
 
   @override
-  String get soundLocal => 'На цьому пристрої';
+  String get sound => 'Звук віддаленого ПК';
 
   @override
-  String get soundRemote => 'На віддаленому ПК';
+  String get soundLocal => 'Чути тут, на цьому пристрої';
 
   @override
-  String get soundOff => 'Не відтворювати';
+  String get soundRemote => 'Лишати на віддаленому ПК (тут не чути)';
+
+  @override
+  String get soundOff => 'Вимкнути';
+
+  @override
+  String get soundRemoteHint =>
+      'Звук гратиме з колонок самого віддаленого ПК. Якщо колонок у нього немає (сервер, VPS), звуку не буде ніде.';
 
   @override
   String get folders => 'Папки';

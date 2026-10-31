@@ -57,7 +57,7 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[11];         /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[12];         /* копії рядків для win (живуть до кінця процесу) */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
 
@@ -349,6 +349,13 @@ static BOOL mhrd_pre_connect(freerdp* instance)
 	freerdp_settings_set_uint32(s, FreeRDP_OsMajorType, OSMAJORTYPE_WINDOWS);
 	freerdp_settings_set_uint32(s, FreeRDP_OsMinorType, OSMINORTYPE_WINDOWS_NT);
 
+	/* Що пропонуємо серверу: якщо мікрофон тут увімкнено, а канал AUDIO_INPUT у журналі так і не
+	 * з'явився — сервер сам відмовився (наприклад, Windows Server без дозволу на запис). */
+	WLog_INFO("mhrd", "audio: playback=%d remoteConsole=%d capture=%d",
+	          freerdp_settings_get_bool(s, FreeRDP_AudioPlayback),
+	          freerdp_settings_get_bool(s, FreeRDP_RemoteConsoleAudio),
+	          freerdp_settings_get_bool(s, FreeRDP_AudioCapture));
+
 	MhrdContext* m = (MhrdContext*)ctx;
 	if (freerdp_settings_get_bool(s, FreeRDP_RedirectClipboard))
 		m->clipboard = clipboard_new();
@@ -624,7 +631,7 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 			jstr(j, "title"),          jstr(j, "fontPath"),          jstr(labels, "pin"),
 			jstr(labels, "unpin"),     jstr(labels, "minimize"),     jstr(labels, "exitFullscreen"),
 			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
-			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard")
+			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath")
 		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
@@ -639,6 +646,15 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.labelKeyboard = m->winStrings[8];
 		m->win.menuFullscreen = m->winStrings[9];
 		m->win.menuKeyboard = m->winStrings[10];
+		m->win.iconFontPath = m->winStrings[11];
+		const cJSON* icons = cJSON_GetObjectItemCaseSensitive(j, "icons");
+		m->win.iconPin = (uint32_t)jint(icons, "pin", 0);
+		m->win.iconUnpin = (uint32_t)jint(icons, "unpin", 0);
+		m->win.iconKeyboard = (uint32_t)jint(icons, "keyboard", 0);
+		m->win.iconMinimize = (uint32_t)jint(icons, "minimize", 0);
+		m->win.iconFullscreen = (uint32_t)jint(icons, "fullscreen", 0);
+		m->win.iconExitFullscreen = (uint32_t)jint(icons, "exitFullscreen", 0);
+		m->win.iconDisconnect = (uint32_t)jint(icons, "disconnect", 0);
 		m->win.colorSurface = (uint32_t)jint(colors, "surface", 0x141619);
 		m->win.colorBorder = (uint32_t)jint(colors, "border", 0x2C3036);
 		m->win.colorText = (uint32_t)jint(colors, "text", 0xE8EAED);
@@ -788,7 +804,7 @@ static void configure_logging(void)
 	/* Для журналу сеансів: які канали піднялись, що зі звуком і мікрофоном. */
 	WLog_SetLogLevel(WLog_Get("mhrd"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.rdpsnd.client"), WLOG_INFO);
-	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_INFO);
+	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_DEBUG);
 }
 
 static void run_session(MhrdContext* m)

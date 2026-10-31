@@ -282,22 +282,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unpinBar => 'Unpin the bar';
 
   @override
-  String get barPin => 'Pin';
-
-  @override
-  String get barUnpin => 'Unpin';
-
-  @override
   String get barMinimize => 'Minimize';
-
-  @override
-  String get barWindowed => 'Windowed';
-
-  @override
-  String get barFullscreen => 'Full screen';
-
-  @override
-  String get barKeyboard => 'Keyboard';
 
   @override
   String get onScreenKeyboard => 'On-screen keyboard';
@@ -603,22 +588,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clipboard => 'Clipboard';
 
   @override
-  String get clipboardHint => 'Text and images both ways';
+  String get clipboardHint => 'Text, images and files both ways';
 
   @override
-  String get microphone => 'Microphone';
+  String get microphone => 'Use this device\'s microphone on the remote PC';
 
   @override
-  String get sound => 'Sound';
+  String get microphoneHint =>
+      'Apps on the remote PC will hear your microphone. Windows Server blocks this by default — the server admin allows it in Group Policy.';
 
   @override
-  String get soundLocal => 'On this device';
+  String get sound => 'Remote PC sound';
 
   @override
-  String get soundRemote => 'On the remote PC';
+  String get soundLocal => 'Play here, on this device';
 
   @override
-  String get soundOff => 'Don\'t play';
+  String get soundRemote => 'Leave on the remote PC (not heard here)';
+
+  @override
+  String get soundOff => 'Mute';
+
+  @override
+  String get soundRemoteHint =>
+      'Sound plays from the remote PC\'s own speakers. If it has none (a server or VPS), you won\'t hear anything anywhere.';
 
   @override
   String get folders => 'Folders';

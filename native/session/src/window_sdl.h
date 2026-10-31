@@ -28,7 +28,8 @@ typedef struct
 typedef struct
 {
 	const char* title;          /* «Офіс — MHRD» */
-	const char* fontPath;       /* TTF для плашки (необов'язково) */
+	const char* fontPath;       /* TTF для назви й підказок плашки (необов'язково) */
+	/* Підказки кнопок плашки (з'являються через пів секунди наведення) */
 	const char* labelPin;
 	const char* labelUnpin;
 	const char* labelMinimize;
@@ -36,6 +37,9 @@ typedef struct
 	const char* labelFullscreen;
 	const char* labelKeyboard;
 	const char* labelDisconnect;
+	/* Піктограми кнопок: шрифт піктограм і коди символів у ньому (0 — немає, тоді текст) */
+	const char* iconFontPath;
+	uint32_t iconPin, iconUnpin, iconKeyboard, iconMinimize, iconFullscreen, iconExitFullscreen, iconDisconnect;
 	const char* menuFullscreen; /* пункти системного меню вікна (Windows) */
 	const char* menuKeyboard;
 	uint32_t colorSurface, colorBorder, colorText, colorAccent, colorError; /* 0xRRGGBB */
