@@ -805,6 +805,9 @@ static void configure_logging(void)
 	WLog_SetLogLevel(WLog_Get("mhrd"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.rdpsnd.client"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_DEBUG);
+	/* Кожен запит сервера на динамічний канал (і «немає обробника») — тут видно, чи сервер
+	 * взагалі просить мікрофон (AUDIO_INPUT). Дані каналів ідуть на рівні TRACE — їх тут немає. */
+	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.drdynvc.client"), WLOG_DEBUG);
 }
 
 static void run_session(MhrdContext* m)
