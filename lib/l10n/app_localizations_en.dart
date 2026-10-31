@@ -75,7 +75,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accounts => 'Accounts';
 
   @override
-  String get savedPcs => 'Saved PCs';
+  String get savedPcs => 'No group';
 
   @override
   String get invalidAddress => 'Invalid address';
@@ -402,6 +402,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get computers => 'Computers';
 
   @override
+  String get sidebarToggle => 'Side panel: pin or hide';
+
+  @override
   String get activeTunnels => 'Tunnels & proxies';
 
   @override
@@ -614,13 +617,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sound => 'Remote PC sound';
 
   @override
-  String get soundLocal => 'Play here, on this device';
+  String get soundLocal => 'Play on this PC';
 
   @override
-  String get soundRemote => 'Leave on the remote PC (not heard here)';
+  String get soundRemote => 'Leave on the remote device';
 
   @override
-  String get soundOff => 'Mute';
+  String get soundOff => 'Turn off completely';
 
   @override
   String get soundRemoteHint =>

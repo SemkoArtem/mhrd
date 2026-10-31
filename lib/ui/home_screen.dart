@@ -487,7 +487,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _header(context, wide),
                   Expanded(
                     child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      if (wide) SizedBox(width: 248, child: _sidebar(context)),
+                      if (wide && repo.settings.sidebarShown) SizedBox(width: 248, child: _sidebar(context)),
                       Expanded(child: _main(context)),
                     ]),
                   ),
@@ -507,13 +507,16 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
       child: Row(children: [
-        if (!wide)
-          Builder(
-              builder: (c) => IconButton(
-                    tooltip: l.groups,
-                    icon: const Icon(Icons.menu),
-                    onPressed: () => Scaffold.of(c).openDrawer(),
-                  )),
+        // Бічна панель: на широкому екрані закріпити / сховати, на вузькому — відкрити поверх.
+        Builder(
+            builder: (c) => IconButton(
+                  tooltip: l.sidebarToggle,
+                  icon: Icon(wide && repo.settings.sidebarShown ? Icons.menu_open : Icons.menu),
+                  onPressed: () => wide
+                      ? repo.updateSettings(repo.settings.copyWith(sidebarShown: !repo.settings.sidebarShown))
+                      : Scaffold.of(c).openDrawer(),
+                )),
+        const SizedBox(width: 4),
         Text('MHRD',
             style: TextStyle(
                 fontFamily: t.fontMono,
@@ -791,7 +794,9 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: items.isEmpty
               ? _empty(context)
-              : tiles
+              : _filter == _all && _query.trim().isEmpty && repo.groups.isNotEmpty
+                  ? _grouped(context, items, tiles)
+                  : tiles
                   ? GridView.builder(
                       padding: const EdgeInsets.only(bottom: 32),
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -812,6 +817,80 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ]),
     );
+  }
+
+  /// «Усі ПК» розділами за групами; кожен розділ згортається, «Без групи» — останнім
+  /// (типово згорнутий). Згорнуте запам'ятовується.
+  Widget _grouped(BuildContext context, List<Connection> items, bool tiles) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    String path(Group g) {
+      final names = [g.name];
+      var p = g.parentId;
+      final seen = <String>{};
+      while (p != null && seen.add(p)) {
+        final parent = repo.groups[p];
+        if (parent == null) break;
+        names.insert(0, parent.name);
+        p = parent.parentId;
+      }
+      return names.join(' / ');
+    }
+
+    final groups = repo.groups.values.toList()..sort((a, b) => path(a).compareTo(path(b)));
+    final sections = <(String, String, List<Connection>)>[
+      for (final g in groups) (g.id, path(g), items.where((c) => c.groupId == g.id).toList()),
+      (AppSettings.noGroupSection, l.savedPcs, items.where((c) => !repo.groups.containsKey(c.groupId)).toList()),
+    ].where((s) => s.$3.isNotEmpty);
+    final collapsed = repo.settings.collapsedGroups.toSet();
+
+    void toggle(String id) {
+      final next = {...collapsed};
+      if (!next.remove(id)) next.add(id);
+      repo.updateSettings(repo.settings.copyWith(collapsedGroups: next.toList()));
+    }
+
+    return CustomScrollView(slivers: [
+      for (final (id, name, pcs) in sections) ...[
+        SliverToBoxAdapter(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(t.radius * 0.7),
+            onTap: () => toggle(id),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(children: [
+                Icon(collapsed.contains(id) ? Icons.chevron_right : Icons.expand_more, size: 20, color: t.textMuted),
+                const SizedBox(width: 6),
+                Text(name, style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                Text('${pcs.length}', style: TextStyle(fontFamily: t.fontMono, color: t.textMuted, fontSize: 12)),
+              ]),
+            ),
+          ),
+        ),
+        if (!collapsed.contains(id))
+          SliverPadding(
+            padding: const EdgeInsets.only(bottom: 16),
+            sliver: tiles
+                ? SliverGrid.builder(
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 300,
+                      mainAxisExtent: 236,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: pcs.length,
+                    itemBuilder: (_, i) => PcTile(connection: pcs[i], repo: repo, actions: _actions),
+                  )
+                : SliverList.separated(
+                    itemCount: pcs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    itemBuilder: (_, i) => PcRow(connection: pcs[i], repo: repo, actions: _actions),
+                  ),
+          ),
+      ],
+      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+    ]);
   }
 
   Widget _empty(BuildContext context) {

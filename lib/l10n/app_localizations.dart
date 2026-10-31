@@ -233,7 +233,7 @@ abstract class AppLocalizations {
   /// No description provided for @savedPcs.
   ///
   /// In uk, this message translates to:
-  /// **'Збережені ПК'**
+  /// **'Без групи'**
   String get savedPcs;
 
   /// No description provided for @invalidAddress.
@@ -770,6 +770,12 @@ abstract class AppLocalizations {
   /// **'Комп\'ютери'**
   String get computers;
 
+  /// No description provided for @sidebarToggle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Бічна панель: закріпити або сховати'**
+  String get sidebarToggle;
+
   /// No description provided for @activeTunnels.
   ///
   /// In uk, this message translates to:
@@ -1175,19 +1181,19 @@ abstract class AppLocalizations {
   /// No description provided for @soundLocal.
   ///
   /// In uk, this message translates to:
-  /// **'Чути тут, на цьому пристрої'**
+  /// **'Транслювати на цей ПК'**
   String get soundLocal;
 
   /// No description provided for @soundRemote.
   ///
   /// In uk, this message translates to:
-  /// **'Лишати на віддаленому ПК (тут не чути)'**
+  /// **'Залишити на віддаленому пристрої'**
   String get soundRemote;
 
   /// No description provided for @soundOff.
   ///
   /// In uk, this message translates to:
-  /// **'Вимкнути'**
+  /// **'Вимкнути зовсім'**
   String get soundOff;
 
   /// No description provided for @soundRemoteHint.

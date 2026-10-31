@@ -75,7 +75,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get accounts => 'Облікові записи';
 
   @override
-  String get savedPcs => 'Збережені ПК';
+  String get savedPcs => 'Без групи';
 
   @override
   String get invalidAddress => 'Некоректна адреса';
@@ -403,6 +403,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get computers => 'Комп\'ютери';
 
   @override
+  String get sidebarToggle => 'Бічна панель: закріпити або сховати';
+
+  @override
   String get activeTunnels => 'Тунелі й проксі';
 
   @override
@@ -614,13 +617,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get sound => 'Звук віддаленого ПК';
 
   @override
-  String get soundLocal => 'Чути тут, на цьому пристрої';
+  String get soundLocal => 'Транслювати на цей ПК';
 
   @override
-  String get soundRemote => 'Лишати на віддаленому ПК (тут не чути)';
+  String get soundRemote => 'Залишити на віддаленому пристрої';
 
   @override
-  String get soundOff => 'Вимкнути';
+  String get soundOff => 'Вимкнути зовсім';
 
   @override
   String get soundRemoteHint =>

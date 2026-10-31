@@ -232,8 +232,13 @@ class AppSettings {
     this.keepScreenAwake = true,
     this.keyboardCapture = KeyboardCapture.fullscreenOnly,
     this.bar = const BarPlacement(),
+    this.sidebarShown = true,
+    this.collapsedGroups = const [noGroupSection],
     this.lastBackupAt,
   });
+
+  /// Розділ «Без групи» у списку «Усі ПК» (у [collapsedGroups] поруч з id груп).
+  static const noGroupSection = '__nogroup';
 
   /// Мова інтерфейсу: 'system' (як в ОС, інакше англійська), 'uk' або 'en'.
   final String language;
@@ -246,6 +251,12 @@ class AppSettings {
   final bool keepScreenAwake;
   final KeyboardCapture keyboardCapture;
   final BarPlacement bar;
+
+  /// Ліва панель на широкому екрані: закріплена (true) чи схована — тоді відкривається кнопкою.
+  final bool sidebarShown;
+
+  /// Згорнуті розділи списку «Усі ПК»: id груп і [noGroupSection].
+  final List<String> collapsedGroups;
   final DateTime? lastBackupAt;
 
   AppSettings copyWith({
@@ -257,6 +268,8 @@ class AppSettings {
     bool? keepScreenAwake,
     KeyboardCapture? keyboardCapture,
     BarPlacement? bar,
+    bool? sidebarShown,
+    List<String>? collapsedGroups,
     DateTime? lastBackupAt,
   }) =>
       AppSettings(
@@ -268,6 +281,8 @@ class AppSettings {
         keepScreenAwake: keepScreenAwake ?? this.keepScreenAwake,
         keyboardCapture: keyboardCapture ?? this.keyboardCapture,
         bar: bar ?? this.bar,
+        sidebarShown: sidebarShown ?? this.sidebarShown,
+        collapsedGroups: collapsedGroups ?? this.collapsedGroups,
         lastBackupAt: lastBackupAt ?? this.lastBackupAt,
       );
 
@@ -280,6 +295,8 @@ class AppSettings {
         'keepScreenAwake': keepScreenAwake,
         'keyboardCapture': keyboardCapture.name,
         'bar': bar.toJson(),
+        'sidebarShown': sidebarShown,
+        'collapsedGroups': collapsedGroups,
         'lastBackupAt': lastBackupAt?.toIso8601String(),
       };
 
@@ -293,6 +310,8 @@ class AppSettings {
         keyboardCapture:
             enumByName(KeyboardCapture.values, j['keyboardCapture'], KeyboardCapture.fullscreenOnly),
         bar: BarPlacement.fromJson(mapOr(j['bar'])),
+        sidebarShown: boolOr(j['sidebarShown'], true),
+        collapsedGroups: j.containsKey('collapsedGroups') ? stringList(j['collapsedGroups']) : const [noGroupSection],
         lastBackupAt: dateOrNull(j['lastBackupAt']),
       );
 }

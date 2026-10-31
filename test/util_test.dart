@@ -1,10 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mhrd/models/connection.dart';
+import 'package:mhrd/models/entities.dart';
 import 'package:mhrd/util/address.dart';
 import 'package:mhrd/util/rdp_file.dart';
 import 'package:mhrd/util/wireguard_conf.dart';
 
 void main() {
+  test('налаштування: «Без групи» типово згорнуто, панель закріплена; старі налаштування без полів', () {
+    final old = AppSettings.fromJson(const {'language': 'uk'});
+    expect(old.collapsedGroups, [AppSettings.noGroupSection]);
+    expect(old.sidebarShown, isTrue);
+    final s = old.copyWith(sidebarShown: false, collapsedGroups: const []);
+    final back = AppSettings.fromJson(s.toJson());
+    expect(back.sidebarShown, isFalse);
+    expect(back.collapsedGroups, isEmpty); // усе розгорнуто — так і лишається
+  });
+
   group('parseAddress', () {
     test('ім\'я без порту → 3389', () {
       expect(parseAddress('MyDesktop'), const ParsedAddress('MyDesktop', 3389));
