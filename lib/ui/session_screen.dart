@@ -43,6 +43,7 @@ class _SessionScreenState extends State<SessionScreen> {
   double _dpr = 1;
 
   bool _fullscreen = false;
+  bool _wasMaximized = false;
   bool _barShown = false;
   bool _barPinned = false;
 
@@ -81,7 +82,16 @@ class _SessionScreenState extends State<SessionScreen> {
   /// роздільності), зверху — плашка з панеллю, що ховається.
   Future<void> _setFullscreen(bool on) async {
     if (!_desktop || on == _fullscreen) return;
-    await windowManager.setFullScreen(on);
+    if (on) {
+      // window_manager для розгорнутого вікна не прибирає заголовок (лишається рамка «mhrd»
+      // і смуги) — тож спершу відновлюємо звичайний розмір, а після виходу розгортаємо знову.
+      _wasMaximized = await windowManager.isMaximized();
+      if (_wasMaximized) await windowManager.unmaximize();
+      await windowManager.setFullScreen(true);
+    } else {
+      await windowManager.setFullScreen(false);
+      if (_wasMaximized) await windowManager.maximize();
+    }
     if (!mounted) return;
     setState(() {
       _fullscreen = on;
@@ -115,7 +125,11 @@ class _SessionScreenState extends State<SessionScreen> {
   void dispose() {
     s.removeListener(_onSession);
     _resizeTimer?.cancel();
-    if (_fullscreen) windowManager.setFullScreen(false);
+    if (_fullscreen) {
+      windowManager.setFullScreen(false).then((_) {
+        if (_wasMaximized) windowManager.maximize();
+      });
+    }
     _releaseKeys();
     _manager.close(s);
     _focus.dispose();
