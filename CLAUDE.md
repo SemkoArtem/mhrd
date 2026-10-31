@@ -99,9 +99,13 @@ docs/SPEC.md                   специфікація (джерело прав
 3. Екран сеансу: вкладки, повний екран, зміна розміру, перепідключення.
 4. Вбудований WireGuard (wireguard-go netstack) + менеджер тунелів і переадресація портів.
 5. Android: збірка FreeRDP і Go-модулів через NDK, сенсорне керування, фонова служба.
-6. Проксі, SSH, RD Gateway, папки, файли через буфер обміну. Уже зроблено раніше (на прохання
-   власника): буфер обміну — текст і зображення (`native/session/src/clipboard_win.c`), звук (rdpsnd),
-   мікрофон (audin) — за налаштуваннями ПК «Пристрої».
+6. Проксі, SSH, RD Gateway. Уже зроблено раніше (на прохання власника):
+   - буфер обміну (`native/session/src/clipboard_win.c`): текст, зображення, **файли в обидва боки**
+     (звідси — FileGroupDescriptorW із CF_HDROP; із сервера — власний OLE `IDataObject` + `IStream`);
+   - звук (rdpsnd), мікрофон (audin), спільні папки з режимами доступу (доповнений канал drive у
+     `native/session/vcpkg-overlay/freerdp/mhrd/drive_main.c`);
+   - з етапу 3: зміна роздільності під вікно (Display Control), повний екран із плашкою
+     (`window_manager`, Ctrl+Alt+Enter), HiDPI — фізичні пікселі + масштаб ОС серверу.
 7. Tailscale/Headscale, OpenVPN, OpenConnect.
 
 ## Правила роботи
