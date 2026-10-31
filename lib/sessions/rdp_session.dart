@@ -138,6 +138,7 @@ class RdpSession extends ChangeNotifier {
         _frame?.close();
         width = e.width;
         height = e.height;
+        _requestedSize = null; // новий розмір від сервера — можна просити знову
         _stride = e.stride;
         _frame = _openFrameBuffer(e.name, e.stride * e.height);
         _dirty = true;

@@ -50,9 +50,27 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
+  /// На весь екран — завжди заповнюємо екран, незалежно від режиму ПК.
   void _onViewSize(Size size) {
-    if (s.connection.display.resizeMode != ResizeMode.changeResolution || size == _viewSize) return;
+    if (!_followsWindow || size == _viewSize) return;
     _viewSize = size;
+    _scheduleResize(size);
+  }
+
+  bool get _followsWindow => _fullscreen || s.connection.display.resizeMode == ResizeMode.changeResolution;
+
+  /// Сервер надіслав картинку іншого розміру, ніж вікно (наприклад, проігнорував ранній запит) —
+  /// просимо ще раз. RdpSession не повторює той самий запит, тож циклу немає.
+  int _lastSurface = 0;
+  void _checkSurface() {
+    final surface = s.width * 100000 + s.height;
+    if (surface == _lastSurface) return;
+    _lastSurface = surface;
+    final v = _viewSize;
+    if (v != null && _followsWindow) _scheduleResize(v);
+  }
+
+  void _scheduleResize(Size size) {
     _resizeTimer?.cancel();
     _resizeTimer = Timer(const Duration(milliseconds: 300), () {
       if (mounted) s.requestResize((size.width * _dpr).floor(), (size.height * _dpr).floor());
@@ -107,6 +125,7 @@ class _SessionScreenState extends State<SessionScreen> {
   void _onSession() {
     if (!mounted) return;
     setState(() {});
+    _checkSurface();
     final cert = s.pendingCertificate;
     if (cert != null && !_certDialogOpen) _askCertificate(cert);
   }

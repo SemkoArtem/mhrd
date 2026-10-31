@@ -46,10 +46,14 @@ typedef struct
 	MhrdClipboard* clipboard; /* NULL — буфер обміну для цього ПК вимкнено */
 	DispClientContext* disp;  /* канал Display Control; NULL — сервер не вміє міняти роздільність */
 	BOOL dispReady;           /* сервер надіслав свої можливості — можна просити нову роздільність */
+	BOOL painted;             /* сервер уже намалював перший кадр: раніше запити на зміну роздільності
+	                           * Windows ігнорує (так само чекають клієнти FreeRDP) */
 	UINT32 wantWidth, wantHeight; /* запит, що прийшов раніше, ніж канал був готовий */
 	UINT32 desktopScale;          /* масштаб інтерфейсу на ПК, % (як у ОС клієнта) */
 	UINT32 deviceScale;           /* 100 / 140 / 180 — MS-RDPBCGR */
 } MhrdContext;
+
+static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height);
 
 /* ── Події до застосунку ───────────────────────────────────────── */
 
@@ -174,6 +178,14 @@ static BOOL mhrd_end_paint(rdpContext* ctx)
 	put_u32(buf + 8, (uint32_t)inv->w);
 	put_u32(buf + 12, (uint32_t)inv->h);
 	proto_send(EVT_FRAME, buf, sizeof(buf));
+
+	/* Перший кадр — сеанс готовий; відкладений запит на зміну роздільності надсилаємо зараз. */
+	if (!m->painted)
+	{
+		m->painted = TRUE;
+		if (m->wantWidth && m->wantHeight)
+			send_monitor_layout(m, m->wantWidth, m->wantHeight);
+	}
 	return TRUE;
 }
 
@@ -221,9 +233,9 @@ static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height)
 		height = DISPLAY_CONTROL_MAX_MONITOR_HEIGHT;
 	width &= ~1u;
 
-	if (!m->disp || !m->dispReady)
+	if (!m->disp || !m->dispReady || !m->painted)
 	{
-		m->wantWidth = width; /* надішлемо, щойно канал буде готовий */
+		m->wantWidth = width; /* надішлемо, щойно канал буде готовий і сеанс намалює перший кадр */
 		m->wantHeight = height;
 		return;
 	}
@@ -248,7 +260,7 @@ static UINT mhrd_disp_caps(DispClientContext* disp, UINT32 maxMonitors, UINT32 f
 	(void)factorB;
 	MhrdContext* m = (MhrdContext*)disp->custom;
 	m->dispReady = TRUE;
-	if (m->wantWidth && m->wantHeight)
+	if (m->painted && m->wantWidth && m->wantHeight)
 		send_monitor_layout(m, m->wantWidth, m->wantHeight);
 	return CHANNEL_RC_OK;
 }
