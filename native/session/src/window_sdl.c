@@ -17,7 +17,7 @@
 #define RESIZE_DELAY_MS 300 /* SPEC: нова роздільність — через 300 мс після останньої зміни розміру */
 #define BAR_W 520            /* типова довжина плашки (одиниці інтерфейсу; × масштаб ОС = пікселі) */
 #define BAR_H 40             /* товщина плашки */
-#define BAR_MARGIN 6         /* відступ плашки від краю вікна */
+#define BAR_MARGIN 6         /* відступ кінців плашки від кутів вікна */
 #define BAR_PAD 6            /* поле на кінцях плашки — за нього тягнуть, щоб змінити довжину */
 #define GRIP_W 14            /* «ручка» на початку плашки — за неї (і за назву ПК) перетягують */
 #define ICON_PX 20           /* розмір піктограм кнопок плашки */
@@ -305,32 +305,38 @@ static void set_color(uint32_t rgb, Uint8 a)
 	SDL_SetRenderDrawColor(W.renderer, (Uint8)(rgb >> 16), (Uint8)(rgb >> 8), (Uint8)rgb, a);
 }
 
-/* Контур прямокутника із заокругленими кутами: 4 дуги по ROUND_STEPS відрізків. */
+/* Контур прямокутника із заокругленими кутами: 4 дуги по ROUND_STEPS відрізків.
+ * [corners] — які кути заокруглювати (CORNER_*), решта — прямі. */
 #define ROUND_STEPS 8
 #define ROUND_POINTS (4 * (ROUND_STEPS + 1))
+#define CORNER_TL 1
+#define CORNER_TR 2
+#define CORNER_BR 4
+#define CORNER_BL 8
+#define CORNER_ALL 15
 
-static float round_outline(const SDL_FRect* r, float radius, SDL_FPoint* out)
+static void round_outline(const SDL_FRect* r, float radius, unsigned corners, SDL_FPoint* out)
 {
 	radius = SDL_min(radius, SDL_min(r->w, r->h) / 2.0f);
-	const float cx[4] = { r->x + radius, r->x + r->w - radius, r->x + r->w - radius, r->x + radius };
-	const float cy[4] = { r->y + radius, r->y + radius, r->y + r->h - radius, r->y + r->h - radius };
 	int n = 0;
-	for (int c = 0; c < 4; c++)
+	for (int c = 0; c < 4; c++) /* за годинниковою: лівий верхній, правий верхній, правий нижній, лівий нижній */
 	{
+		const float rr = (corners & (1u << c)) ? radius : 0.0f;
+		const float cx = c == 0 || c == 3 ? r->x + rr : r->x + r->w - rr;
+		const float cy = c < 2 ? r->y + rr : r->y + r->h - rr;
 		const float a0 = SDL_PI_F * (1.0f + 0.5f * (float)c); /* лівий верхній кут починається з 180° */
 		for (int i = 0; i <= ROUND_STEPS; i++)
 		{
 			const float a = a0 + 0.5f * SDL_PI_F * (float)i / (float)ROUND_STEPS;
-			out[n++] = (SDL_FPoint){ cx[c] + radius * SDL_cosf(a), cy[c] + radius * SDL_sinf(a) };
+			out[n++] = (SDL_FPoint){ cx + rr * SDL_cosf(a), cy + rr * SDL_sinf(a) };
 		}
 	}
-	return radius;
 }
 
-static void fill_round(const SDL_FRect* r, float radius, uint32_t rgb, Uint8 alpha)
+static void fill_round(const SDL_FRect* r, float radius, unsigned corners, uint32_t rgb, Uint8 alpha)
 {
 	SDL_FPoint p[ROUND_POINTS];
-	round_outline(r, radius, p);
+	round_outline(r, radius, corners, p);
 	SDL_Vertex v[ROUND_POINTS + 1];
 	int idx[ROUND_POINTS * 3];
 	const SDL_FColor c = { (float)((rgb >> 16) & 0xFF) / 255.0f, (float)((rgb >> 8) & 0xFF) / 255.0f,
@@ -347,22 +353,22 @@ static void fill_round(const SDL_FRect* r, float radius, uint32_t rgb, Uint8 alp
 	SDL_RenderGeometry(W.renderer, NULL, v, ROUND_POINTS + 1, idx, ROUND_POINTS * 3);
 }
 
-static void stroke_round(const SDL_FRect* r, float radius, uint32_t rgb)
+static void stroke_round(const SDL_FRect* r, float radius, unsigned corners, uint32_t rgb)
 {
 	/* Лінія — по центру крайнього ряду пікселів, щоб не розмивалась. */
 	const SDL_FRect in = { r->x + 0.5f, r->y + 0.5f, r->w - 1.0f, r->h - 1.0f };
 	SDL_FPoint p[ROUND_POINTS + 1];
-	round_outline(&in, radius, p);
+	round_outline(&in, radius, corners, p);
 	p[ROUND_POINTS] = p[0];
 	set_color(rgb, 255);
 	SDL_RenderLines(W.renderer, p, ROUND_POINTS + 1);
 }
 
 /* Панель у стилі MHRD: заливка, рамка, кути як у темі. */
-static void draw_panel(const SDL_FRect* r, float radius)
+static void draw_panel(const SDL_FRect* r, float radius, unsigned corners)
 {
-	fill_round(r, radius, W.cfg.colorSurface, 255);
-	stroke_round(r, radius, W.cfg.colorBorder);
+	fill_round(r, radius, corners, W.cfg.colorSurface, 255);
+	stroke_round(r, radius, corners, W.cfg.colorBorder);
 }
 
 static SDL_Texture* make_label(const char* text)
@@ -422,7 +428,7 @@ static void load_labels(void)
 	W.labels[BTN_FULLSCREEN] = make_label(W.cfg.labelExitFullscreen);
 	W.fullscreenLabel = make_label(W.cfg.labelFullscreen);
 	W.labels[BTN_DISCONNECT] = make_label(W.cfg.labelDisconnect);
-	W.labels[BTN_COUNT] = make_label(W.cfg.title);
+	W.labels[BTN_COUNT] = make_label(W.cfg.barTitle ? W.cfg.barTitle : W.cfg.title);
 	W.reconnectLabel = make_label(W.cfg.labelReconnecting);
 }
 
@@ -473,6 +479,22 @@ static BOOL bar_vertical(void)
 	return W.barEdge == EDGE_LEFT || W.barEdge == EDGE_RIGHT;
 }
 
+/* Плашка притулена до краю — заокруглені лише кути з боку екрана. */
+static unsigned bar_corners(void)
+{
+	switch (W.barEdge)
+	{
+		case EDGE_BOTTOM:
+			return CORNER_TL | CORNER_TR;
+		case EDGE_LEFT:
+			return CORNER_TR | CORNER_BR;
+		case EDGE_RIGHT:
+			return CORNER_TL | CORNER_BL;
+		default:
+			return CORNER_BL | CORNER_BR;
+	}
+}
+
 /* Прямокутник у координатах плашки (уздовж краю, впоперек) → пікселі вікна. */
 static SDL_FRect place(float along, float across, float length, float thickness)
 {
@@ -502,10 +524,10 @@ static void layout_bar(void)
 	const float len = SDL_clamp(W.barLen * s, minLen, maxLen);
 	const float start = SDL_clamp(W.barPos * extent - len / 2.0f, margin, SDL_max(margin, extent - margin - len));
 	const BOOL nearSide = W.barEdge == EDGE_TOP || W.barEdge == EDGE_LEFT;
-	const float across = nearSide ? margin : cross - margin - thick;
+	const float across = nearSide ? 0 : cross - thick; /* притулена до краю */
 
 	W.barRect = place(start, across, len, thick);
-	W.hotRect = place(start, nearSide ? 0 : across, len, thick + margin);
+	W.hotRect = W.barRect;
 	W.handleRect = place(start + (len - HANDLE_W * s) / 2.0f, nearSide ? 0 : cross - HANDLE_H * s, HANDLE_W * s,
 	                     HANDLE_H * s);
 
@@ -590,7 +612,7 @@ static void draw_tooltip(void)
 	}
 	box.x = SDL_clamp(box.x, 4 * s, SDL_max(4 * s, (float)pw - box.w - 4 * s));
 	box.y = SDL_clamp(box.y, 4 * s, SDL_max(4 * s, (float)ph - box.h - 4 * s));
-	draw_panel(&box, (float)W.cfg.radius * 0.7f * s);
+	draw_panel(&box, (float)W.cfg.radius * 0.7f * s, CORNER_ALL);
 	draw_label(t, &box, FALSE);
 }
 
@@ -620,10 +642,10 @@ static void draw_bar(void)
 	const float s = ui_scale(), radius = (float)W.cfg.radius * s;
 	if (!bar_visible())
 	{
-		draw_panel(&W.handleRect, radius); /* тонка смужка біля краю */
+		draw_panel(&W.handleRect, radius, bar_corners()); /* тонка смужка біля краю */
 		return;
 	}
-	draw_panel(&W.barRect, radius);
+	draw_panel(&W.barRect, radius, bar_corners());
 	draw_grip();
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
@@ -631,7 +653,7 @@ static void draw_bar(void)
 			continue;
 		const BOOL accent = i == BTN_DISCONNECT || (i == BTN_PIN && W.barPinned);
 		if (W.hoverButton == i || accent)
-			fill_round(&W.buttons[i], radius * 0.6f, i == BTN_DISCONNECT ? W.cfg.colorError : W.cfg.colorAccent,
+			fill_round(&W.buttons[i], radius * 0.6f, CORNER_ALL, i == BTN_DISCONNECT ? W.cfg.colorError : W.cfg.colorAccent,
 			           W.hoverButton == i ? 90 : 40);
 		SDL_Texture* icon = button_icon(i);
 		if (icon)
@@ -670,8 +692,8 @@ static void draw_reconnecting(void)
 	SDL_GetTextureSize(W.reconnectLabel, &tw, &th);
 	const SDL_FRect box = { floorf(((float)pw - tw) / 2.0f - 20 * s), floorf(((float)ph - th) / 2.0f - 12 * s),
 		                    tw + 40 * s, th + 24 * s };
-	fill_round(&box, (float)W.cfg.radius * s, W.cfg.colorSurface, 255);
-	stroke_round(&box, (float)W.cfg.radius * s, W.cfg.colorAccent);
+	fill_round(&box, (float)W.cfg.radius * s, CORNER_ALL, W.cfg.colorSurface, 255);
+	stroke_round(&box, (float)W.cfg.radius * s, CORNER_ALL, W.cfg.colorAccent);
 	draw_label(W.reconnectLabel, &box, FALSE);
 }
 

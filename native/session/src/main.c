@@ -58,7 +58,7 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[13];         /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[14];        /* копії рядків для win (живуть до кінця процесу) */
 	volatile LONG reconnecting;   /* зв'язок відновлюється — ввід із вікна не надсилаємо */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
@@ -716,7 +716,7 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 			jstr(labels, "unpin"),     jstr(labels, "minimize"),     jstr(labels, "exitFullscreen"),
 			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
 			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath"),
-			jstr(labels, "reconnecting")
+			jstr(labels, "reconnecting"), jstr(j, "barTitle")
 		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
@@ -733,6 +733,7 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.menuKeyboard = m->winStrings[10];
 		m->win.iconFontPath = m->winStrings[11];
 		m->win.labelReconnecting = m->winStrings[12];
+		m->win.barTitle = m->winStrings[13][0] ? m->winStrings[13] : m->win.title;
 		const cJSON* icons = cJSON_GetObjectItemCaseSensitive(j, "icons");
 		m->win.iconPin = (uint32_t)jint(icons, "pin", 0);
 		m->win.iconUnpin = (uint32_t)jint(icons, "unpin", 0);

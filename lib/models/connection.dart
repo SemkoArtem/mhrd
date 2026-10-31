@@ -232,6 +232,9 @@ class Connection {
 
   String get displayName => name.trim().isEmpty ? address : name.trim();
 
+  /// «Назва · адреса», а без назви — лише адреса (підпис на плашці вікна сеансу).
+  String get nameWithAddress => name.trim().isEmpty ? address : '${name.trim()} · $address';
+
   /// Адреса так, як її показують і вводять: host або host:port, IPv6 у дужках.
   String get address {
     final h = host.contains(':') ? '[$host]' : host;

@@ -30,6 +30,7 @@ typedef struct
 typedef struct
 {
 	const char* title;          /* «Офіс — MHRD» */
+	const char* barTitle;       /* підпис на плашці: «Офіс · 10.0.0.5» або лише адреса */
 	const char* fontPath;       /* TTF для назви й підказок плашки (необов'язково) */
 	/* Підказки кнопок плашки (з'являються через пів секунди наведення) */
 	const char* labelPin;

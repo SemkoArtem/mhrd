@@ -172,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> {
       gatewayPassword: gatewayPassword,
       window: {
         'title': '${c.displayName} — MHRD',
+        // Підпис на плашці: «Назва · адреса», а без назви — лише адреса.
+        'barTitle': c.nameWithAddress,
         // Шрифт плашки — той самий, що в застосунку (лежить поруч у flutter_assets).
         'fontPath': p.join(assets, 'assets', 'fonts', 'IBMPlexSans-Medium.ttf'),
         // Підказки кнопок плашки (через пів секунди наведення) і пункти системного меню вікна.

@@ -131,6 +131,9 @@ PersistentKeepalive = 25
       expect(back.toJson(), c.toJson());
       expect(back.address, '[fd00::5]');
       expect(back.displayName, '[fd00::5]');
+      // Підпис плашки: без назви — лише адреса, з назвою — «назва · адреса» (порт, якщо не 3389).
+      expect(back.nameWithAddress, '[fd00::5]');
+      expect(back.copyWith(name: ' Офіс ', port: 3390).nameWithAddress, 'Офіс · [fd00::5]:3390');
     });
   });
 }
