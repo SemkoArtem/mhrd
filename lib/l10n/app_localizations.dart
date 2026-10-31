@@ -584,6 +584,24 @@ abstract class AppLocalizations {
   /// **'У вікно'**
   String get barWindowed;
 
+  /// No description provided for @barFullscreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'На весь екран'**
+  String get barFullscreen;
+
+  /// No description provided for @barKeyboard.
+  ///
+  /// In uk, this message translates to:
+  /// **'Клавіатура'**
+  String get barKeyboard;
+
+  /// No description provided for @onScreenKeyboard.
+  ///
+  /// In uk, this message translates to:
+  /// **'Екранна клавіатура'**
+  String get onScreenKeyboard;
+
   /// No description provided for @close.
   ///
   /// In uk, this message translates to:

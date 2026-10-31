@@ -7,8 +7,10 @@ import '../models/connection.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
 import 'rdp_session.dart';
+import 'session_log.dart';
 
 export 'rdp_session.dart' show RdpSession, SessionState;
+export 'session_log.dart' show SessionLog;
 
 /// Облікові дані для одного підключення. password == null — UI має спитати.
 class ConnectCredentials {
@@ -23,11 +25,14 @@ typedef ChannelFactory = Future<SessionChannel> Function(String executable);
 
 /// Керує активними сеансами. Кожен сеанс — окремий процес `mhrd-session` (SPEC → «Архітектура»).
 class SessionManager extends ChangeNotifier {
-  SessionManager(this.repo, {String? enginePath, ChannelFactory? channelFactory})
+  SessionManager(this.repo, {String? enginePath, ChannelFactory? channelFactory, this.log})
       : enginePath = enginePath ?? _defaultEnginePath(),
         _channelFactory = channelFactory ?? ProcessChannel.start;
 
   final Repository repo;
+
+  /// Куди записати сеанс, коли він завершився (null — не записувати).
+  final SessionLog? log;
 
   /// Шлях до `mhrd-session`; null — модуля підключення немає (наприклад, ще не зібрано).
   final String? enginePath;
@@ -103,6 +108,8 @@ class SessionManager extends ChangeNotifier {
       ],
       if (window != null) ...{'nativeWindow': true, ...window},
     });
+    final log = this.log;
+    if (log != null) s.done.then((_) => log.write(s));
     if (window != null) {
       s.done.then((_) {
         if (sessions.remove(s)) notifyListeners();

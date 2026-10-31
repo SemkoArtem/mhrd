@@ -21,7 +21,8 @@ Future<void> main() async {
   final dir = await getApplicationSupportDirectory();
   final db = MhrdDatabase.open(dir);
   final repo = Repository(db, SystemSecretStore());
-  runApp(MhrdApp(repo: repo, sessions: SessionManager(repo), autoBackup: AutoBackup(repo)));
+  final sessions = SessionManager(repo, log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')));
+  runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }
 
 /// Ліцензії OFL вбудованих шрифтів — щоб вони були разом зі шрифтами, як вимагає OFL.

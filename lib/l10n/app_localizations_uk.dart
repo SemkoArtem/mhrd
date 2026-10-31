@@ -296,6 +296,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get barWindowed => 'У вікно';
 
   @override
+  String get barFullscreen => 'На весь екран';
+
+  @override
+  String get barKeyboard => 'Клавіатура';
+
+  @override
+  String get onScreenKeyboard => 'Екранна клавіатура';
+
+  @override
   String get close => 'Закрити';
 
   @override

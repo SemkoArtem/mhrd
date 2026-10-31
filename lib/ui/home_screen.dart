@@ -131,7 +131,12 @@ class _HomeScreenState extends State<HomeScreen> {
           'unpin': l.barUnpin,
           'minimize': l.barMinimize,
           'exitFullscreen': l.barWindowed,
+          'fullscreen': l.barFullscreen,
+          'keyboard': l.barKeyboard,
           'disconnect': l.disconnectAction,
+          // Системне меню вікна (клік по іконці в заголовку)
+          'menuFullscreen': '${l.barFullscreen}\tCtrl+Alt+Enter',
+          'menuKeyboard': l.onScreenKeyboard,
         },
         'colors': {
           'surface': rgb(t.surface),

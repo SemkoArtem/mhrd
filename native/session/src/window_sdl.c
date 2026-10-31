@@ -9,8 +9,13 @@
 #include <SDL3_ttf/SDL_ttf.h>
 #include <freerdp/input.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #define RESIZE_DELAY_MS 300 /* SPEC: нова роздільність — через 300 мс після останньої зміни розміру */
-#define BAR_W 640
+#define BAR_W 720
 #define BAR_H 40
 #define HANDLE_W 120
 #define HANDLE_H 8
@@ -22,15 +27,18 @@ enum
 	EV_FRAME,
 	EV_FOCUS,
 	EV_QUIT,
+	EV_MENU_FULLSCREEN, /* пункти системного меню вікна */
+	EV_MENU_KEYBOARD,
 	EV_COUNT
 };
 
-/* Кнопки плашки повного екрана */
+/* Кнопки плашки (і в повному екрані, і у вікні) */
 enum
 {
 	BTN_PIN,
-	BTN_MINIMIZE,
-	BTN_EXIT_FS,
+	BTN_KEYBOARD,
+	BTN_MINIMIZE, /* лише в повному екрані: у вікні є кнопка в заголовку */
+	BTN_FULLSCREEN,
 	BTN_DISCONNECT,
 	BTN_COUNT,
 	BTN_NONE = -1
@@ -66,6 +74,8 @@ static struct
 	TTF_Font* font;
 	SDL_Texture* labels[BTN_COUNT + 1]; /* + назва ПК; BTN_PIN — «закріпити», окремо «відкріпити» */
 	SDL_Texture* unpinLabel;
+	SDL_Texture* fullscreenLabel; /* BTN_FULLSCREEN у вікні; labels[BTN_FULLSCREEN] — «у вікно» */
+	float titleRight;             /* де закінчується місце для назви ПК на плашці */
 } W;
 
 /* ── Клавіші: SDL_Scancode (= USB HID usage) → скан-код RDP (PC/AT, набір 1) ── */
@@ -257,15 +267,31 @@ static void load_labels(void)
 		return;
 	W.labels[BTN_PIN] = make_label(W.cfg.labelPin);
 	W.unpinLabel = make_label(W.cfg.labelUnpin);
+	W.labels[BTN_KEYBOARD] = make_label(W.cfg.labelKeyboard);
 	W.labels[BTN_MINIMIZE] = make_label(W.cfg.labelMinimize);
-	W.labels[BTN_EXIT_FS] = make_label(W.cfg.labelExitFullscreen);
+	W.labels[BTN_FULLSCREEN] = make_label(W.cfg.labelExitFullscreen);
+	W.fullscreenLabel = make_label(W.cfg.labelFullscreen);
 	W.labels[BTN_DISCONNECT] = make_label(W.cfg.labelDisconnect);
 	W.labels[BTN_COUNT] = make_label(W.cfg.title);
 }
 
 static BOOL bar_visible(void)
 {
-	return W.fullscreen && (W.barPinned || W.barHover);
+	return W.barPinned || W.barHover;
+}
+
+static BOOL button_shown(int i)
+{
+	return i != BTN_MINIMIZE || W.fullscreen;
+}
+
+static SDL_Texture* button_label(int i)
+{
+	if (i == BTN_PIN && W.barPinned && W.unpinLabel)
+		return W.unpinLabel;
+	if (i == BTN_FULLSCREEN && !W.fullscreen)
+		return W.fullscreenLabel;
+	return W.labels[i];
 }
 
 /* Розкладка плашки й кнопок у пікселях вікна. */
@@ -277,21 +303,29 @@ static void layout_bar(void)
 	const float bw = SDL_min(BAR_W * s, (float)pw), bh = BAR_H * s;
 	W.barRect = (SDL_FRect){ ((float)pw - bw) / 2.0f, 0, bw, bh };
 	W.handleRect = (SDL_FRect){ ((float)pw - HANDLE_W * s) / 2.0f, 0, HANDLE_W * s, HANDLE_H * s };
-	/* Справа наліво: «Відключитись», «Вийти з повного екрана», «Згорнути»; зліва — «Закріпити». */
+	/* Справа наліво: «Відключитись», «На весь екран»/«У вікно», «Згорнути», «Клавіатура»;
+	 * зліва — «Закріпити», між ними — назва ПК. */
 	float x = W.barRect.x + W.barRect.w - 8 * s;
-	const int order[] = { BTN_DISCONNECT, BTN_EXIT_FS, BTN_MINIMIZE };
+	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD };
 	for (size_t i = 0; i < SDL_arraysize(order); i++)
 	{
+		if (!button_shown(order[i]))
+		{
+			W.buttons[order[i]] = (SDL_FRect){ 0, 0, 0, 0 };
+			continue;
+		}
 		float tw = 0, th = 0;
-		if (W.labels[order[i]])
-			SDL_GetTextureSize(W.labels[order[i]], &tw, &th);
+		SDL_Texture* t = button_label(order[i]);
+		if (t)
+			SDL_GetTextureSize(t, &tw, &th);
 		const float w = (tw > 0 ? tw : 60 * s) + 20 * s;
 		x -= w;
 		W.buttons[order[i]] = (SDL_FRect){ x, 6 * s, w, bh - 12 * s };
 		x -= 4 * s;
 	}
+	W.titleRight = x;
 	float tw = 0, th = 0;
-	SDL_Texture* pin = W.barPinned && W.unpinLabel ? W.unpinLabel : W.labels[BTN_PIN];
+	SDL_Texture* pin = button_label(BTN_PIN);
 	if (pin)
 		SDL_GetTextureSize(pin, &tw, &th);
 	W.buttons[BTN_PIN] = (SDL_FRect){ W.barRect.x + 8 * s, 6 * s, (tw > 0 ? tw : 60 * s) + 20 * s, bh - 12 * s };
@@ -323,6 +357,8 @@ static void draw_bar(void)
 	SDL_RenderRect(W.renderer, &W.barRect);
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
+		if (!button_shown(i))
+			continue;
 		const BOOL accent = i == BTN_DISCONNECT || (i == BTN_PIN && W.barPinned);
 		if (W.hoverButton == i || accent)
 		{
@@ -330,13 +366,12 @@ static void draw_bar(void)
 			SDL_SetRenderDrawBlendMode(W.renderer, SDL_BLENDMODE_BLEND);
 			SDL_RenderFillRect(W.renderer, &W.buttons[i]);
 		}
-		SDL_Texture* t = i == BTN_PIN && W.barPinned && W.unpinLabel ? W.unpinLabel : W.labels[i];
-		draw_label(t, &W.buttons[i], FALSE);
+		draw_label(button_label(i), &W.buttons[i], FALSE);
 	}
 	/* Назва ПК — між «Закріпити» і правими кнопками. */
 	const float s = ui_scale();
-	SDL_FRect name = { W.buttons[BTN_PIN].x + W.buttons[BTN_PIN].w + 12 * s, 0,
-		               W.buttons[BTN_MINIMIZE].x - (W.buttons[BTN_PIN].x + W.buttons[BTN_PIN].w) - 24 * s, W.barRect.h };
+	const float nameX = W.buttons[BTN_PIN].x + W.buttons[BTN_PIN].w + 12 * s;
+	SDL_FRect name = { nameX, 0, W.titleRight - nameX - 8 * s, W.barRect.h };
 	if (name.w > 0 && W.labels[BTN_COUNT])
 	{
 		SDL_Rect clip = { (int)name.x, (int)name.y, (int)name.w, (int)name.h };
@@ -358,8 +393,7 @@ static void render(void)
 		SDL_SetTextureScaleMode(W.texture, exact ? SDL_SCALEMODE_NEAREST : SDL_SCALEMODE_LINEAR);
 		SDL_RenderTexture(W.renderer, W.texture, NULL, &dst);
 	}
-	if (W.fullscreen)
-		draw_bar();
+	draw_bar();
 	SDL_RenderPresent(W.renderer);
 }
 
@@ -430,9 +464,68 @@ static void set_fullscreen(BOOL on)
 	release_keys();
 	W.fullscreen = on;
 	W.barHover = FALSE;
+	W.hoverButton = BTN_NONE;
 	SDL_SetWindowFullscreen(W.window, on);
 	apply_keyboard_grab();
 }
+
+/* Екранна клавіатура ОС: її натискання йдуть у це вікно, а звідси — на віддалений ПК. */
+static void open_keyboard(void)
+{
+#ifdef _WIN32
+	/* osk.exe вимагає uiAccess — CreateProcess відмовить, ShellExecute запускає правильно. */
+	ShellExecuteW(NULL, L"open", L"osk.exe", NULL, NULL, SW_SHOWNORMAL);
+#endif
+}
+
+#ifdef _WIN32
+/* Системне меню вікна (клік по іконці в заголовку, Alt+Пробіл): «На весь екран», «Екранна клавіатура».
+ * Ідентифікатори — кратні 16 і менші за 0xF000, як вимагає WM_SYSCOMMAND. */
+#define IDM_FULLSCREEN 0x1010
+#define IDM_KEYBOARD 0x1020
+
+static WNDPROC g_sdlWndProc;
+
+static LRESULT CALLBACK menu_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
+{
+	if (msg == WM_SYSCOMMAND)
+	{
+		switch (wp & 0xFFF0)
+		{
+			case IDM_FULLSCREEN:
+				push(EV_MENU_FULLSCREEN);
+				return 0;
+			case IDM_KEYBOARD:
+				push(EV_MENU_KEYBOARD);
+				return 0;
+			default:
+				break;
+		}
+	}
+	return CallWindowProcW(g_sdlWndProc, hwnd, msg, wp, lp);
+}
+
+static void append_menu_item(HMENU menu, UINT id, const char* utf8)
+{
+	if (!utf8 || !utf8[0])
+		return;
+	wchar_t text[256];
+	if (MultiByteToWideChar(CP_UTF8, 0, utf8, -1, text, (int)SDL_arraysize(text)) > 0)
+		AppendMenuW(menu, MF_STRING, id, text);
+}
+
+static void add_system_menu(void)
+{
+	HWND hwnd = (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(W.window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+	HMENU menu = hwnd ? GetSystemMenu(hwnd, FALSE) : NULL;
+	if (!menu)
+		return;
+	AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+	append_menu_item(menu, IDM_FULLSCREEN, W.cfg.menuFullscreen);
+	append_menu_item(menu, IDM_KEYBOARD, W.cfg.menuKeyboard);
+	g_sdlWndProc = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)menu_wndproc);
+}
+#endif
 
 static void create_window(void)
 {
@@ -460,6 +553,9 @@ static void create_window(void)
 	SDL_SetWindowSize(W.window, w, h);
 	SDL_SetWindowPosition(W.window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 	load_labels();
+#ifdef _WIN32
+	add_system_menu();
+#endif
 	SDL_ShowWindow(W.window);
 	SDL_RaiseWindow(W.window);
 	if (W.cfg.startFullscreen)
@@ -508,11 +604,9 @@ static BOOL in_rect(const SDL_FRect* r, float px, float py)
 	return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
 }
 
-/* Плашка в повному екрані: повертає TRUE, якщо подія миші — її (на ПК не йде). */
+/* Плашка вгорі по центру: повертає TRUE, якщо подія миші — її (на ПК не йде). */
 static BOOL bar_mouse(float x, float y, BOOL click)
 {
-	if (!W.fullscreen)
-		return FALSE;
 	const float k = pixel_ratio();
 	const float px = x * k, py = y * k;
 	layout_bar();
@@ -528,11 +622,14 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 			case BTN_PIN:
 				W.barPinned = !W.barPinned;
 				break;
+			case BTN_KEYBOARD:
+				open_keyboard();
+				break;
 			case BTN_MINIMIZE:
 				SDL_MinimizeWindow(W.window);
 				break;
-			case BTN_EXIT_FS:
-				set_fullscreen(FALSE);
+			case BTN_FULLSCREEN:
+				set_fullscreen(!W.fullscreen);
 				break;
 			case BTN_DISCONNECT:
 				W.host.close(W.host.ctx);
@@ -690,6 +787,16 @@ void window_run(void)
 					case EV_QUIT:
 						quit = TRUE;
 						break;
+					case EV_MENU_FULLSCREEN:
+						if (W.window)
+						{
+							set_fullscreen(!W.fullscreen);
+							render();
+						}
+						break;
+					case EV_MENU_KEYBOARD:
+						open_keyboard();
+						break;
 					default:
 						break;
 				}
@@ -711,6 +818,14 @@ void window_run(void)
 						break;
 					case SDL_EVENT_WINDOW_FOCUS_LOST:
 						release_keys(); /* щоб на ПК не «залип» Ctrl чи Alt */
+						break;
+					case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+						if (W.barHover)
+						{
+							W.barHover = FALSE;
+							W.hoverButton = BTN_NONE;
+							render();
+						}
 						break;
 					case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
 						if (W.fullscreen)
@@ -753,6 +868,8 @@ void window_shutdown(void)
 	}
 	if (W.unpinLabel)
 		SDL_DestroyTexture(W.unpinLabel);
+	if (W.fullscreenLabel)
+		SDL_DestroyTexture(W.fullscreenLabel);
 	if (W.font)
 		TTF_CloseFont(W.font);
 	if (W.texture)

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -38,8 +39,8 @@ class ProcessChannel implements SessionChannel {
 
   final Process _p;
 
-  /// Останні рядки журналу — для «Деталей» при збої процесу.
-  final stderrTail = _Tail(4096);
+  /// Останні рядки журналу — для «Деталей» при збої процесу і для журналу сеансів.
+  final stderrTail = _Tail(16384);
 
   static Future<ProcessChannel> start(String executable) async =>
       ProcessChannel._(await Process.start(executable, const [], runInShell: false));
@@ -76,7 +77,7 @@ class _Tail {
   }
 
   @override
-  String toString() => String.fromCharCodes(_bytes);
+  String toString() => utf8.decode(_bytes, allowMalformed: true);
 }
 
 typedef FrameBufferOpener = FrameBuffer? Function(String name, int size);
@@ -123,6 +124,12 @@ class RdpSession extends ChangeNotifier {
   /// Завершується, коли процес сеансу закрився (сам, на прохання чи примусово).
   Future<void> get done => _done.future;
 
+  /// Журнал FreeRDP (stderr процесу) — для журналу сеансів.
+  String get engineLog {
+    final ch = _channel;
+    return ch is ProcessChannel ? '${ch.stderrTail}' : '';
+  }
+
   /// Запускає підключення. [config] містить пароль — він іде лише в канал.
   void start(Map<String, Object?> config) {
     _sub = _channel.output.transform(const SessionEventDecoder()).listen(_onEvent, onError: (_) {});
@@ -163,9 +170,7 @@ class RdpSession extends ChangeNotifier {
     _frame = null;
     if (ended == null) {
       // Процес зник без події «відключено» — збій. Застосунок працює далі (SPEC → стабільність).
-      final ch = _channel;
-      final log = ch is ProcessChannel ? '${ch.stderrTail}' : '';
-      ended = DisconnectedEvent(DisconnectReason.crashed, code, log.trim());
+      ended = DisconnectedEvent(DisconnectReason.crashed, code, engineLog.trim());
       state = SessionState.failed;
     }
     _notify();

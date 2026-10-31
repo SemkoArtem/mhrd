@@ -294,6 +294,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get barWindowed => 'Windowed';
 
   @override
+  String get barFullscreen => 'Full screen';
+
+  @override
+  String get barKeyboard => 'Keyboard';
+
+  @override
+  String get onScreenKeyboard => 'On-screen keyboard';
+
+  @override
   String get close => 'Close';
 
   @override

@@ -33,7 +33,11 @@ typedef struct
 	const char* labelUnpin;
 	const char* labelMinimize;
 	const char* labelExitFullscreen;
+	const char* labelFullscreen;
+	const char* labelKeyboard;
 	const char* labelDisconnect;
+	const char* menuFullscreen; /* пункти системного меню вікна (Windows) */
+	const char* menuKeyboard;
 	uint32_t colorSurface, colorBorder, colorText, colorAccent, colorError; /* 0xRRGGBB */
 	BOOL startFullscreen;
 	int keyboardCapture; /* 0 — лише на весь екран, 1 — завжди, 2 — ніколи */

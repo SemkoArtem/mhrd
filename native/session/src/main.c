@@ -6,6 +6,7 @@
  * Два режими показу:
  *  - nativeWindow (десктоп): процес сам відкриває вікно (window_sdl.c) — картинка прямо на
  *    відеокарту, ввід прямо в FreeRDP. FreeRDP працює в окремому потоці, вікно — в головному.
+ *    Таке вікно живе незалежно від застосунку: закрили MHRD — сеанс працює далі.
  *  - без вікна (Android): картинка у спільній пам'яті, ділянки — подіями в stdout, ввід — з stdin.
  */
 #include <stdio.h>
@@ -56,7 +57,7 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[7];          /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[11];         /* копії рядків для win (живуть до кінця процесу) */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
 
@@ -291,6 +292,7 @@ static UINT mhrd_disp_caps(DispClientContext* disp, UINT32 maxMonitors, UINT32 f
 static void mhrd_channel_connected(void* context, const ChannelConnectedEventArgs* e)
 {
 	MhrdContext* m = (MhrdContext*)context;
+	WLog_INFO("mhrd", "channel connected: %s", e->name);
 	if (strcmp(e->name, CLIPRDR_SVC_CHANNEL_NAME) == 0)
 	{
 		if (m->clipboard)
@@ -422,7 +424,7 @@ static DWORD mhrd_verify_certificate(freerdp* instance, const char* host, UINT16
 	{
 		ProtoMsg* msg = proto_wait(INFINITE);
 		if (!msg)
-			break; /* застосунок закрився */
+			break; /* застосунок закрився — спитати нікого, не довіряємо */
 		const uint8_t type = msg->type;
 		const BOOL accept = msg->len >= 1 && msg->data[0] != 0;
 		free(msg);
@@ -618,10 +620,12 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	{
 		const cJSON* labels = cJSON_GetObjectItemCaseSensitive(j, "labels");
 		const cJSON* colors = cJSON_GetObjectItemCaseSensitive(j, "colors");
-		const char* src[7] = { jstr(j, "title"),          jstr(j, "fontPath"),
-			                   jstr(labels, "pin"),       jstr(labels, "unpin"),
-			                   jstr(labels, "minimize"),  jstr(labels, "exitFullscreen"),
-			                   jstr(labels, "disconnect") };
+		const char* src[ARRAYSIZE(m->winStrings)] = {
+			jstr(j, "title"),          jstr(j, "fontPath"),          jstr(labels, "pin"),
+			jstr(labels, "unpin"),     jstr(labels, "minimize"),     jstr(labels, "exitFullscreen"),
+			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
+			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard")
+		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
 		m->win.title = m->winStrings[0][0] ? m->winStrings[0] : "MHRD";
@@ -631,6 +635,10 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.labelMinimize = m->winStrings[4];
 		m->win.labelExitFullscreen = m->winStrings[5];
 		m->win.labelDisconnect = m->winStrings[6];
+		m->win.labelFullscreen = m->winStrings[7];
+		m->win.labelKeyboard = m->winStrings[8];
+		m->win.menuFullscreen = m->winStrings[9];
+		m->win.menuKeyboard = m->winStrings[10];
 		m->win.colorSurface = (uint32_t)jint(colors, "surface", 0x141619);
 		m->win.colorBorder = (uint32_t)jint(colors, "border", 0x2C3036);
 		m->win.colorText = (uint32_t)jint(colors, "text", 0xE8EAED);
@@ -777,6 +785,10 @@ static void configure_logging(void)
 	wLogAppender* appender = WLog_GetLogAppender(root);
 	WLog_ConfigureAppender(appender, "outputstream", "stderr");
 	WLog_SetLogLevel(root, WLOG_WARN);
+	/* Для журналу сеансів: які канали піднялись, що зі звуком і мікрофоном. */
+	WLog_SetLogLevel(WLog_Get("mhrd"), WLOG_INFO);
+	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.rdpsnd.client"), WLOG_INFO);
+	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_INFO);
 }
 
 static void run_session(MhrdContext* m)
@@ -788,13 +800,17 @@ static void run_session(MhrdContext* m)
 		DWORD n = freerdp_get_event_handles(ctx, handles, ARRAYSIZE(handles) - 1);
 		if (n == 0)
 			break;
-		handles[n++] = proto_event();
+		const BOOL closed = proto_closed();
+		if (!closed)
+			handles[n++] = proto_event(); /* після закриття подія лишається ввімкненою — не чекаємо її */
 		if (WaitForMultipleObjects(n, handles, FALSE, 100) == WAIT_FAILED)
 			break;
 		if (!freerdp_check_event_handles(ctx))
 			break;
 		handle_input(m);
-		if (proto_closed())
+		/* Застосунок закрився. Без вікна сеанс без нього не має сенсу; власне вікно живе
+		 * незалежно — його закриває лише користувач. */
+		if (closed && !m->nativeWindow)
 		{
 			m->userDisconnect = TRUE;
 			break;
