@@ -282,6 +282,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unpinBar => 'Unpin the bar';
 
   @override
+  String get barPin => 'Pin';
+
+  @override
+  String get barUnpin => 'Unpin';
+
+  @override
+  String get barMinimize => 'Minimize';
+
+  @override
+  String get barWindowed => 'Windowed';
+
+  @override
   String get close => 'Close';
 
   @override

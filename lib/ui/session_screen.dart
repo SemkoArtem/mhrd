@@ -150,7 +150,7 @@ class _SessionScreenState extends State<SessionScreen> {
       context: context,
       barrierDismissible: false,
       builder: (c) =>
-          _CertificateDialog(cert: cert, canRemember: _manager.repo.connections.containsKey(s.connection.id)),
+          CertificateDialog(cert: cert, canRemember: _manager.repo.connections.containsKey(s.connection.id)),
     );
     _certDialogOpen = false;
     if (!mounted) return;
@@ -480,18 +480,18 @@ class _Message extends StatelessWidget {
 
 /// «Довіряти сертифікату?» — для зміненого сертифіката червоне попередження й без тихої згоди.
 /// Повертає (довіряти, запам'ятати).
-class _CertificateDialog extends StatefulWidget {
-  const _CertificateDialog({required this.cert, required this.canRemember});
+class CertificateDialog extends StatefulWidget {
+  const CertificateDialog({super.key, required this.cert, required this.canRemember});
   final CertificateEvent cert;
 
   /// ПК збережено в списку — є де запам'ятати відбиток.
   final bool canRemember;
 
   @override
-  State<_CertificateDialog> createState() => _CertificateDialogState();
+  State<CertificateDialog> createState() => _CertificateDialogState();
 }
 
-class _CertificateDialogState extends State<_CertificateDialog> {
+class _CertificateDialogState extends State<CertificateDialog> {
   bool _remember = true;
 
   @override

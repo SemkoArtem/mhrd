@@ -1,0 +1,2 @@
+// Іконка mhrd-session.exe і вікон сеансів (SDL бере ресурс 1 — window_sdl.c).
+1 ICON "../../../assets/branding/mhrd-icon.ico"

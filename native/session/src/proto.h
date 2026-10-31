@@ -20,6 +20,7 @@ enum
 	MSG_CERT_ANSWER = 0x06,  /* u8 довіряти */
 	MSG_DISCONNECT = 0x07,
 	MSG_RESIZE = 0x08,       /* u16 ширина, u16 висота — нова роздільність (канал Display Control) */
+	MSG_FOCUS = 0x09,        /* показати власне вікно сеансу (режим nativeWindow) */
 
 	/* mhrd-session -> застосунок */
 	EVT_STATE = 0x81,        /* u8 стан: 1 з'єднання, 2 підключено */

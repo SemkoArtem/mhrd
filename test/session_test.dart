@@ -250,6 +250,29 @@ void main() {
       expect(json['width'], 800);
       // Типові пристрої ПК: буфер увімкнено, звук тут, мікрофон вимкнено.
       expect([json['clipboard'], json['sound'], json['microphone']], [true, 'local', false]);
+      expect(json.containsKey('nativeWindow'), isFalse);
+    });
+
+    test('власне вікно: налаштування йдуть у connect, після виходу процесу сеанс зникає', () async {
+      final s = await m.start(pc(), username: 'u', password: 'p', width: 800, height: 600, window: {
+        'title': 'Офіс — MHRD',
+        'labels': {'disconnect': 'Відключитись'},
+      });
+      final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
+      expect(json['nativeWindow'], isTrue);
+      expect(json['title'], 'Офіс — MHRD');
+      expect((json['labels'] as Map)['disconnect'], 'Відключитись');
+      ch.emit(Msg.evtState, [2]);
+      await settle();
+      expect(m.forConnection('pc'), same(s));
+      s.focusWindow();
+      expect(ch.sentTypes.last, Msg.focus);
+      ch.emit(Msg.evtDisconnected, [DisconnectReason.userRequest.index, ...u32s([0])]);
+      ch.exit.complete(0);
+      await s.done;
+      await settle();
+      expect(m.sessions, isEmpty);
+      expect(s.ended?.reason, DisconnectReason.userRequest); // причина лишається для діалогу
     });
   });
 }

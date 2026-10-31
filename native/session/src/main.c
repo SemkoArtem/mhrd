@@ -1,11 +1,12 @@
 /* mhrd-session — один сеанс RDP в окремому процесі (SPEC → «Архітектура»).
  *
- * Застосунок запускає цей процес, надсилає MSG_CONNECT (налаштування + пароль) у stdin,
- * далі — ввід. Картинку FreeRDP малює прямо в спільну пам'ять, про змінені ділянки
- * процес повідомляє через stdout. Падіння тут не зачіпає застосунок і інші сеанси.
+ * Застосунок запускає цей процес і надсилає MSG_CONNECT (налаштування + пароль) у stdin.
+ * Падіння тут не зачіпає застосунок і інші сеанси.
  *
- * Етап 2: підключення, NLA, сертифікат, картинка (без GFX), клавіатура, миша.
- * Канали (буфер, звук, диски, зміна роздільності) — наступні етапи.
+ * Два режими показу:
+ *  - nativeWindow (десктоп): процес сам відкриває вікно (window_sdl.c) — картинка прямо на
+ *    відеокарту, ввід прямо в FreeRDP. FreeRDP працює в окремому потоці, вікно — в головному.
+ *  - без вікна (Android): картинка у спільній пам'яті, ділянки — подіями в stdout, ввід — з stdin.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@
 #include "clipboard.h"
 #include "proto.h"
 #include "shm.h"
+#include "window_sdl.h"
 
 typedef struct
 {
@@ -51,6 +53,11 @@ typedef struct
 	UINT32 wantWidth, wantHeight; /* запит, що прийшов раніше, ніж канал був готовий */
 	UINT32 desktopScale;          /* масштаб інтерфейсу на ПК, % (як у ОС клієнта) */
 	UINT32 deviceScale;           /* 100 / 140 / 180 — MS-RDPBCGR */
+
+	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
+	WindowConfig win;
+	char* winStrings[7];          /* копії рядків для win (живуть до кінця процесу) */
+	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
 
 static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height);
@@ -163,21 +170,26 @@ static BOOL mhrd_end_paint(rdpContext* ctx)
 	if (inv->null || inv->w <= 0 || inv->h <= 0)
 		return TRUE;
 
-	/* Сервер не завжди заповнює альфа-канал, а Flutter малює BGRA з прозорістю. */
-	uint8_t* base = (uint8_t*)m->shm.data;
-	for (INT32 y = inv->y; y < inv->y + inv->h; y++)
+	if (m->nativeWindow)
+		window_post_frame(inv->x, inv->y, inv->w, inv->h); /* альфу вікно ігнорує (XRGB) */
+	else
 	{
-		uint8_t* p = base + (size_t)y * gdi->stride + (size_t)inv->x * 4 + 3;
-		for (INT32 x = 0; x < inv->w; x++, p += 4)
-			*p = 0xFF;
-	}
+		/* Сервер не завжди заповнює альфа-канал, а Flutter малює BGRA з прозорістю. */
+		uint8_t* base = (uint8_t*)m->shm.data;
+		for (INT32 y = inv->y; y < inv->y + inv->h; y++)
+		{
+			uint8_t* p = base + (size_t)y * gdi->stride + (size_t)inv->x * 4 + 3;
+			for (INT32 x = 0; x < inv->w; x++, p += 4)
+				*p = 0xFF;
+		}
 
-	uint8_t buf[16];
-	put_u32(buf, (uint32_t)inv->x);
-	put_u32(buf + 4, (uint32_t)inv->y);
-	put_u32(buf + 8, (uint32_t)inv->w);
-	put_u32(buf + 12, (uint32_t)inv->h);
-	proto_send(EVT_FRAME, buf, sizeof(buf));
+		uint8_t buf[16];
+		put_u32(buf, (uint32_t)inv->x);
+		put_u32(buf + 4, (uint32_t)inv->y);
+		put_u32(buf + 8, (uint32_t)inv->w);
+		put_u32(buf + 12, (uint32_t)inv->h);
+		proto_send(EVT_FRAME, buf, sizeof(buf));
+	}
 
 	/* Перший кадр — сеанс готовий; відкладений запит на зміну роздільності надсилаємо зараз. */
 	if (!m->painted)
@@ -197,17 +209,26 @@ static BOOL alloc_surface(MhrdContext* m, UINT32 width, UINT32 height, BOOL resi
 	ShmBuffer next;
 	if (!shm_create(&next, (size_t)stride * height))
 		return FALSE;
+	/* Під замком: вікно не має читати старий буфер, поки його звільняємо. */
+	EnterCriticalSection(&m->bufLock);
 	BOOL ok = resize ? gdi_resize_ex(ctx->gdi, width, height, stride, PIXEL_FORMAT_BGRA32, next.data, NULL)
 	                 : gdi_init_ex(ctx->instance, PIXEL_FORMAT_BGRA32, stride, next.data, NULL);
+	if (ok)
+	{
+		ShmBuffer old = m->shm;
+		m->shm = next;
+		shm_free(&old);
+	}
+	LeaveCriticalSection(&m->bufLock);
 	if (!ok)
 	{
 		shm_free(&next);
 		return FALSE;
 	}
-	ShmBuffer old = m->shm;
-	m->shm = next;
-	shm_free(&old);
-	send_surface(m, width, height, stride);
+	if (m->nativeWindow)
+		window_post_surface();
+	else
+		send_surface(m, width, height, stride);
 	return TRUE;
 }
 
@@ -590,14 +611,113 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 
 	const char* pin = jstr(j, "certPin");
 	m->certPin = pin ? _strdup(pin) : NULL;
+
+	/* Власне вікно сеансу (десктоп): заголовок, шрифт і тексти плашки, кольори теми MHRD. */
+	m->nativeWindow = jbool(j, "nativeWindow", FALSE);
+	if (m->nativeWindow)
+	{
+		const cJSON* labels = cJSON_GetObjectItemCaseSensitive(j, "labels");
+		const cJSON* colors = cJSON_GetObjectItemCaseSensitive(j, "colors");
+		const char* src[7] = { jstr(j, "title"),          jstr(j, "fontPath"),
+			                   jstr(labels, "pin"),       jstr(labels, "unpin"),
+			                   jstr(labels, "minimize"),  jstr(labels, "exitFullscreen"),
+			                   jstr(labels, "disconnect") };
+		for (size_t i = 0; i < ARRAYSIZE(src); i++)
+			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
+		m->win.title = m->winStrings[0][0] ? m->winStrings[0] : "MHRD";
+		m->win.fontPath = m->winStrings[1];
+		m->win.labelPin = m->winStrings[2];
+		m->win.labelUnpin = m->winStrings[3];
+		m->win.labelMinimize = m->winStrings[4];
+		m->win.labelExitFullscreen = m->winStrings[5];
+		m->win.labelDisconnect = m->winStrings[6];
+		m->win.colorSurface = (uint32_t)jint(colors, "surface", 0x141619);
+		m->win.colorBorder = (uint32_t)jint(colors, "border", 0x2C3036);
+		m->win.colorText = (uint32_t)jint(colors, "text", 0xE8EAED);
+		m->win.colorAccent = (uint32_t)jint(colors, "accent", 0xC6F432);
+		m->win.colorError = (uint32_t)jint(colors, "error", 0xFF8A7A);
+		m->win.startFullscreen = jbool(j, "startFullscreen", FALSE);
+		m->win.keyboardCapture = jint(j, "keyboardCapture", 0);
+		m->win.resizeMode = jint(j, "resizeMode", 0);
+		m->win.swapMouseButtons = jbool(j, "swapMouse", FALSE);
+	}
 out:
 	wipe_string(j, "password");
 	cJSON_Delete(j);
 	return ok;
 }
 
-/* ── Ввід від застосунку ───────────────────────────────────────── */
+/* ── Ввід ──────────────────────────────────────────────────────── */
 
+/* Коліщатко: 9-бітне значення з доповненням до двох (MS-RDPBCGR 2.2.8.1.1.3.1.1.3). */
+static void send_wheel(rdpInput* input, int delta, BOOL horizontal, UINT16 x, UINT16 y)
+{
+	if (delta > 255)
+		delta = 255;
+	if (delta < -255)
+		delta = -255;
+	UINT16 flags = horizontal ? PTR_FLAGS_HWHEEL : PTR_FLAGS_WHEEL;
+	if (delta < 0)
+		flags |= PTR_FLAGS_WHEEL_NEGATIVE | (UINT16)((0x100 + delta) & 0xFF);
+	else
+		flags |= (UINT16)delta;
+	freerdp_input_send_mouse_event(input, flags, x, y);
+}
+
+/* Що просить власне вікно сеансу (головний потік). */
+static void host_lock(void* ctx)
+{
+	EnterCriticalSection(&((MhrdContext*)ctx)->bufLock);
+}
+
+static void host_unlock(void* ctx)
+{
+	LeaveCriticalSection(&((MhrdContext*)ctx)->bufLock);
+}
+
+static const uint8_t* host_buffer(void* ctx, uint32_t* width, uint32_t* height, uint32_t* stride)
+{
+	MhrdContext* m = (MhrdContext*)ctx;
+	rdpGdi* gdi = m->common.context.gdi;
+	if (!gdi || !m->shm.data)
+	{
+		*width = *height = *stride = 0;
+		return NULL;
+	}
+	*width = gdi->width;
+	*height = gdi->height;
+	*stride = gdi->stride;
+	return (const uint8_t*)m->shm.data;
+}
+
+static void host_key(void* ctx, uint16_t code, BOOL down, BOOL repeat)
+{
+	freerdp_input_send_keyboard_event_ex(((MhrdContext*)ctx)->common.context.input, down, repeat, code);
+}
+
+static void host_mouse(void* ctx, uint16_t flags, uint16_t x, uint16_t y)
+{
+	freerdp_input_send_mouse_event(((MhrdContext*)ctx)->common.context.input, flags, x, y);
+}
+
+static void host_wheel(void* ctx, int delta, BOOL horizontal, uint16_t x, uint16_t y)
+{
+	send_wheel(((MhrdContext*)ctx)->common.context.input, delta, horizontal, x, y);
+}
+
+static void host_resize(void* ctx, uint32_t width, uint32_t height)
+{
+	send_monitor_layout((MhrdContext*)ctx, width, height);
+}
+
+static void host_close(void* ctx)
+{
+	MhrdContext* m = (MhrdContext*)ctx;
+	m->userDisconnect = TRUE;
+	freerdp_abort_connect_context(&m->common.context);
+}
+
+/* Повідомлення від застосунку (режим без вікна — увесь ввід; з вікном — лише керування). */
 static void handle_input(MhrdContext* m)
 {
 	rdpInput* input = m->common.context.input;
@@ -626,24 +746,15 @@ static void handle_input(MhrdContext* m)
 				break;
 			case MSG_MOUSE_WHEEL:
 				if (msg->len >= 7)
-				{
-					int delta = (int16_t)get_u16(d);
-					if (delta > 255)
-						delta = 255;
-					if (delta < -255)
-						delta = -255;
-					/* 9-бітне значення з доповненням до двох (MS-RDPBCGR 2.2.8.1.1.3.1.1.3). */
-					UINT16 flags = d[2] ? PTR_FLAGS_HWHEEL : PTR_FLAGS_WHEEL;
-					if (delta < 0)
-						flags |= PTR_FLAGS_WHEEL_NEGATIVE | (UINT16)((0x100 + delta) & 0xFF);
-					else
-						flags |= (UINT16)delta;
-					freerdp_input_send_mouse_event(input, flags, get_u16(d + 3), get_u16(d + 5));
-				}
+					send_wheel(input, (int16_t)get_u16(d), d[2] != 0, get_u16(d + 3), get_u16(d + 5));
 				break;
 			case MSG_RESIZE:
 				if (msg->len >= 4)
 					send_monitor_layout(m, get_u16(d), get_u16(d + 2));
+				break;
+			case MSG_FOCUS:
+				if (m->nativeWindow)
+					window_post_focus();
 				break;
 			case MSG_DISCONNECT:
 				m->userDisconnect = TRUE;
@@ -691,6 +802,27 @@ static void run_session(MhrdContext* m)
 	}
 }
 
+/* Підключення, сеанс, відключення. З вікном — у власному потоці. */
+static void rdp_run(MhrdContext* m)
+{
+	freerdp* instance = m->common.context.instance;
+	send_state(1);
+	if (freerdp_connect(instance))
+	{
+		run_session(m);
+		freerdp_disconnect(instance);
+	}
+	send_disconnected(m);
+	if (m->nativeWindow)
+		window_post_quit();
+}
+
+static DWORD WINAPI rdp_thread(LPVOID arg)
+{
+	rdp_run((MhrdContext*)arg);
+	return 0;
+}
+
 int main(void)
 {
 	configure_logging();
@@ -728,6 +860,7 @@ int main(void)
 		return 1;
 	MhrdContext* m = (MhrdContext*)ctx;
 
+	InitializeCriticalSection(&m->bufLock);
 	const BOOL configured = apply_config(m, connect->data, connect->len);
 	memset(connect->data, 0, connect->len); /* у JSON був пароль */
 	free(connect);
@@ -738,16 +871,37 @@ int main(void)
 		rc = 2;
 		send_disconnected(m);
 	}
-	else
+	else if (m->nativeWindow)
 	{
-		send_state(1);
-		if (freerdp_connect(ctx->instance))
+		/* Вікно — у головному потоці (вимога SDL), FreeRDP — у своєму. */
+		const WindowHost host = { m, host_lock, host_unlock, host_buffer, host_key,
+			                      host_mouse, host_wheel, host_resize, host_close };
+		if (window_init(&m->win, &host))
 		{
-			run_session(m);
-			freerdp_disconnect(ctx->instance);
+			HANDLE t = CreateThread(NULL, 0, rdp_thread, m, 0, NULL);
+			if (t)
+			{
+				window_run();
+				WaitForSingleObject(t, INFINITE);
+				CloseHandle(t);
+			}
+			else
+				rc = 1;
 		}
-		send_disconnected(m);
+		else
+		{
+			WLog_ERR("mhrd", "window init failed, running without a window");
+			m->nativeWindow = FALSE;
+			rdp_run(m);
+		}
+		window_shutdown();
 	}
+	else
+		rdp_run(m);
+
 	freerdp_client_context_free(ctx);
+	for (size_t i = 0; i < ARRAYSIZE(m->winStrings); i++)
+		free(m->winStrings[i]);
+	DeleteCriticalSection(&m->bufLock);
 	return rc;
 }

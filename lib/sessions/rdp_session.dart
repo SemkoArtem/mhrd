@@ -275,6 +275,11 @@ class RdpSession extends ChangeNotifier {
     _channel.send(encodeResize(w, h));
   }
 
+  /// Виводить наперед вікно сеансу, яке малює сам процес (десктоп).
+  void focusWindow() {
+    if (isActive) _channel.send(encodeFocus());
+  }
+
   /// Просить процес відключитись сам; за 5 с — закриває примусово (SPEC → «Архітектура»).
   void disconnect() {
     if (!isActive && _killTimer == null) {
@@ -291,6 +296,7 @@ class RdpSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _killTimer?.cancel();
     _moveTimer?.cancel();

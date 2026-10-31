@@ -7,7 +7,9 @@
       "name": "freerdp",
       "default-features": false,
       "features": ["client"]
-    }
+    },
+    "sdl3",
+    "sdl3-ttf"
   ],
   "builtin-baseline": "d186940b2f0c4e8e5b4ff804af57d2a26fbfa091",
   "vcpkg-configuration": {

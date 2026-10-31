@@ -284,6 +284,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unpinBar => 'Відкріпити панель';
 
   @override
+  String get barPin => 'Закріпити';
+
+  @override
+  String get barUnpin => 'Відкріпити';
+
+  @override
+  String get barMinimize => 'Згорнути';
+
+  @override
+  String get barWindowed => 'У вікно';
+
+  @override
   String get close => 'Закрити';
 
   @override

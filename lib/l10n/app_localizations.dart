@@ -560,6 +560,30 @@ abstract class AppLocalizations {
   /// **'Відкріпити панель'**
   String get unpinBar;
 
+  /// No description provided for @barPin.
+  ///
+  /// In uk, this message translates to:
+  /// **'Закріпити'**
+  String get barPin;
+
+  /// No description provided for @barUnpin.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відкріпити'**
+  String get barUnpin;
+
+  /// No description provided for @barMinimize.
+  ///
+  /// In uk, this message translates to:
+  /// **'Згорнути'**
+  String get barMinimize;
+
+  /// No description provided for @barWindowed.
+  ///
+  /// In uk, this message translates to:
+  /// **'У вікно'**
+  String get barWindowed;
+
   /// No description provided for @close.
   ///
   /// In uk, this message translates to:

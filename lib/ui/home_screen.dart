@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../app.dart';
 import '../l10n/l10n.dart';
@@ -64,7 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final running = credentialId == null ? sessions.forConnection(c.id) : null;
     if (running != null) {
-      _openSession(running, c);
+      if (sessions.nativeWindows) {
+        running.focusWindow();
+      } else {
+        _openSession(running, c);
+      }
       return;
     }
     final creds = await sessions.credentialsFor(c, credentialId: credentialId);
@@ -76,6 +81,11 @@ class _HomeScreenState extends State<HomeScreen> {
       (user, password) = r;
     }
     if (!mounted) return;
+    if (sessions.nativeWindows) {
+      final s = await _startWindow(c, user!, password ?? '');
+      if (s != null && mounted) _watchWindow(s, c, credentialId: credentialId);
+      return;
+    }
     // Роздільність = розмір вікна у фізичних пікселях (масштаб Windows 150% → ×1.5), а масштаб
     // ОС передаємо серверу — так картинка чітка, а текст на ПК звичного розміру.
     final size = MediaQuery.sizeOf(context);
@@ -88,6 +98,123 @@ class _HomeScreenState extends State<HomeScreen> {
         height: even((size.height - 40) * dpr, 480, 8192),
         scale: (dpr * 100).round());
     if (mounted) _openSession(s, c, credentialId: credentialId);
+  }
+
+  /// Десктоп: сеанс у власному вікні процесу `mhrd-session`. Роздільність — у фізичних пікселях
+  /// монітора: на весь екран — увесь екран, інакше 80% (вікно потім саме підлаштує її під себе).
+  Future<RdpSession?> _startWindow(Connection c, String username, String password) async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    final sessions = AppScope.of(context).sessions;
+    final display = View.of(context).display;
+    final fullscreen = c.display.startFullscreen ?? repo.settings.startFullscreen;
+    final k = fullscreen ? 1.0 : 0.8;
+    int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
+    int rgb(Color color) => color.toARGB32() & 0xFFFFFF;
+    final exe = sessions.enginePath!;
+    toast(context, l.connectingTo(c.address));
+    return sessions.start(
+      c,
+      username: username,
+      password: password,
+      width: c.display.width ?? even(display.size.width * k, 640, 8192),
+      height: c.display.height ?? even(display.size.height * k, 480, 8192),
+      scale: (display.devicePixelRatio * 100).round(),
+      window: {
+        'title': '${c.displayName} — MHRD',
+        // Шрифт плашки — той самий, що в застосунку (лежить поруч у flutter_assets).
+        'fontPath': '${File(exe).parent.path}${Platform.pathSeparator}data${Platform.pathSeparator}'
+            'flutter_assets${Platform.pathSeparator}assets${Platform.pathSeparator}fonts'
+            '${Platform.pathSeparator}IBMPlexSans-Medium.ttf',
+        'labels': {
+          'pin': l.barPin,
+          'unpin': l.barUnpin,
+          'minimize': l.barMinimize,
+          'exitFullscreen': l.barWindowed,
+          'disconnect': l.disconnectAction,
+        },
+        'colors': {
+          'surface': rgb(t.surface),
+          'border': rgb(t.border),
+          'text': rgb(t.text),
+          'accent': rgb(t.accent),
+          'error': rgb(t.error),
+        },
+        'startFullscreen': fullscreen,
+        'keyboardCapture': repo.settings.keyboardCapture.index, // 0 лише на весь екран, 1 завжди, 2 ніколи
+        'resizeMode': c.display.resizeMode.index, // 0 змінювати роздільність, 1 масштабувати, 2 ні
+        'swapMouse': c.swapMouseButtons,
+      },
+    );
+  }
+
+  /// Вікно сеансу живе саме; головне вікно лише питає про сертифікат і пояснює, чому сеанс
+  /// закрився (з «Підключитись знову»).
+  void _watchWindow(RdpSession s, Connection c, {String? credentialId}) {
+    var asking = false;
+    s.addListener(() {
+      final cert = s.pendingCertificate;
+      if (cert == null || asking || !mounted) return;
+      asking = true;
+      _askCertificate(s, cert).whenComplete(() => asking = false);
+    });
+    s.done.then((_) async {
+      final ended = s.ended;
+      if (!mounted || ended == null || ended.reason == DisconnectReason.userRequest) return;
+      await _bringToFront();
+      if (!mounted) return;
+      final l = context.l10n;
+      final t = context.mhrd;
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (dc) => AlertDialog(
+          icon: Icon(Icons.error_outline, color: t.error),
+          title: Text(c.displayName),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(l.disconnectReason(ended.reason), textAlign: TextAlign.center),
+              if (ended.details.isNotEmpty || ended.code != 0) ...[
+                const SizedBox(height: 10),
+                SelectableText(
+                  l.sessionDetails(ended.details.isEmpty ? '—' : ended.details, '0x${ended.code.toRadixString(16)}'),
+                  textAlign: TextAlign.center,
+                  style: t.mono,
+                ),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.close)),
+            FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(l.retry)),
+          ],
+        ),
+      );
+      if (retry != true || !mounted) return;
+      _connect(c,
+          credentialId: credentialId,
+          askPassword: ended.reason == DisconnectReason.authFailed || ended.reason == DisconnectReason.noCredentials);
+    });
+  }
+
+  Future<void> _askCertificate(RdpSession s, CertificateEvent cert) async {
+    await _bringToFront();
+    if (!mounted) return;
+    final sessions = AppScope.of(context).sessions;
+    final r = await showDialog<(bool, bool)>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CertificateDialog(cert: cert, canRemember: repo.connections.containsKey(s.connection.id)),
+    );
+    final (accept, remember) = r ?? (false, false);
+    if (accept && remember) sessions.trustCertificate(s, cert.fingerprint);
+    s.answerCertificate(accept);
+  }
+
+  /// Діалог про сеанс має бути видно, навіть якщо головне вікно згорнуте чи позаду.
+  Future<void> _bringToFront() async {
+    if (await windowManager.isMinimized()) await windowManager.restore();
+    await windowManager.focus();
   }
 
   void _openSession(RdpSession s, Connection c, {String? credentialId}) {

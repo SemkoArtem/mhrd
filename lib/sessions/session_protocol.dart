@@ -13,6 +13,7 @@ abstract final class Msg {
   static const certAnswer = 0x06;
   static const disconnect = 0x07;
   static const resize = 0x08;
+  static const focus = 0x09;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -72,6 +73,9 @@ Uint8List encodeDisconnect() => encodeFrame(Msg.disconnect);
 
 /// Нова роздільність віддаленого екрана (канал Display Control). Сервер відповість SurfaceEvent.
 Uint8List encodeResize(int width, int height) => encodeFrame(Msg.resize, _u16s([width, height]));
+
+/// Показати власне вікно сеансу (режим nativeWindow) — розгорнути й вивести наперед.
+Uint8List encodeFocus() => encodeFrame(Msg.focus);
 
 List<int> _u16s(List<int> values) => [
       for (final v in values) ...[v.clamp(0, 0xFFFF) & 0xFF, (v.clamp(0, 0xFFFF) >> 8) & 0xFF],

@@ -36,6 +36,10 @@ class SessionManager extends ChangeNotifier {
 
   bool get engineAvailable => enginePath != null;
 
+  /// На десктопі кожен сеанс — окреме вікно, яке малює сам `mhrd-session` (SDL3);
+  /// на мобільних — екран сеансу всередині застосунку.
+  bool get nativeWindows => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   /// `mhrd-session.exe` лежить поруч із головною програмою (його кладе туди збірка Windows).
   static String? _defaultEnginePath() {
     if (!Platform.isWindows) return null;
@@ -54,6 +58,8 @@ class SessionManager extends ChangeNotifier {
   }
 
   /// Запускає сеанс. [width]/[height] — бажана роздільність віддаленого екрана.
+  /// [window] — налаштування власного вікна процесу (заголовок, шрифт, мітки, кольори…);
+  /// із ним сеанс сам зникає зі списку, щойно процес завершився.
   Future<RdpSession> start(
     Connection c, {
     required String username,
@@ -61,6 +67,7 @@ class SessionManager extends ChangeNotifier {
     required int width,
     required int height,
     int scale = 100,
+    Map<String, Object?>? window,
   }) async {
     final exe = enginePath;
     if (exe == null) throw StateError('mhrd-session not found');
@@ -94,7 +101,14 @@ class SessionManager extends ChangeNotifier {
       'folders': [
         for (final f in c.devices.folders) {'name': f.name, 'path': f.path, 'access': f.access.name},
       ],
+      if (window != null) ...{'nativeWindow': true, ...window},
     });
+    if (window != null) {
+      s.done.then((_) {
+        if (sessions.remove(s)) notifyListeners();
+        s.dispose();
+      });
+    }
     notifyListeners();
     return s;
   }
