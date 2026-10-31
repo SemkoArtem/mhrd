@@ -350,7 +350,8 @@ static BOOL mhrd_pre_connect(freerdp* instance)
 	freerdp_settings_set_uint32(s, FreeRDP_OsMinorType, OSMINORTYPE_WINDOWS_NT);
 
 	/* Що пропонуємо серверу: якщо мікрофон тут увімкнено, а канал AUDIO_INPUT у журналі так і не
-	 * з'явився — сервер сам відмовився (наприклад, Windows Server без дозволу на запис). */
+	 * з'явився — сервер сам відмовився. Так буває в адміністративному сеансі (ConsoleSession:
+	 * Windows туди мікрофон не передає) або коли запис заборонено політикою сервера. */
 	WLog_INFO("mhrd", "audio: playback=%d remoteConsole=%d capture=%d",
 	          freerdp_settings_get_bool(s, FreeRDP_AudioPlayback),
 	          freerdp_settings_get_bool(s, FreeRDP_RemoteConsoleAudio),
@@ -804,10 +805,7 @@ static void configure_logging(void)
 	/* Для журналу сеансів: які канали піднялись, що зі звуком і мікрофоном. */
 	WLog_SetLogLevel(WLog_Get("mhrd"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.rdpsnd.client"), WLOG_INFO);
-	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_DEBUG);
-	/* Кожен запит сервера на динамічний канал (і «немає обробника») — тут видно, чи сервер
-	 * взагалі просить мікрофон (AUDIO_INPUT). Дані каналів ідуть на рівні TRACE — їх тут немає. */
-	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.drdynvc.client"), WLOG_DEBUG);
+	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_INFO);
 }
 
 static void run_session(MhrdContext* m)

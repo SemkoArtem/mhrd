@@ -534,7 +534,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminSession => 'Administrative session';
 
   @override
-  String get adminSessionHint => 'Connect to the server\'s console session';
+  String get adminSessionHint =>
+      'Connect to the server\'s console session. Windows doesn\'t pass the microphone into this session.';
 
   @override
   String get swapMouse => 'Swap mouse buttons';
@@ -595,7 +596,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get microphoneHint =>
-      'Apps on the remote PC will hear your microphone. Windows Server blocks this by default — the server admin allows it in Group Policy.';
+      'Apps on the remote PC will hear your microphone. Doesn\'t work in an admin session; some servers also need the admin to allow it.';
 
   @override
   String get sound => 'Remote PC sound';

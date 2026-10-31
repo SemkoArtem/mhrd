@@ -1025,7 +1025,7 @@ abstract class AppLocalizations {
   /// No description provided for @adminSessionHint.
   ///
   /// In uk, this message translates to:
-  /// **'Підключення до консольного сеансу сервера'**
+  /// **'Підключення до консольного сеансу сервера. У такому сеансі Windows не передає мікрофон.'**
   String get adminSessionHint;
 
   /// No description provided for @swapMouse.
@@ -1145,7 +1145,7 @@ abstract class AppLocalizations {
   /// No description provided for @microphoneHint.
   ///
   /// In uk, this message translates to:
-  /// **'Програми на віддаленому ПК чутимуть ваш мікрофон. Windows Server за замовчуванням це забороняє — дозволяє адміністратор сервера в груповій політиці.'**
+  /// **'Програми на віддаленому ПК чутимуть ваш мікрофон. Не працює в адміністративному сеансі; на деяких серверах його ще має дозволити адміністратор.'**
   String get microphoneHint;
 
   /// No description provided for @sound.

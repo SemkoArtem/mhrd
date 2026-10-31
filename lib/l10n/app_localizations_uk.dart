@@ -533,7 +533,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get adminSession => 'Адміністративний сеанс';
 
   @override
-  String get adminSessionHint => 'Підключення до консольного сеансу сервера';
+  String get adminSessionHint =>
+      'Підключення до консольного сеансу сервера. У такому сеансі Windows не передає мікрофон.';
 
   @override
   String get swapMouse => 'Поміняти кнопки миші місцями';
@@ -594,7 +595,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get microphoneHint =>
-      'Програми на віддаленому ПК чутимуть ваш мікрофон. Windows Server за замовчуванням це забороняє — дозволяє адміністратор сервера в груповій політиці.';
+      'Програми на віддаленому ПК чутимуть ваш мікрофон. Не працює в адміністративному сеансі; на деяких серверах його ще має дозволити адміністратор.';
 
   @override
   String get sound => 'Звук віддаленого ПК';

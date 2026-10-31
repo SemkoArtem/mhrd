@@ -19,6 +19,7 @@
 #define BAR_H 40
 #define ICON_PX 20          /* розмір піктограм кнопок плашки */
 #define TOOLTIP_DELAY_MS 500 /* підказка кнопки — через пів секунди наведення */
+#define BAR_HIDE_DELAY_MS 3500 /* плашка ховається через 3,5 с після того, як мишу прибрали */
 #define HANDLE_W 120
 #define HANDLE_H 8
 #define RDP_EXT 0x100 /* скан-код із префіксом E0 */
@@ -64,6 +65,7 @@ static struct
 
 	BOOL fullscreen;
 	BOOL barPinned, barHover;
+	Uint64 barHideAt; /* коли сховати плашку (0 — не ховати) */
 	int hoverButton;
 	SDL_FRect buttons[BTN_COUNT];
 	SDL_FRect barRect, handleRect;
@@ -561,6 +563,7 @@ static void set_fullscreen(BOOL on)
 	release_keys();
 	W.fullscreen = on;
 	W.barHover = FALSE;
+	W.barHideAt = 0;
 	W.hoverButton = BTN_NONE;
 	SDL_SetWindowFullscreen(W.window, on);
 	apply_keyboard_grab();
@@ -707,11 +710,17 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 	const float k = pixel_ratio();
 	const float px = x * k, py = y * k;
 	layout_bar();
-	const BOOL over = bar_visible() ? in_rect(&W.barRect, px, py) : in_rect(&W.handleRect, px, py);
+	const BOOL inside = bar_visible() ? in_rect(&W.barRect, px, py) : in_rect(&W.handleRect, px, py);
 	const BOOL wasHover = W.barHover;
 	const int wasButton = W.hoverButton;
-	W.barHover = over || (W.barHover && in_rect(&W.barRect, px, py));
-	W.hoverButton = W.barHover ? hit_button(px, py) : BTN_NONE;
+	if (inside)
+	{
+		W.barHover = TRUE;
+		W.barHideAt = 0;
+	}
+	else if (W.barHover && !W.barHideAt)
+		W.barHideAt = SDL_GetTicks() + BAR_HIDE_DELAY_MS; /* мишу прибрали — ховаємо не одразу */
+	W.hoverButton = inside ? hit_button(px, py) : BTN_NONE;
 	if (W.hoverButton != wasButton)
 	{
 		W.hoverSince = SDL_GetTicks();
@@ -722,7 +731,7 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 		W.tooltipShown = FALSE; /* натиснули — підказка знову лише після паузи */
 		W.hoverSince = SDL_GetTicks();
 	}
-	if (click && W.barHover)
+	if (click && inside)
 	{
 		switch (W.hoverButton)
 		{
@@ -747,7 +756,19 @@ static BOOL bar_mouse(float x, float y, BOOL click)
 	}
 	if (wasHover != W.barHover || wasButton != W.hoverButton || click)
 		render();
-	return W.barHover || W.barPinned ? (bar_visible() && in_rect(&W.barRect, px, py)) : FALSE;
+	return bar_visible() && in_rect(&W.barRect, px, py);
+}
+
+/* Час сховати плашку настав (мишу прибрали кілька секунд тому). */
+static void hide_bar_if_due(void)
+{
+	if (!W.barHideAt || SDL_GetTicks() < W.barHideAt)
+		return;
+	W.barHideAt = 0;
+	W.barHover = FALSE;
+	W.hoverButton = BTN_NONE;
+	if (W.window)
+		render();
 }
 
 static void on_key(const SDL_KeyboardEvent* e)
@@ -855,6 +876,8 @@ void window_run(void)
 		const Uint64 now = SDL_GetTicks();
 		if (W.resizeAt)
 			timeout = W.resizeAt > now ? (Sint32)(W.resizeAt - now) : 0;
+		if (W.barHideAt)
+			timeout = SDL_min(timeout, W.barHideAt > now ? (Sint32)(W.barHideAt - now) : 0);
 		const BOOL tooltipPending = W.hoverButton != BTN_NONE && !W.tooltipShown;
 		if (tooltipPending)
 		{
@@ -931,9 +954,11 @@ void window_run(void)
 						release_keys(); /* щоб на ПК не «залип» Ctrl чи Alt */
 						break;
 					case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-						if (W.barHover)
+						/* Миша вийшла з вікна — підказку прибираємо одразу, плашку ховаємо із затримкою. */
+						if (W.barHover && !W.barHideAt)
+							W.barHideAt = SDL_GetTicks() + BAR_HIDE_DELAY_MS;
+						if (W.hoverButton != BTN_NONE)
 						{
-							W.barHover = FALSE;
 							W.hoverButton = BTN_NONE;
 							render();
 						}
@@ -967,6 +992,7 @@ void window_run(void)
 		}
 		if (W.resizeAt && SDL_GetTicks() >= W.resizeAt && W.window)
 			request_resize_now();
+		hide_bar_if_due();
 		if (W.window && W.hoverButton != BTN_NONE && !W.tooltipShown &&
 		    SDL_GetTicks() >= W.hoverSince + TOOLTIP_DELAY_MS)
 		{
