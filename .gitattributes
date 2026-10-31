@@ -1,0 +1,5 @@
+# Патчі vcpkg мають лишатися з LF: інакше git на Windows перетворить їх на CRLF
+# і vcpkg не зможе накласти їх на вихідний код FreeRDP.
+*.patch text eol=lf
+*.diff text eol=lf
+*.sh text eol=lf
