@@ -28,6 +28,9 @@ void main() {
     final (events, code) = await _run({'host': '127.0.0.1', 'port': 1, 'username': 'u', 'password': 'p'}, closeInput: false);
     final ended = events.whereType<DisconnectedEvent>().single;
     expect(ended.reason, DisconnectReason.network, reason: '${ended.code}: ${ended.details}');
+    // Саме відмова з'єднання, а не «DNS» (0x20004/0x20005): IP-адресу не треба шукати в DNS.
+    // Так виглядала помилка без WSAStartup на Windows.
+    expect(ended.code, isNot(anyOf(0x20004, 0x20005)), reason: ended.details);
     expect(code, isNot(-1), reason: 'процес мав завершитись сам');
   }, skip: _skip);
 

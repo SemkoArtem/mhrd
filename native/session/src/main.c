@@ -19,6 +19,7 @@
 #include <freerdp/settings.h>
 #include <winpr/string.h>
 #include <winpr/synch.h>
+#include <winpr/winsock.h>
 #include <winpr/wlog.h>
 
 #include <cjson/cJSON.h>
@@ -486,6 +487,11 @@ static void run_session(MhrdContext* m)
 int main(void)
 {
 	configure_logging();
+	/* Без WSAStartup на Windows не працює жоден мережевий виклик — навіть розбір IP-адреси
+	 * (FreeRDP тоді повідомляє «DNS-ім'я не знайдено»). Клієнти FreeRDP роблять це самі. */
+	WSADATA wsa;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+		return 1;
 	if (!proto_init())
 		return 1;
 
