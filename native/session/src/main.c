@@ -632,6 +632,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE)) &&
 	     /* 5 спроб, далі — відключення з «Підключитись знову» (SPEC → «Сеанс»). */
 	     freerdp_settings_set_uint32(s, FreeRDP_AutoReconnectMaxRetries, RECONNECT_MAX) &&
+	     /* Канал rdpei: дотики сенсорного екрана — справжніми дотиками на віддалений ПК. */
+	     freerdp_settings_set_bool(s, FreeRDP_MultiTouchInput, TRUE) &&
 	     freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, jbool(j, "clipboard", TRUE)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_AudioCapture, jbool(j, "microphone", FALSE));
 	/* Масштаб: картинка у фізичних пікселях, а інтерфейс ПК збільшено як у ОС клієнта —
@@ -857,6 +859,16 @@ static void host_close(void* ctx)
 	MhrdContext* m = (MhrdContext*)ctx;
 	m->userDisconnect = TRUE;
 	freerdp_abort_connect_context(&m->common.context);
+}
+
+/* Дотик пальцем — справжнім дотиком на віддалений ПК (канал rdpei), щоб Windows там сама робила
+ * жести: гортання пальцем, щипок, довге натискання. FALSE — сервер дотику не підтримує. */
+static BOOL host_touch(void* ctx, uint32_t flags, int finger, int x, int y)
+{
+	MhrdContext* m = (MhrdContext*)ctx;
+	if (!m->common.rdpei)
+		return FALSE;
+	return freerdp_client_handle_touch(&m->common, flags, finger, 0, x, y);
 }
 
 /* Плашку перетягнули чи змінили її довжину — застосунок запам'ятає для наступних сеансів. */
@@ -1087,7 +1099,7 @@ int main(void)
 	{
 		/* Вікно — у головному потоці (вимога SDL), FreeRDP — у своєму. */
 		const WindowHost host = { m, host_lock, host_unlock, host_buffer, host_key,
-			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved };
+			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved, host_touch };
 		if (window_init(&m->win, &host))
 		{
 			HANDLE t = CreateThread(NULL, 0, rdp_thread, m, 0, NULL);

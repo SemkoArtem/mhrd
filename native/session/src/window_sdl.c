@@ -7,6 +7,7 @@
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <freerdp/client.h> /* FREERDP_TOUCH_* */
 #include <freerdp/input.h>
 
 #ifdef _WIN32
@@ -87,7 +88,10 @@ typedef struct
 	SDL_FingerID id;
 	float x, y;   /* зараз, пікселі вікна */
 	float sx, sy; /* де торкнулись */
+	int slot;     /* номер дотику для віддаленого ПК (0..MAX_FINGERS-1), сталий, поки палець на екрані */
 } TouchFinger;
+
+#define MAX_FINGERS 10
 
 static struct
 {
@@ -155,7 +159,7 @@ static struct
 
 	/* Сенсорний екран (див. «Дотик»): масштаб щипком і стан жесту. */
 	float zoom, viewX, viewY;
-	TouchFinger fingers[2];
+	TouchFinger fingers[MAX_FINGERS];
 	int nfingers;
 	int gesture;     /* G_* */
 	Uint64 touchAt;  /* коли торкнулись (довге натискання, дотик двома пальцями) */
@@ -176,7 +180,8 @@ enum
 	G_SCROLL,    /* два пальці гортають (у збільшеному вигляді — зсувають картинку) */
 	G_PINCH,     /* два пальці масштабують */
 	G_END,       /* жест скінчився — чекаємо, доки піднімуть усі пальці */
-	G_BAR        /* палець на плашці — події йдуть їй, як миша */
+	G_BAR,       /* палець на плашці — події йдуть їй, як миша */
+	G_NATIVE     /* справжні дотики йдуть на віддалений ПК (rdpei) — жести робить сама Windows там */
 };
 
 #define TOUCH_SLOP 12         /* на скільки пікселів (× масштаб) рушити, щоб це вже був не дотик */
@@ -1050,6 +1055,17 @@ static void add_system_menu(void)
 	HMENU menu = hwnd ? GetSystemMenu(hwnd, FALSE) : NULL;
 	if (!menu)
 		return;
+	/* Дотик обробляє віддалена Windows: тут не треба ні «натиснути й тримати = правий клік», ні
+	 * змахів, ні кружечків під пальцем — інакше вони дублювались би. */
+	SetPropW(hwnd, L"MicrosoftTabletPenServiceProperty", (HANDLE)(ULONG_PTR)(0x00000001 /* press-and-hold */ |
+	                                                                         0x00000008 /* tap feedback */ |
+	                                                                         0x00000010 /* barrel feedback */ |
+	                                                                         0x00010000 /* flicks */));
+	BOOL off = FALSE;
+	SetWindowFeedbackSetting(hwnd, FEEDBACK_TOUCH_CONTACTVISUALIZATION, 0, sizeof(off), &off);
+	SetWindowFeedbackSetting(hwnd, FEEDBACK_TOUCH_TAP, 0, sizeof(off), &off);
+	SetWindowFeedbackSetting(hwnd, FEEDBACK_TOUCH_PRESSANDHOLD, 0, sizeof(off), &off);
+	SetWindowFeedbackSetting(hwnd, FEEDBACK_TOUCH_RIGHTTAP, 0, sizeof(off), &off);
 	AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
 	append_menu_item(menu, IDM_FULLSCREEN, W.cfg.menuFullscreen);
 	append_menu_item(menu, IDM_KEYBOARD, W.cfg.menuKeyboard);
@@ -1393,9 +1409,60 @@ static void on_wheel(const SDL_MouseWheelEvent* e)
 }
 
 /* ── Дотик ────────────────────────────────────────────────────────
- * Сенсорний екран керує мишею віддаленого ПК: один палець — як миша (дотик — клік, рух — тягнути
- * з лівою кнопкою), довге натискання — правий клік, два пальці — гортати в будь-який бік, щипок —
- * збільшити картинку (у збільшеному вигляді два пальці зсувають її), дотик двома пальцями — правий клік. */
+ * Основний режим: дотики йдуть на віддалений ПК справжніми дотиками (канал rdpei) — як на сенсорному
+ * екрані самої Windows: пальцем гортати, щипок у програмах, довге натискання — правий клік тощо.
+ * Якщо сервер дотику не підтримує, вікно імітує мишу: один палець — як миша (дотик — клік, рух —
+ * тягнути з лівою кнопкою), довге натискання — правий клік, два пальці — гортати, щипок — збільшити
+ * картинку (у збільшеному вигляді два пальці зсувають її), дотик двома пальцями — правий клік. */
+
+static int finger_index(SDL_FingerID id);
+
+static int free_slot(void)
+{
+	for (int s = 0; s < MAX_FINGERS; s++)
+	{
+		BOOL used = FALSE;
+		for (int i = 0; i < W.nfingers; i++)
+			used |= W.fingers[i].slot == s;
+		if (!used)
+			return s;
+	}
+	return -1;
+}
+
+/* Справжній дотик на віддалений ПК. FALSE — сервер дотику не підтримує (лише на першому дотику). */
+static BOOL native_touch(const SDL_TouchFingerEvent* e, float px, float py)
+{
+	uint16_t x = 0, y = 0;
+	px_to_remote(px, py, &x, &y);
+	if (e->type == SDL_EVENT_FINGER_DOWN)
+	{
+		const int slot = free_slot();
+		if (slot < 0)
+			return TRUE; /* більше 10 пальців — зайві пропускаємо */
+		if (!W.host.touch(W.host.ctx, FREERDP_TOUCH_DOWN, slot, x, y))
+			return FALSE;
+		W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py, slot };
+		W.gesture = G_NATIVE;
+		return TRUE;
+	}
+	const int i = finger_index(e->fingerID);
+	if (i < 0)
+		return TRUE;
+	const int slot = W.fingers[i].slot;
+	if (e->type == SDL_EVENT_FINGER_MOTION)
+	{
+		W.fingers[i].x = px;
+		W.fingers[i].y = py;
+		W.host.touch(W.host.ctx, FREERDP_TOUCH_MOTION, slot, x, y);
+		return TRUE;
+	}
+	W.host.touch(W.host.ctx, FREERDP_TOUCH_UP, slot, x, y);
+	W.fingers[i] = W.fingers[--W.nfingers];
+	if (W.nfingers == 0)
+		W.gesture = G_NONE;
+	return TRUE;
+}
 
 static void remote_click(float px, float py, uint16_t button)
 {
@@ -1456,6 +1523,12 @@ static void on_finger(const SDL_TouchFingerEvent* e)
 	const float px = e->x * (float)pw, py = e->y * (float)ph, k = pixel_ratio(), s = ui_scale();
 	const Uint64 now = SDL_GetTicks();
 
+	if (W.gesture == G_NATIVE)
+	{
+		native_touch(e, px, py);
+		return;
+	}
+
 	if (e->type == SDL_EVENT_FINGER_DOWN)
 	{
 		/* Під час перепідключення — лише «Скасувати». */
@@ -1465,20 +1538,27 @@ static void on_finger(const SDL_TouchFingerEvent* e)
 				W.host.close(W.host.ctx);
 			return;
 		}
-		if (W.nfingers >= 2)
-			return; /* третій і далі пальці не беремо */
-		W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py };
-		if (W.nfingers == 1)
+		if (W.nfingers == 0)
 		{
 			layout_bar();
 			const BOOL onBar = bar_visible() ? in_rect(&W.hotRect, px, py) : in_rect(&W.handleRect, px, py);
 			if (onBar)
 			{
+				W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py, 0 };
 				W.gesture = G_BAR;
 				bar_mouse(px / k, py / k, MOUSE_MOVE, 0);
 				bar_mouse(px / k, py / k, MOUSE_DOWN, SDL_BUTTON_LEFT);
 				return;
 			}
+			/* Сервер приймає справжні дотики — далі все йде йому. */
+			if (W.host.touch && native_touch(e, px, py))
+				return;
+		}
+		if (W.nfingers >= 2)
+			return; /* без rdpei третій і далі пальці не беремо */
+		W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py, 0 };
+		if (W.nfingers == 1)
+		{
 			W.gesture = G_PENDING;
 			W.touchAt = now;
 			remote_mouse(px, py, PTR_FLAGS_MOVE); /* курсор — туди, де палець */

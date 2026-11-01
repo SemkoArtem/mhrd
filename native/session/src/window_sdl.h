@@ -24,6 +24,9 @@ typedef struct
 	void (*close)(void* ctx); /* користувач закрив вікно / «Відключитись» */
 	/* Плашку перетягнули або змінили довжину (див. barEdge/barPos/barLength). */
 	void (*barMoved)(void* ctx, int edge, int pos, int length);
+	/* Дотик на віддалений ПК (FREERDP_TOUCH_*, координати віддаленого екрана). FALSE — сервер
+	 * дотику не підтримує, тоді вікно імітує мишу саме. */
+	BOOL (*touch)(void* ctx, uint32_t flags, int finger, int x, int y);
 } WindowHost;
 
 /* Налаштування з MSG_CONNECT. Рядки належать викликачу до window_run включно. */
