@@ -5,9 +5,14 @@
 бекап і власні теми. Ядро протоколу — [FreeRDP 3](https://github.com/FreeRDP/FreeRDP),
 інтерфейс — Flutter.
 
-> **Статус: робочий прототип для Windows.** Підключення, буфер обміну, звук, мікрофон і
-> спільні папки працюють і перевірені на реальному сервері. Далі — доробка решти пунктів,
-> потім Android і Linux.
+> **Статус: перший публічний випуск для Windows.** Далі — Linux і портативна версія, потім Android.
+
+## Завантажити
+
+Інсталятор для Windows 10/11 (x64) і версія без встановлення (zip) — у
+[**Releases**](https://github.com/SemkoArtem/mhrd/releases). Права адміністратора не потрібні.
+Програма ще не підписана сертифікатом, тож SmartScreen може попередити: «Докладніше» →
+«Однаково запустити».
 
 ## Що вже вміє (Windows)
 
@@ -83,6 +88,10 @@ flutter build windows --release
 Без збирання на своєму ПК: **Actions** → **build** → **Run workflow** — збірки для Windows,
 Linux, macOS і Android з'являться в цьому запуску → **Artifacts**. На кожен push GitHub Actions
 лише проганяє аналіз коду й тести.
+
+**Випуск:** тег `vX.Y.Z` (та сама версія в `pubspec.yaml`) і нотатки в `docs/releases/vX.Y.Z.md` →
+workflow **release** збирає інсталятор (`windows/installer/mhrd.iss`, Inno Setup) і zip та
+створює GitHub Release.
 
 ## Як влаштовано
 

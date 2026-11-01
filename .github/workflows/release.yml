@@ -1,0 +1,83 @@
+name: release
+
+# Реліз для Windows: тег vX.Y.Z → збирання → інсталятор (Inno Setup) і zip без встановлення →
+# GitHub Release з обома файлами. Вручну (Run workflow) — лише збирання й артефакти, без релізу.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write  # створити реліз і прикріпити файли
+
+jobs:
+  windows:
+    # Саме 2022: native/session/build.ps1 збирає генератором «Visual Studio 17 2022», а windows-latest
+    # з часом переходить на новішу студію.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # mhrd-session: FreeRDP, OpenSSL, SDL3 через vcpkg (статично). Кеш — щоб ~30 хв збирання
+      # повторювались лише при зміні native/session/vcpkg.json.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('native/session/vcpkg.json') }}
+      - name: Build mhrd-session
+        shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+        run: |
+          New-Item -ItemType Directory -Force "${{ github.workspace }}\vcpkg-cache" | Out-Null
+          git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          $env:VCPKG_ROOT = "$env:RUNNER_TEMP\vcpkg"
+          ./native/session/build.ps1 -Config Release
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/tunnels/go.mod
+          cache-dependency-path: native/tunnels/go.sum
+      - name: Build mhrd-tunnel
+        shell: pwsh
+        run: ./native/tunnels/build.ps1
+
+      - run: flutter pub get
+      - run: flutter build windows --release
+
+      - name: Version
+        id: ver
+        shell: pwsh
+        run: |
+          # З тегу (v0.1.0 → 0.1.0), а без тегу — з pubspec.yaml.
+          $v = '${{ github.ref_name }}'
+          if ($v -notmatch '^v\d') { $v = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([\d.]+)').Matches[0].Groups[1].Value }
+          "version=$($v.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+
+      - name: Installer and portable zip
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" windows\installer\mhrd.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "build\installer\mhrd-${{ steps.ver.outputs.version }}-x64-portable.zip"
+          Get-ChildItem build\installer | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mhrd-windows-${{ steps.ver.outputs.version }}
+          path: build/installer/*
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MHRD ${{ steps.ver.outputs.version }}
+          body_path: docs/releases/v${{ steps.ver.outputs.version }}.md
+          files: build/installer/*

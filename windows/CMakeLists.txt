@@ -107,6 +107,17 @@ else()
   message(WARNING "mhrd-tunnel.exe не знайдено: запустіть native/tunnels/build.ps1")
 endif()
 
+# Бібліотеки Visual C++ (msvcp140, vcruntime140, vcruntime140_1) — поруч із програмою: mhrd.exe і
+# плагіни Flutter без них не запускаються на Windows, де немає Visual C++ Redistributable.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+include(InstallRequiredSystemLibraries)
+if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+  install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS} DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Бібліотеки Visual C++ не знайдено — на чистій Windows MHRD може не запуститись")
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
