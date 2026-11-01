@@ -30,6 +30,7 @@ dependencies:
   ffi: ^2.1.0
   # Повний екран сеансу (Windows/Linux/macOS)
   window_manager: ^0.5.2
+  local_auth: ^3.0.2
 
 dev_dependencies:
   flutter_test:

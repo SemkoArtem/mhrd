@@ -1760,6 +1760,102 @@ abstract class AppLocalizations {
   /// **'Зображення'**
   String get imageFiles;
 
+  /// No description provided for @lockSection.
+  ///
+  /// In uk, this message translates to:
+  /// **'Блокування'**
+  String get lockSection;
+
+  /// No description provided for @lockEnable.
+  ///
+  /// In uk, this message translates to:
+  /// **'Блокувати MHRD PIN-кодом'**
+  String get lockEnable;
+
+  /// No description provided for @lockEnableHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'PIN питається при кожному запуску. Відкриті сеанси працюють далі.'**
+  String get lockEnableHint;
+
+  /// No description provided for @lockBiometric.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відкривати відбитком / Windows Hello'**
+  String get lockBiometric;
+
+  /// No description provided for @lockReason.
+  ///
+  /// In uk, this message translates to:
+  /// **'Розблокувати MHRD'**
+  String get lockReason;
+
+  /// No description provided for @lockTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Введіть PIN-код'**
+  String get lockTitle;
+
+  /// No description provided for @lockSetPin.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий PIN-код'**
+  String get lockSetPin;
+
+  /// No description provided for @pinHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'PIN'**
+  String get pinHint;
+
+  /// No description provided for @pinNew.
+  ///
+  /// In uk, this message translates to:
+  /// **'PIN-код (від 4 цифр)'**
+  String get pinNew;
+
+  /// No description provided for @pinRepeat.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ще раз'**
+  String get pinRepeat;
+
+  /// No description provided for @pinCurrent.
+  ///
+  /// In uk, this message translates to:
+  /// **'Поточний PIN-код'**
+  String get pinCurrent;
+
+  /// No description provided for @pinWrong.
+  ///
+  /// In uk, this message translates to:
+  /// **'Неправильний PIN-код.'**
+  String get pinWrong;
+
+  /// No description provided for @pinTooShort.
+  ///
+  /// In uk, this message translates to:
+  /// **'PIN-код — щонайменше 4 цифри.'**
+  String get pinTooShort;
+
+  /// No description provided for @pinMismatch.
+  ///
+  /// In uk, this message translates to:
+  /// **'PIN-коди не збігаються.'**
+  String get pinMismatch;
+
+  /// No description provided for @unlock.
+  ///
+  /// In uk, this message translates to:
+  /// **'Розблокувати'**
+  String get unlock;
+
+  /// No description provided for @unlockBiometric.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відбиток / Windows Hello'**
+  String get unlockBiometric;
+
   /// No description provided for @checkConnection.
   ///
   /// In uk, this message translates to:

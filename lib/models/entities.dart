@@ -274,6 +274,8 @@ class AppSettings {
     this.collapsedGroups = const [noGroupSection],
     this.screenTemplates = const [],
     this.defaultScreen = ScreenTemplate.auto,
+    this.lockEnabled = false,
+    this.lockBiometric = false,
     this.lastBackupAt,
   });
 
@@ -303,6 +305,12 @@ class AppSettings {
 
   /// Типовий шаблон для ПК, у яких «як у загальних»: id шаблону або [ScreenTemplate.auto].
   final String defaultScreen;
+
+  /// Блокування MHRD при запуску PIN-кодом (сам PIN — лише хеш у сховищі, див. AppLock).
+  final bool lockEnabled;
+
+  /// Відкривати також відбитком / Windows Hello.
+  final bool lockBiometric;
   final DateTime? lastBackupAt;
 
   /// Усі шаблони: стандартні, потім свої.
@@ -331,6 +339,8 @@ class AppSettings {
     List<String>? collapsedGroups,
     List<ScreenTemplate>? screenTemplates,
     String? defaultScreen,
+    bool? lockEnabled,
+    bool? lockBiometric,
     DateTime? lastBackupAt,
   }) =>
       AppSettings(
@@ -346,6 +356,8 @@ class AppSettings {
         collapsedGroups: collapsedGroups ?? this.collapsedGroups,
         screenTemplates: screenTemplates ?? this.screenTemplates,
         defaultScreen: defaultScreen ?? this.defaultScreen,
+        lockEnabled: lockEnabled ?? this.lockEnabled,
+        lockBiometric: lockBiometric ?? this.lockBiometric,
         lastBackupAt: lastBackupAt ?? this.lastBackupAt,
       );
 
@@ -362,6 +374,8 @@ class AppSettings {
         'collapsedGroups': collapsedGroups,
         'screenTemplates': [for (final t in screenTemplates) t.toJson()],
         'defaultScreen': defaultScreen,
+        'lockEnabled': lockEnabled,
+        'lockBiometric': lockBiometric,
         'lastBackupAt': lastBackupAt?.toIso8601String(),
       };
 
@@ -383,6 +397,8 @@ class AppSettings {
               if (x is Map) ScreenTemplate.fromJson(x.cast<String, dynamic>()),
         ],
         defaultScreen: strOr(j['defaultScreen'], ScreenTemplate.auto),
+        lockEnabled: boolOr(j['lockEnabled'], false),
+        lockBiometric: boolOr(j['lockBiometric'], false),
         lastBackupAt: dateOrNull(j['lastBackupAt']),
       );
 }

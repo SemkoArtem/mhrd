@@ -6,6 +6,7 @@ import 'sessions/session_manager.dart';
 import 'storage/repository.dart';
 import 'theme/mhrd_theme.dart';
 import 'ui/home_screen.dart';
+import 'ui/lock_screen.dart';
 
 /// Доступ до сервісів з будь-якого віджета: `AppScope.of(context).repo`.
 class AppScope extends InheritedWidget {
@@ -66,7 +67,7 @@ class MhrdApp extends StatelessWidget {
               ),
               child: child!,
             ),
-            home: const HomeScreen(),
+            home: const LockGate(child: HomeScreen()),
           );
         },
       ),

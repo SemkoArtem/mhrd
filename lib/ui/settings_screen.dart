@@ -11,6 +11,7 @@ import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
 import '../l10n/l10n.dart';
 import '../models/entities.dart';
+import '../security/app_lock.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -18,6 +19,7 @@ import '../util/wireguard_conf.dart';
 import 'credential_dialog.dart';
 import 'dialogs.dart';
 import 'file_actions.dart';
+import 'lock_screen.dart';
 import 'theme_editor.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -143,6 +145,38 @@ class _GeneralTab extends StatelessWidget {
           onChanged: (v) => set(s.copyWith(keyboardCapture: v)),
         ),
       ),
+      _caption(context, l.lockSection),
+      SwitchListTile(
+        value: s.lockEnabled,
+        title: Text(l.lockEnable),
+        subtitle: Text(l.lockEnableHint),
+        onChanged: (v) async {
+          final lock = AppLock(repo);
+          if (v) {
+            final pin = await askNewPin(context);
+            if (pin != null) await lock.setPin(pin);
+          } else if (await confirmPin(context, lock)) {
+            await lock.disable();
+          } else if (context.mounted) {
+            toast(context, l.pinWrong);
+          }
+        },
+      ),
+      if (s.lockEnabled)
+        FutureBuilder<bool>(
+          future: AppLock(repo).biometricAvailable(),
+          builder: (context, snap) => snap.data != true
+              ? const SizedBox.shrink()
+              : SwitchListTile(
+                  value: s.lockBiometric,
+                  title: Text(l.lockBiometric),
+                  onChanged: (v) async {
+                    // Вмикаємо, лише якщо відбиток / Windows Hello справді спрацював.
+                    if (v && !await AppLock(repo).unlockWithBiometric(l.lockReason)) return;
+                    set(repo.settings.copyWith(lockBiometric: v));
+                  },
+                ),
+        ),
     ]);
   }
 }

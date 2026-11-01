@@ -953,6 +953,55 @@ class AppLocalizationsUk extends AppLocalizations {
   String get imageFiles => 'Зображення';
 
   @override
+  String get lockSection => 'Блокування';
+
+  @override
+  String get lockEnable => 'Блокувати MHRD PIN-кодом';
+
+  @override
+  String get lockEnableHint =>
+      'PIN питається при кожному запуску. Відкриті сеанси працюють далі.';
+
+  @override
+  String get lockBiometric => 'Відкривати відбитком / Windows Hello';
+
+  @override
+  String get lockReason => 'Розблокувати MHRD';
+
+  @override
+  String get lockTitle => 'Введіть PIN-код';
+
+  @override
+  String get lockSetPin => 'Новий PIN-код';
+
+  @override
+  String get pinHint => 'PIN';
+
+  @override
+  String get pinNew => 'PIN-код (від 4 цифр)';
+
+  @override
+  String get pinRepeat => 'Ще раз';
+
+  @override
+  String get pinCurrent => 'Поточний PIN-код';
+
+  @override
+  String get pinWrong => 'Неправильний PIN-код.';
+
+  @override
+  String get pinTooShort => 'PIN-код — щонайменше 4 цифри.';
+
+  @override
+  String get pinMismatch => 'PIN-коди не збігаються.';
+
+  @override
+  String get unlock => 'Розблокувати';
+
+  @override
+  String get unlockBiometric => 'Відбиток / Windows Hello';
+
+  @override
   String get checkConnection => 'Перевірити з\'єднання';
 
   @override

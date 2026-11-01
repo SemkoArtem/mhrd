@@ -953,6 +953,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get imageFiles => 'Images';
 
   @override
+  String get lockSection => 'Lock';
+
+  @override
+  String get lockEnable => 'Lock MHRD with a PIN';
+
+  @override
+  String get lockEnableHint =>
+      'The PIN is asked on every start. Open sessions keep running.';
+
+  @override
+  String get lockBiometric => 'Unlock with fingerprint / Windows Hello';
+
+  @override
+  String get lockReason => 'Unlock MHRD';
+
+  @override
+  String get lockTitle => 'Enter your PIN';
+
+  @override
+  String get lockSetPin => 'New PIN';
+
+  @override
+  String get pinHint => 'PIN';
+
+  @override
+  String get pinNew => 'PIN (4 digits or more)';
+
+  @override
+  String get pinRepeat => 'Repeat';
+
+  @override
+  String get pinCurrent => 'Current PIN';
+
+  @override
+  String get pinWrong => 'Wrong PIN.';
+
+  @override
+  String get pinTooShort => 'The PIN must have at least 4 digits.';
+
+  @override
+  String get pinMismatch => 'The PINs don\'t match.';
+
+  @override
+  String get unlock => 'Unlock';
+
+  @override
+  String get unlockBiometric => 'Fingerprint / Windows Hello';
+
+  @override
   String get checkConnection => 'Check connection';
 
   @override
