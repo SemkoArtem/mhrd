@@ -14,7 +14,7 @@ import '../models/connection.dart';
 import '../models/entities.dart';
 import '../security/app_lock.dart';
 import '../sessions/route_health.dart' show probeProxy;
-import '../sessions/session_manager.dart' show HealthState, TunnelError;
+import '../sessions/session_manager.dart' show HealthState, RouteHealth, RouteStatus, TunnelError;
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -298,15 +298,19 @@ class _RoutesTab extends StatelessWidget {
     ));
   }
 
-  /// Проксі SOCKS5 або HTTP. Пароль — лише в системному сховищі; під час редагування порожнє
-  /// поле пароля лишає збережений (прибрали логін — пароль видаляємо).
+  /// Проксі SOCKS5 або HTTP. Пароль — лише в системному сховищі. Наявний проксі редагується лише
+  /// після PIN-коду MHRD чи Windows Hello — тоді видно й збережений пароль (прибрали логін — пароль видаляємо).
   Future<void> _editProxy(BuildContext context, [ProxyProfile? p]) async {
     final l = context.l10n;
+    if (p != null && !await authorizeSensitive(context, repo)) return;
+    final saved = p == null || p.username.isEmpty ? '' : (await repo.secrets.read(p.secretKey) ?? '');
+    if (!context.mounted) return;
     final name = TextEditingController(text: p?.name ?? '');
     final addr = TextEditingController(text: p == null ? '' : '${p.host}:${p.port}');
     final user = TextEditingController(text: p?.username ?? '');
-    final pass = TextEditingController();
+    final pass = TextEditingController(text: saved);
     var type = p?.type ?? ProxyType.socks5;
+    var showPass = false;
     String? err;
     int defaultPort() => type == ProxyType.http ? 8080 : 1080;
     final ok = await showDialog<bool>(
@@ -341,7 +345,18 @@ class _RoutesTab extends StatelessWidget {
                 decoration: InputDecoration(labelText: l.credUser, helperText: l.proxyLoginHint),
               ),
               const SizedBox(height: 12),
-              TextField(controller: pass, obscureText: true, decoration: InputDecoration(labelText: l.password)),
+              TextField(
+                controller: pass,
+                obscureText: !showPass,
+                decoration: InputDecoration(
+                  labelText: l.password,
+                  suffixIcon: IconButton(
+                    tooltip: l.showKeys,
+                    icon: Icon(showPass ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    onPressed: () => set(() => showPass = !showPass),
+                  ),
+                ),
+              ),
             ]),
           ),
           actions: [
@@ -366,9 +381,8 @@ class _RoutesTab extends StatelessWidget {
     final profile =
         ProxyProfile(id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username);
     // Спершу перевіряємо проксі (і ПК за ним, якщо через нього вже ходить ПК), потім зберігаємо.
-    final password = username.isEmpty
-        ? ''
-        : (pass.text.isNotEmpty ? pass.text : (p == null ? '' : await repo.secrets.read(p.secretKey) ?? ''));
+    // Поле пароля вже містить збережений: що в ньому — те й буде (порожнє — пароль видаляється).
+    final password = username.isEmpty ? '' : pass.text;
     final target = repo.connections.values.where((c) => c.route == RouteKind.proxy && c.routeRefId == p?.id).firstOrNull;
     if (!context.mounted) return;
     final save = await checkBeforeSave(
@@ -377,8 +391,69 @@ class _RoutesTab extends StatelessWidget {
       check: () => probeProxy(profile, password: password, targetHost: target?.host, targetPort: target?.port ?? 3389),
       okText: (ms) => target == null ? l.proxyCheckOk(ms) : l.proxyCheckOkPc(ms, target.displayName),
     );
-    if (!save) return;
-    await repo.saveProxy(profile, password: username.isEmpty ? '' : (pass.text.isEmpty ? null : pass.text));
+    if (!save || !context.mounted) return;
+    final health = AppScope.of(context).sessions.health;
+    await repo.saveProxy(profile, password: password);
+    health.check(profile.id); // стан у лівій панелі — з новим паролем теж
+  }
+
+  /// Рядок проксі: адреса й логін, стан і затримка; перевірити, редагувати (після PIN), видалити.
+  Widget _proxyTile(BuildContext context, ProxyProfile p) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final health = AppScope.of(context).sessions.health;
+    return ListenableBuilder(
+      listenable: health,
+      builder: (context, _) {
+        final s = health.statusOf(p.id);
+        final (status, color) = _statusLine(context, s);
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.swap_horiz, color: s.state == HealthState.ok ? t.ok : null),
+          title: Text(p.name.trim().isEmpty ? '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}' : p.name),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}:${p.port}'
+                '${p.username.isEmpty ? '' : ' · ${p.username}'} · ${l.pcCount(repo.usersOfTunnel(p.id))}',
+                style: t.mono),
+            Text(status, style: TextStyle(color: color, fontSize: 12.5)),
+          ]),
+          isThreeLine: true,
+          trailing: Wrap(children: [
+            _checkButton(context, health, p.id, s),
+            IconButton(tooltip: l.edit, icon: const Icon(Icons.edit_outlined), onPressed: () => _editProxy(context, p)),
+            IconButton(
+              tooltip: l.delete,
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _guardedDelete(context, (force) => repo.deleteProxy(p.id, force: force)),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+
+  /// Стан маршруту текстом і кольором: «Працює · 34 мс», причина помилки, «Перевіряю…».
+  (String, Color) _statusLine(BuildContext context, RouteStatus s) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    return switch (s.state) {
+      HealthState.ok => (l.healthOk(s.latencyMs ?? 0), t.ok),
+      HealthState.failed => (l.healthError(s.error ?? TunnelError.failed), t.error),
+      HealthState.checking => (l.healthChecking, t.textMuted),
+      HealthState.unknown => (l.healthUnknown, t.textMuted),
+    };
+  }
+
+  Widget _checkButton(BuildContext context, RouteHealth health, String id, RouteStatus s) {
+    final checking = s.state == HealthState.checking;
+    return IconButton(
+      tooltip: context.l10n.checkNow,
+      icon: checking
+          ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.network_check),
+      onPressed: checking ? null : () => health.check(id),
+    );
   }
 
   /// Імпорт .conf: новий тунель або, з [into], оновлення наявного (те саме id — ПК лишаються на ньому,
@@ -547,12 +622,7 @@ class _RoutesTab extends StatelessWidget {
       listenable: health,
       builder: (context, _) {
         final s = health.statusOf(tu.id);
-        final (status, color) = switch (s.state) {
-          HealthState.ok => (l.healthOk(s.latencyMs ?? 0), t.ok),
-          HealthState.failed => (l.healthError(s.error ?? TunnelError.failed), t.error),
-          HealthState.checking => (l.healthChecking, t.textMuted),
-          HealthState.unknown => (l.healthUnknown, t.textMuted),
-        };
+        final (status, color) = _statusLine(context, s);
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.shield_outlined, color: s.state == HealthState.ok ? t.ok : null),
@@ -565,13 +635,7 @@ class _RoutesTab extends StatelessWidget {
           ]),
           isThreeLine: true,
           trailing: Wrap(children: [
-            IconButton(
-              tooltip: l.checkNow,
-              icon: s.state == HealthState.checking
-                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.network_check),
-              onPressed: s.state == HealthState.checking ? null : () => health.check(tu.id),
-            ),
+            _checkButton(context, health, tu.id, s),
             IconButton(
               tooltip: l.wgUpdateFromConf,
               icon: const Icon(Icons.sync),
@@ -624,18 +688,7 @@ class _RoutesTab extends StatelessWidget {
         ),
       ]),
       _caption(context, l.proxies),
-      for (final p in repo.proxies.values)
-        ListTile(
-          leading: const Icon(Icons.swap_horiz),
-          title: Text(p.name.trim().isEmpty ? '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}' : p.name),
-          subtitle: Text('${p.host}:${p.port}${p.username.isEmpty ? '' : ' · ${p.username}'}', style: t.mono),
-          onTap: () => _editProxy(context, p),
-          trailing: IconButton(
-            tooltip: l.delete,
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _guardedDelete(context, (force) => repo.deleteProxy(p.id, force: force)),
-          ),
-        ),
+      for (final p in repo.proxies.values) _proxyTile(context, p),
       Wrap(spacing: 8, children: [
         TextButton.icon(icon: const Icon(Icons.add), label: Text(l.addProxy), onPressed: () => _editProxy(context)),
       ]),
