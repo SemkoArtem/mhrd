@@ -27,6 +27,8 @@ typedef struct
 	/* Дотик на віддалений ПК (FREERDP_TOUCH_*, координати віддаленого екрана). FALSE — сервер
 	 * дотику не підтримує, тоді вікно імітує мишу саме. */
 	BOOL (*touch)(void* ctx, uint32_t flags, int finger, int x, int y);
+	/* Символ без клавіші (сенсорна клавіатура, автозаповнення паролів, емодзі): одиниця UTF-16. */
+	void (*unicode)(void* ctx, uint16_t code);
 } WindowHost;
 
 /* Налаштування з MSG_CONNECT. Рядки належать викликачу до window_run включно. */

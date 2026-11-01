@@ -940,7 +940,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // «10.8.0.2 · 34 мс» — адреса й затримка, коли працює.
                 if (address != null)
                   Text(
-                    s.state == HealthState.ok && s.latencyMs != null ? '$address · ${l.latencyMs('${s.latencyMs}')}' : address,
+                    // мс — першими: довга адреса проксі обрізається, а затримку має бути видно
+                    s.state == HealthState.ok && s.latencyMs != null ? '${l.latencyMs('${s.latencyMs}')} · $address' : address,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontFamily: t.fontMono, color: t.textMuted, fontSize: 11.5),

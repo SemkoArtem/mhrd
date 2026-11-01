@@ -640,6 +640,18 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	if (account && !freerdp_parse_username(account, &user, &domain))
 		goto out;
 
+	/* Власне сховище сертифікатів FreeRDP (%APPDATA%\freerdp\server) не потрібне: довіру пам'ятає
+	 * застосунок (certPin), а FreeRDP заглядав би туди першим — через тунель адреса завжди 127.0.0.1
+	 * з випадковим портом, і він «бачив би» підміну там, де інший сервер, або сам приймав старий запис,
+	 * оминаючи certPin. Окрема порожня тека — і рішення завжди за mhrd_verify_certificate. */
+	char cfgDir[MAX_PATH + 32] = { 0 };
+	const DWORD tmpLen = GetTempPathA(MAX_PATH, cfgDir);
+	if (tmpLen > 0 && tmpLen < MAX_PATH)
+	{
+		strcat_s(cfgDir, sizeof(cfgDir), "mhrd-freerdp");
+		freerdp_settings_set_string(s, FreeRDP_ConfigPath, cfgDir);
+	}
+
 	ok = freerdp_settings_set_string(s, FreeRDP_ServerHostname, host) &&
 	     freerdp_settings_set_uint32(s, FreeRDP_ServerPort, (UINT32)jint(j, "port", 3389)) &&
 	     freerdp_settings_set_string(s, FreeRDP_Username, user) &&
@@ -909,6 +921,16 @@ static BOOL host_touch(void* ctx, uint32_t flags, int finger, int x, int y)
 	return ok;
 }
 
+static void host_unicode(void* ctx, uint16_t code)
+{
+	if (!input_begin(ctx))
+		return;
+	rdpInput* input = ((MhrdContext*)ctx)->common.context.input;
+	freerdp_input_send_unicode_keyboard_event(input, 0, code);
+	freerdp_input_send_unicode_keyboard_event(input, KBD_FLAGS_RELEASE, code);
+	input_end(ctx);
+}
+
 /* Плашку перетягнули чи змінили її довжину — застосунок запам'ятає для наступних сеансів. */
 static void host_bar_moved(void* ctx, int edge, int pos, int length)
 {
@@ -985,6 +1007,10 @@ static void configure_logging(void)
 	WLog_SetLogLevel(WLog_Get("mhrd"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.rdpsnd.client"), WLOG_INFO);
 	WLog_SetLogLevel(WLog_Get("com.freerdp.channels.audin.client"), WLOG_INFO);
+	/* Сертифікат RDP-сервера самопідписаний і виданий на ім'я ПК, а не на IP, — FreeRDP щоразу пише
+	 * «REMOTE HOST IDENTIFICATION HAS CHANGED… man-in-the-middle». Довіру ж вирішує MHRD (certPin і
+	 * діалог з відбитком), тож у журналі сеансів ця тривога лише лякає. */
+	WLog_SetLogLevel(WLog_Get("com.freerdp.crypto"), WLOG_FATAL);
 }
 
 /* Між спробами перепідключення; користувач закрив вікно чи натиснув «Відключитись» — досить. */
@@ -1147,7 +1173,8 @@ int main(void)
 	{
 		/* Вікно — у головному потоці (вимога SDL), FreeRDP — у своєму. */
 		const WindowHost host = { m, host_lock, host_unlock, host_buffer, host_key,
-			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved, host_touch };
+			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved, host_touch,
+			                      host_unicode };
 		if (window_init(&m->win, &host))
 		{
 			HANDLE t = CreateThread(NULL, 0, rdp_thread, m, 0, NULL);

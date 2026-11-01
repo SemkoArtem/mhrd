@@ -157,6 +157,8 @@ static struct
 	SDL_FRect latencyRect;
 
 	Uint64 thumbAt; /* коли зберегти мініатюру (0 — ще немає картинки) */
+	BOOL textFromKey; /* натиснута клавіша зі скан-кодом — її текст (SDL_EVENT_TEXT_INPUT) не дублюємо */
+	SDL_Texture* ellipsis; /* «…» для назви ПК, що не вміщається на плашці */
 
 	/* Сенсорний екран (див. «Дотик»): масштаб щипком і стан жесту. */
 	float zoom, viewX, viewY;
@@ -548,6 +550,7 @@ static void load_labels(void)
 	W.labels[BTN_COUNT] = make_label(W.cfg.barTitle ? W.cfg.barTitle : W.cfg.title);
 	W.reconnectLabel = make_label(W.cfg.labelReconnecting);
 	W.cancelLabel = make_label(W.cfg.labelCancel);
+	W.ellipsis = make_label("\xE2\x80\xA6"); /* … */
 }
 
 /* «Перепідключення… спроба 2 з 5» для поточної спроби. */
@@ -848,10 +851,21 @@ static void draw_bar(void)
 	const SDL_FRect* name = &W.titleRect;
 	if (name->w > 0 && W.labels[BTN_COUNT])
 	{
-		SDL_Rect clip = { (int)name->x, (int)name->y, (int)name->w, (int)name->h };
+		/* Не вміщається — обрізаємо й ставимо «…», а не уриваємо посеред адреси. */
+		float tw = 0, th = 0, ew = 0, eh = 0;
+		SDL_GetTextureSize(W.labels[BTN_COUNT], &tw, &th);
+		if (W.ellipsis)
+			SDL_GetTextureSize(W.ellipsis, &ew, &eh);
+		const BOOL cut = tw > name->w && ew > 0 && name->w > ew * 2;
+		SDL_Rect clip = { (int)name->x, (int)name->y, (int)(cut ? name->w - ew : name->w), (int)name->h };
 		SDL_SetRenderClipRect(W.renderer, &clip);
 		draw_label(W.labels[BTN_COUNT], name, TRUE);
 		SDL_SetRenderClipRect(W.renderer, NULL);
+		if (cut)
+		{
+			const SDL_FRect e = { name->x + name->w - ew, name->y, ew, name->h };
+			draw_label(W.ellipsis, &e, TRUE);
+		}
 	}
 	draw_tooltip();
 }
@@ -1120,6 +1134,7 @@ static void create_window(void)
 	add_system_menu();
 #endif
 	SDL_ShowWindow(W.window);
+	SDL_StartTextInput(W.window); /* символи без клавіші — див. on_text */
 	SDL_RaiseWindow(W.window);
 	if (W.cfg.startFullscreen)
 		set_fullscreen(TRUE);
@@ -1347,13 +1362,46 @@ static void on_key(const SDL_KeyboardEvent* e)
 		render();
 		return;
 	}
+	if (!e->down)
+		W.textFromKey = FALSE;
 	if (e->scancode >= SDL_SCANCODE_COUNT)
 		return;
 	const uint16_t code = g_scan[e->scancode];
 	if (!code)
 		return;
 	W.pressed[e->scancode] = e->down;
+	if (e->down)
+		W.textFromKey = TRUE; /* текст цієї клавіші вже піде скан-кодом — on_text його пропустить */
 	W.host.key(W.host.ctx, code, e->down, e->repeat);
+}
+
+/* Текст, за яким не стоїть клавіша (сенсорна клавіатура Windows, автозаповнення паролів, панель
+ * емодзі, ввід символами Unicode), — на ПК як символи Unicode. Текст звичайної клавіші вже пішов
+ * скан-кодом (і розкладкою віддаленого ПК), тож його пропускаємо. */
+static void on_text(const SDL_TextInputEvent* e)
+{
+	if (W.textFromKey)
+	{
+		W.textFromKey = FALSE;
+		return;
+	}
+	if (!W.host.unicode || !e->text)
+		return;
+	const char* p = e->text;
+	size_t left = SDL_strlen(p);
+	while (left > 0)
+	{
+		const Uint32 cp = SDL_StepUTF8(&p, &left);
+		if (cp == 0 || cp == SDL_INVALID_UNICODE_CODEPOINT)
+			break;
+		if (cp >= 0x10000) /* поза BMP — сурогатною парою, як у UTF-16 */
+		{
+			W.host.unicode(W.host.ctx, (uint16_t)(0xD800 + ((cp - 0x10000) >> 10)));
+			W.host.unicode(W.host.ctx, (uint16_t)(0xDC00 + ((cp - 0x10000) & 0x3FF)));
+		}
+		else
+			W.host.unicode(W.host.ctx, (uint16_t)cp);
+	}
 }
 
 static void on_button(const SDL_MouseButtonEvent* e)
@@ -1776,6 +1824,8 @@ BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "1");
 	/* У повному екрані Alt+Tab має йти на віддалений ПК, а не перемикати вікна тут. */
 	SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "0");
+	/* Прийом тексту (on_text) не має сам відкривати екранну клавіатуру — її відкриває кнопка плашки. */
+	SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
 	if (!SDL_Init(SDL_INIT_VIDEO))
 		return FALSE;
 	TTF_Init();
@@ -1913,6 +1963,9 @@ void window_run(void)
 					case SDL_EVENT_KEY_UP:
 						on_key(&e.key);
 						break;
+					case SDL_EVENT_TEXT_INPUT:
+						on_text(&e.text);
+						break;
 					case SDL_EVENT_MOUSE_MOTION:
 						on_motion(&e.motion);
 						break;
@@ -1973,6 +2026,8 @@ void window_shutdown(void)
 		SDL_DestroyTexture(W.cancelLabel);
 	if (W.latencyLabel)
 		SDL_DestroyTexture(W.latencyLabel);
+	if (W.ellipsis)
+		SDL_DestroyTexture(W.ellipsis);
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
 		if (W.icons[i])

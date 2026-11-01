@@ -258,7 +258,6 @@ Future<int> probeProxy(
   int targetPort = 3389,
   Duration timeout = const Duration(seconds: 10),
 }) async {
-  final watch = Stopwatch()..start();
   final Socket s;
   try {
     s = await Socket.connect(p.host, p.port, timeout: timeout);
@@ -270,8 +269,7 @@ Future<int> probeProxy(
     final talk = p.type == ProxyType.socks5
         ? _socks5(s, r, p.username, password, targetHost, targetPort)
         : _http(s, r, p, password, targetHost, targetPort);
-    await talk.timeout(timeout, onTimeout: () => throw const ProxyException(ProxyError.protocol, 'timeout'));
-    return watch.elapsedMilliseconds;
+    return await talk.timeout(timeout, onTimeout: () => throw const ProxyException(ProxyError.protocol, 'timeout'));
   } on SocketException catch (e) {
     throw ProxyException(ProxyError.unreachable, e.osError?.message ?? e.message);
   } finally {
@@ -280,10 +278,14 @@ Future<int> probeProxy(
   }
 }
 
-Future<void> _socks5(Socket s, _Reader r, String user, String password, String? host, int port) async {
+/// Повертає час останнього обміну, мс: запит до ПК крізь проксі (≈ затримка всього шляху, як у сеансі),
+/// а без ПК — привітання з проксі. З'єднання й логін не рахуємо — інакше вийшло б утричі більше.
+Future<int> _socks5(Socket s, _Reader r, String user, String password, String? host, int port) async {
   final method = user.isEmpty ? 0x00 : 0x02;
+  final watch = Stopwatch()..start();
   s.add([5, 1, method]);
   final hello = await r.take(2);
+  final helloMs = watch.elapsedMilliseconds;
   if (hello[0] != 5) throw ProxyException(ProxyError.protocol, 'not SOCKS5 (${hello[0]})');
   if (hello[1] == 0xFF) throw const ProxyException(ProxyError.auth, 'no acceptable auth method');
   if (hello[1] != method) throw ProxyException(ProxyError.protocol, 'method ${hello[1]}');
@@ -295,21 +297,26 @@ Future<void> _socks5(Socket s, _Reader r, String user, String password, String? 
     final auth = await r.take(2);
     if (auth[1] != 0) throw const ProxyException(ProxyError.auth);
   }
-  if (host == null) return;
+  if (host == null) return helloMs;
   final ip = InternetAddress.tryParse(host);
   final addr = ip == null
       ? [3, utf8.encode(host).length, ...utf8.encode(host)]
       : [ip.type == InternetAddressType.IPv6 ? 4 : 1, ...ip.rawAddress];
+  watch.reset();
   s.add([5, 1, 0, ...addr, port >> 8, port & 0xFF]);
   final reply = await r.take(2);
+  final ms = watch.elapsedMilliseconds;
   if (reply[0] != 5) throw ProxyException(ProxyError.protocol, 'reply version ${reply[0]}');
   if (reply[1] != 0) throw ProxyException(ProxyError.refused, 'SOCKS5 reply ${reply[1]}');
+  return ms;
 }
 
-Future<void> _http(Socket s, _Reader r, ProxyProfile p, String password, String? host, int port) async {
+/// Повертає час запиту (CONNECT до ПК або, без ПК, OPTIONS), мс — див. [_socks5].
+Future<int> _http(Socket s, _Reader r, ProxyProfile p, String password, String? host, int port) async {
   final auth = p.username.isEmpty
       ? ''
       : 'Proxy-Authorization: Basic ${base64.encode(utf8.encode('${p.username}:$password'))}\r\n';
+  final watch = Stopwatch()..start();
   if (host == null) {
     // ПК через цей проксі поки немає — достатньо, що відповідає HTTP-проксі.
     s.add(latin1.encode('OPTIONS * HTTP/1.1\r\nHost: ${p.host}:${p.port}\r\n$auth\r\n'));
@@ -318,11 +325,13 @@ Future<void> _http(Socket s, _Reader r, ProxyProfile p, String password, String?
     s.add(utf8.encode('CONNECT $target HTTP/1.1\r\nHost: $target\r\n$auth\r\n'));
   }
   final status = await r.line();
+  final ms = watch.elapsedMilliseconds;
   final m = RegExp(r'^HTTP/\d\.\d (\d{3})').firstMatch(status);
   if (m == null) throw ProxyException(ProxyError.protocol, status.length > 80 ? status.substring(0, 80) : status);
   final code = int.parse(m.group(1)!);
   if (code == 407) throw ProxyException(ProxyError.auth, status);
   if (host != null && (code < 200 || code > 299)) throw ProxyException(ProxyError.refused, status);
+  return ms;
 }
 
 /// Читає відповідь проксі порціями потрібної довжини.
