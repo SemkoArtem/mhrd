@@ -12,6 +12,7 @@ import 'sessions/session_manager.dart';
 import 'storage/database.dart';
 import 'storage/repository.dart';
 import 'storage/secret_store.dart';
+import 'util/app_files.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +22,8 @@ Future<void> main() async {
   final dir = await getApplicationSupportDirectory();
   final db = MhrdDatabase.open(dir);
   final repo = Repository(db, SystemSecretStore());
-  final sessions = SessionManager(repo, log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')));
+  final sessions = SessionManager(repo,
+      log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')), files: AppFiles(dir));
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }

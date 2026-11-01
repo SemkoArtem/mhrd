@@ -204,6 +204,7 @@ class Connection {
     this.certPin,
     this.wakeOnLan,
     this.lastUsed,
+    this.image,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -235,6 +236,9 @@ class Connection {
   final String? certPin;
   final WakeOnLan? wakeOnLan;
   final DateTime? lastUsed;
+
+  /// Своя картинка замість мініатюри (ім'я файлу в теці даних, див. AppFiles).
+  final String? image;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -269,6 +273,7 @@ class Connection {
     String? Function()? certPin,
     WakeOnLan? Function()? wakeOnLan,
     DateTime? Function()? lastUsed,
+    String? Function()? image,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -292,6 +297,7 @@ class Connection {
         certPin: certPin != null ? certPin() : this.certPin,
         wakeOnLan: wakeOnLan != null ? wakeOnLan() : this.wakeOnLan,
         lastUsed: lastUsed != null ? lastUsed() : this.lastUsed,
+        image: image != null ? image() : this.image,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -316,6 +322,7 @@ class Connection {
         'certPin': certPin,
         'wakeOnLan': wakeOnLan?.toJson(),
         'lastUsed': lastUsed?.toIso8601String(),
+        'image': image,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -345,6 +352,7 @@ class Connection {
       certPin: strOrNull(j['certPin']),
       wakeOnLan: j['wakeOnLan'] is Map ? WakeOnLan.fromJson(mapOr(j['wakeOnLan'])) : null,
       lastUsed: dateOrNull(j['lastUsed']),
+      image: strOrNull(j['image']),
       createdAt: dateOrNull(j['createdAt']) ?? now,
       updatedAt: dateOrNull(j['updatedAt']) ?? now,
     );

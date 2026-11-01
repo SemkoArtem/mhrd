@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../models/connection.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
+import '../util/app_files.dart';
 import 'rdp_session.dart';
 import 'route_health.dart';
 import 'session_log.dart';
@@ -59,6 +60,7 @@ class SessionManager extends ChangeNotifier {
     TunnelFactory? tunnelFactory,
     this.log,
     this.latencyInterval = const Duration(seconds: 10),
+    this.files,
   })  : enginePath = enginePath ?? _defaultEnginePath(),
         tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel.exe'),
         _channelFactory = channelFactory ?? ProcessChannel.start,
@@ -78,6 +80,9 @@ class SessionManager extends ChangeNotifier {
 
   /// Як часто міряти затримку до ПК для плашки вікна сеансу.
   final Duration latencyInterval;
+
+  /// Мініатюри й картинки ПК (null — у тестах).
+  final AppFiles? files;
 
   /// Шлях до `mhrd-session`; null — модуля підключення немає (наприклад, ще не зібрано).
   final String? enginePath;
@@ -249,7 +254,14 @@ class SessionManager extends ChangeNotifier {
         for (final f in c.devices.folders) {'name': f.name, 'path': f.path, 'access': f.access.name},
       ],
       ...route,
-      if (window != null) ...{'nativeWindow': true, 'bar': repo.settings.bar.toJson(), ...window},
+      if (window != null) ...{
+        'nativeWindow': true,
+        'bar': repo.settings.bar.toJson(),
+        // Мініатюра для плитки ПК — лише для збережених ПК і якщо мініатюри не вимкнено.
+        if (files != null && repo.settings.showPreviews && repo.connections.containsKey(c.id))
+          'thumbnailPath': _thumbnailPath(c.id),
+        ...window,
+      },
     });
     final log = this.log;
     if (log != null) s.done.then((_) => log.write(s));
@@ -263,6 +275,12 @@ class SessionManager extends ChangeNotifier {
     }
     notifyListeners();
     return s;
+  }
+
+  String _thumbnailPath(String connectionId) {
+    final f = files!.thumbnail(connectionId);
+    f.parent.createSync(recursive: true);
+    return f.path;
   }
 
   /// Поки сеанс підключений — затримка до ПК через увесь маршрут на плашку, кожні [latencyInterval].

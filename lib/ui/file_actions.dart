@@ -15,6 +15,9 @@ List<XTypeGroup> shareTypes(AppLocalizations l) => [XTypeGroup(label: l.fileType
 List<XTypeGroup> rdpTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeRdp, extensions: const ['rdp'])];
 List<XTypeGroup> wgTypes(AppLocalizations l) => [XTypeGroup(label: l.fileTypeWireGuard, extensions: const ['conf'])];
 
+List<XTypeGroup> imageTypes(AppLocalizations l) =>
+    [XTypeGroup(label: l.imageFiles, extensions: const ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'])];
+
 List<XTypeGroup> themeTypes(AppLocalizations l) =>
     [XTypeGroup(label: l.fileTypeTheme, extensions: const ['mhrd-theme', 'json'])];
 

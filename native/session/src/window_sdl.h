@@ -60,6 +60,7 @@ typedef struct
 	/* Плашка: край вікна (0 верх, 1 низ, 2 ліво, 3 право), центр уздовж краю (0..10000),
 	 * довжина в одиницях інтерфейсу (0 — типова); радіус заокруглення, як у темі MHRD. */
 	int barEdge, barPos, barLength, radius;
+	const char* thumbnailPath; /* куди зберігати мініатюру екрана для плитки ПК (BMP); NULL — не треба */
 } WindowConfig;
 
 BOOL window_init(const WindowConfig* cfg, const WindowHost* host);

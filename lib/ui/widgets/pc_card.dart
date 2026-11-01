@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../l10n/l10n.dart';
 import '../../models/connection.dart';
@@ -16,6 +19,7 @@ class PcActions {
     required this.moveToGroup,
     required this.wake,
     required this.delete,
+    required this.select,
   });
 
   final void Function(Connection c, {String? credentialId}) connect;
@@ -25,6 +29,23 @@ class PcActions {
   final void Function(Connection c) moveToGroup;
   final void Function(Connection c) wake;
   final void Function(Connection c) delete;
+
+  /// Позначити / зняти позначку (Ctrl+клік, довге натискання, клік у режимі виділення).
+  final void Function(Connection c) select;
+}
+
+/// Стан картки в списку: виділена, чи йде виділення, чи відкритий сеанс, що показати замість
+/// піктограми (своя картинка або мініатюра останнього сеансу).
+class PcCardState {
+  const PcCardState({this.selected = false, this.selecting = false, this.connected = false, this.preview});
+  final bool selected, selecting, connected;
+  final File? preview;
+}
+
+/// Клік по картці: у режимі виділення або з Ctrl — позначити, інакше — підключитись.
+void _tap(PcActions a, PcCardState s, Connection c) {
+  final ctrl = HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed;
+  s.selecting || ctrl ? a.select(c) : a.connect(c);
 }
 
 String routeLabel(AppLocalizations l, Repository repo, Connection c) {
@@ -46,11 +67,13 @@ String accountLabel(AppLocalizations l, Repository repo, Connection c) {
 
 /// Плитка ПК (вигляд «Плитки»).
 class PcTile extends StatefulWidget {
-  const PcTile({super.key, required this.connection, required this.repo, required this.actions});
+  const PcTile(
+      {super.key, required this.connection, required this.repo, required this.actions, this.state = const PcCardState()});
 
   final Connection connection;
   final Repository repo;
   final PcActions actions;
+  final PcCardState state;
 
   @override
   State<PcTile> createState() => _PcTileState();
@@ -64,6 +87,8 @@ class _PcTileState extends State<PcTile> {
     final t = context.mhrd;
     final l = context.l10n;
     final c = widget.connection;
+    final s = widget.state;
+    final preview = s.preview;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -72,22 +97,42 @@ class _PcTileState extends State<PcTile> {
         curve: Curves.easeOut,
         transform: Matrix4.translationValues(0, _hover ? -3 : 0, 0),
         decoration: BoxDecoration(
-          color: t.surface,
+          color: s.selected ? t.accent.withValues(alpha: 0.12) : t.surface,
           borderRadius: BorderRadius.circular(t.radius + 2),
-          border: Border.all(color: _hover ? t.accent : t.border),
+          border: Border.all(color: s.selected || _hover ? t.accent : t.border, width: s.selected ? 2 : 1),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => widget.actions.connect(c),
+          onTap: () => _tap(widget.actions, s, c),
+          onLongPress: () => widget.actions.select(c),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
                 height: 116,
                 color: t.surfaceRaised.withValues(alpha: 0.6),
-                child: Stack(children: [
-                  Center(child: Icon(Icons.desktop_windows_outlined, size: 40, color: t.textMuted)),
-                  Positioned(left: 10, top: 10, child: _StatusChip(label: l.statusNotConnected, color: t.textMuted)),
+                child: Stack(fit: StackFit.expand, children: [
+                  if (preview != null)
+                    Image.file(preview,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (_, __, ___) =>
+                            Center(child: Icon(Icons.desktop_windows_outlined, size: 40, color: t.textMuted)))
+                  else
+                    Center(child: Icon(Icons.desktop_windows_outlined, size: 40, color: t.textMuted)),
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: s.connected
+                        ? _StatusChip(label: l.statusConnected, color: t.ok)
+                        : _StatusChip(label: l.statusNotConnected, color: t.textMuted),
+                  ),
+                  if (s.selecting || _hover)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Checkbox(value: s.selected, onChanged: (_) => widget.actions.select(c)),
+                    ),
                 ]),
               ),
               Padding(
@@ -123,27 +168,40 @@ class _PcTileState extends State<PcTile> {
 
 /// Рядок ПК (вигляд «Список»).
 class PcRow extends StatelessWidget {
-  const PcRow({super.key, required this.connection, required this.repo, required this.actions});
+  const PcRow(
+      {super.key, required this.connection, required this.repo, required this.actions, this.state = const PcCardState()});
 
   final Connection connection;
   final Repository repo;
   final PcActions actions;
+  final PcCardState state;
 
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
     final l = context.l10n;
     final c = connection;
+    final s = state;
     return Material(
-      color: t.surface,
+      color: s.selected ? t.accent.withValues(alpha: 0.12) : t.surface,
       borderRadius: BorderRadius.circular(t.radius),
       child: InkWell(
         borderRadius: BorderRadius.circular(t.radius),
-        onTap: () => actions.connect(c),
+        onTap: () => _tap(actions, s, c),
+        onLongPress: () => actions.select(c),
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: t.gap * 1.25),
           child: Row(children: [
-            Container(width: 9, height: 9, decoration: BoxDecoration(color: t.textMuted, shape: BoxShape.circle)),
+            if (s.selecting)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Checkbox(value: s.selected, onChanged: (_) => actions.select(c)),
+              )
+            else
+              Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(color: s.connected ? t.ok : t.textMuted, shape: BoxShape.circle)),
             const SizedBox(width: 14),
             Expanded(
               flex: 3,

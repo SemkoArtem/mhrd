@@ -23,6 +23,9 @@
 #define ICON_PX 20           /* розмір піктограм кнопок плашки */
 #define TOOLTIP_DELAY_MS 500 /* підказка кнопки — через пів секунди наведення */
 #define BAR_HIDE_DELAY_MS 3500 /* плашка ховається через 3,5 с після того, як мишу прибрали */
+#define THUMB_W 480              /* ширина мініатюри для плитки ПК */
+#define THUMB_FIRST_MS 5000      /* перша — через 5 с після появи картинки */
+#define THUMB_EVERY_MS 30000     /* далі — кожні 30 с (і при відключенні) */
 #define HANDLE_W 120
 #define HANDLE_H 8
 #define RDP_EXT 0x100 /* скан-код із префіксом E0 */
@@ -139,6 +142,8 @@ static struct
 	SDL_Texture* latencyLabel;
 	int latencyShown;
 	SDL_FRect latencyRect;
+
+	Uint64 thumbAt; /* коли зберегти мініатюру (0 — ще немає картинки) */
 } W;
 
 #define LATENCY_NONE (-2)
@@ -878,6 +883,34 @@ static void upload(BOOL whole)
 
 /* ── Вікно ────────────────────────────────────────────────────── */
 
+/* Зменшений знімок віддаленого екрана для плитки ПК у списку (24-бітний BMP — його читає Flutter). */
+static void save_thumbnail(void)
+{
+	if (!W.cfg.thumbnailPath || SDL_GetAtomicInt(&W.reconnecting))
+		return;
+	W.host.lock(W.host.ctx);
+	uint32_t bw = 0, bh = 0, stride = 0;
+	const uint8_t* buf = W.host.buffer(W.host.ctx, &bw, &bh, &stride);
+	if (buf && bw >= 16 && bh >= 16)
+	{
+		SDL_Surface* src = SDL_CreateSurfaceFrom((int)bw, (int)bh, SDL_PIXELFORMAT_XRGB8888, (void*)buf, (int)stride);
+		const int tw = SDL_min(THUMB_W, (int)bw), th = SDL_max(1, (int)((float)bh * (float)tw / (float)bw));
+		SDL_Surface* small = SDL_CreateSurface(tw, th, SDL_PIXELFORMAT_XRGB8888);
+		if (src && small && SDL_BlitSurfaceScaled(src, NULL, small, NULL, SDL_SCALEMODE_LINEAR))
+		{
+			SDL_Surface* rgb = SDL_ConvertSurface(small, SDL_PIXELFORMAT_BGR24);
+			if (rgb)
+			{
+				SDL_SaveBMP(rgb, W.cfg.thumbnailPath);
+				SDL_DestroySurface(rgb);
+			}
+		}
+		SDL_DestroySurface(small);
+		SDL_DestroySurface(src);
+	}
+	W.host.unlock(W.host.ctx);
+}
+
 static void apply_keyboard_grab(void)
 {
 	const BOOL grab = W.cfg.keyboardCapture == 1 || (W.cfg.keyboardCapture == 0 && W.fullscreen);
@@ -1186,6 +1219,7 @@ static BOOL bar_mouse(float x, float y, int action, Uint8 button)
 				send_ctrl_alt_del();
 				break;
 			case BTN_DISCONNECT:
+				save_thumbnail(); /* останній вигляд екрана — на плитку ПК */
 				W.host.close(W.host.ctx);
 				break;
 			default:
@@ -1349,6 +1383,8 @@ void window_run(void)
 						if (W.window)
 						{
 							upload(TRUE);
+							if (!W.thumbAt)
+								W.thumbAt = SDL_GetTicks() + THUMB_FIRST_MS;
 							W.lastRequestedW = W.lastRequestedH = 0;
 							W.resizeAt = SDL_GetTicks() + RESIZE_DELAY_MS; /* сервер міг дати не той розмір */
 							render();
@@ -1404,6 +1440,7 @@ void window_run(void)
 				{
 					case SDL_EVENT_QUIT:
 					case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+						save_thumbnail();
 						W.host.close(W.host.ctx); /* сеанс відключиться й надішле EV_QUIT */
 						break;
 					case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
@@ -1455,6 +1492,11 @@ void window_run(void)
 		}
 		if (W.resizeAt && SDL_GetTicks() >= W.resizeAt && W.window)
 			request_resize_now();
+		if (W.thumbAt && SDL_GetTicks() >= W.thumbAt)
+		{
+			save_thumbnail();
+			W.thumbAt = SDL_GetTicks() + THUMB_EVERY_MS;
+		}
 		hide_bar_if_due();
 		if (W.window && W.hoverButton != BTN_NONE && !W.tooltipShown &&
 		    SDL_GetTicks() >= W.hoverSince + TOOLTIP_DELAY_MS)

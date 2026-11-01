@@ -921,6 +921,38 @@ class AppLocalizationsUk extends AppLocalizations {
   String get saveAndConnect => 'Підключитись';
 
   @override
+  String selectedCount(int count) {
+    return 'Вибрано: $count';
+  }
+
+  @override
+  String get selectAll => 'Вибрати всі';
+
+  @override
+  String deletePcsTitle(int count) {
+    return 'Видалити вибрані ПК ($count)?';
+  }
+
+  @override
+  String get dragHint => 'або перетягніть на групу зліва';
+
+  @override
+  String get pcImage => 'Картинка на плитці';
+
+  @override
+  String get pcImageHint =>
+      'Своя картинка замість мініатюри останнього сеансу.';
+
+  @override
+  String get pcImagePick => 'Вибрати картинку';
+
+  @override
+  String get pcImageRemove => 'Прибрати';
+
+  @override
+  String get imageFiles => 'Зображення';
+
+  @override
   String get checkConnection => 'Перевірити з\'єднання';
 
   @override

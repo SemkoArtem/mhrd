@@ -1706,6 +1706,60 @@ abstract class AppLocalizations {
   /// **'Підключитись'**
   String get saveAndConnect;
 
+  /// No description provided for @selectedCount.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вибрано: {count}'**
+  String selectedCount(int count);
+
+  /// No description provided for @selectAll.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вибрати всі'**
+  String get selectAll;
+
+  /// No description provided for @deletePcsTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Видалити вибрані ПК ({count})?'**
+  String deletePcsTitle(int count);
+
+  /// No description provided for @dragHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'або перетягніть на групу зліва'**
+  String get dragHint;
+
+  /// No description provided for @pcImage.
+  ///
+  /// In uk, this message translates to:
+  /// **'Картинка на плитці'**
+  String get pcImage;
+
+  /// No description provided for @pcImageHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Своя картинка замість мініатюри останнього сеансу.'**
+  String get pcImageHint;
+
+  /// No description provided for @pcImagePick.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вибрати картинку'**
+  String get pcImagePick;
+
+  /// No description provided for @pcImageRemove.
+  ///
+  /// In uk, this message translates to:
+  /// **'Прибрати'**
+  String get pcImageRemove;
+
+  /// No description provided for @imageFiles.
+  ///
+  /// In uk, this message translates to:
+  /// **'Зображення'**
+  String get imageFiles;
+
   /// No description provided for @checkConnection.
   ///
   /// In uk, this message translates to:

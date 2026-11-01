@@ -60,7 +60,7 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[18];       /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[19];      /* копії рядків для win (живуть до кінця процесу) */
 	volatile LONG reconnecting;   /* зв'язок відновлюється — ввід із вікна не надсилаємо */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
@@ -721,7 +721,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
 			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath"),
 			jstr(labels, "reconnecting"), jstr(j, "barTitle"), jstr(labels, "ctrlAltDel"),
-			jstr(labels, "reconnectAttempt"), jstr(labels, "cancel"), jstr(labels, "latency")
+			jstr(labels, "reconnectAttempt"), jstr(labels, "cancel"), jstr(labels, "latency"),
+			jstr(j, "thumbnailPath")
 		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
@@ -744,6 +745,7 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.labelCancel = m->winStrings[16];
 		m->win.labelLatency = m->winStrings[17];
 		m->win.reconnectMax = RECONNECT_MAX;
+		m->win.thumbnailPath = m->winStrings[18][0] ? m->winStrings[18] : NULL;
 		const cJSON* icons = cJSON_GetObjectItemCaseSensitive(j, "icons");
 		m->win.iconPin = (uint32_t)jint(icons, "pin", 0);
 		m->win.iconUnpin = (uint32_t)jint(icons, "unpin", 0);

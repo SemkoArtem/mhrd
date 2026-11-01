@@ -921,6 +921,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get saveAndConnect => 'Connect';
 
   @override
+  String selectedCount(int count) {
+    return 'Selected: $count';
+  }
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String deletePcsTitle(int count) {
+    return 'Delete the selected PCs ($count)?';
+  }
+
+  @override
+  String get dragHint => 'or drag onto a group on the left';
+
+  @override
+  String get pcImage => 'Tile picture';
+
+  @override
+  String get pcImageHint =>
+      'Your own picture instead of the last-session thumbnail.';
+
+  @override
+  String get pcImagePick => 'Choose picture';
+
+  @override
+  String get pcImageRemove => 'Remove';
+
+  @override
+  String get imageFiles => 'Images';
+
+  @override
   String get checkConnection => 'Check connection';
 
   @override

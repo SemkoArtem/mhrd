@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../app.dart';
 import '../l10n/l10n.dart';
@@ -221,6 +222,9 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         onChanged: (v) => _set(_c.copyWith(groupId: () => v)),
       ),
 
+      _section(l.pcImage),
+      _imagePicker(context),
+
       _section(l.accounts),
       if (creds.isEmpty) Text(l.noAccountsHint, style: TextStyle(color: t.textMuted)),
       if (creds.isNotEmpty)
@@ -352,6 +356,53 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         onChanged: (v) => _set(_c.copyWith(swapMouseButtons: v)),
       ),
     ];
+  }
+
+  /// Своя картинка на плитці ПК замість мініатюри останнього сеансу.
+  Widget _imagePicker(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final files = AppScope.of(context).sessions.files;
+    final file = _c.image == null || files == null ? null : files.image(_c.image!);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Container(
+        width: 128,
+        height: 72,
+        decoration: BoxDecoration(
+          color: t.surfaceRaised,
+          borderRadius: BorderRadius.circular(t.radius * 0.7),
+          border: Border.all(color: t.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: file != null && file.existsSync()
+            ? Image.file(file, fit: BoxFit.cover)
+            : Icon(Icons.desktop_windows_outlined, color: t.textMuted),
+      ),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(l.pcImageHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.image_outlined, size: 18),
+              label: Text(l.pcImagePick),
+              onPressed: files == null
+                  ? null
+                  : () async {
+                      final picked = await openBytes(imageTypes(l));
+                      if (picked == null) return;
+                      final ext = p.extension(picked.$1).replaceFirst('.', '').toLowerCase();
+                      final name = await files.saveImage(_c.id, picked.$2, ext.isEmpty ? 'png' : ext);
+                      _set(_c.copyWith(image: () => name));
+                    },
+            ),
+            if (_c.image != null)
+              TextButton(onPressed: () => _set(_c.copyWith(image: () => null)), child: Text(l.pcImageRemove)),
+          ]),
+        ]),
+      ),
+    ]);
   }
 
   // ── Екран ───────────────────────────────────────────────────────

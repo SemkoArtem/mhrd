@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -235,6 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Вікно сеансу живе саме; головне вікно лише питає про сертифікат і пояснює, чому сеанс
   /// закрився (з «Підключитись знову»).
   void _watchWindow(RdpSession s, Connection c, {String? credentialId}) {
+    final thumb = AppScope.of(context).sessions.files?.thumbnail(c.id);
     var asking = false;
     s.addListener(() {
       final cert = s.pendingCertificate;
@@ -243,6 +245,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _askCertificate(s, cert).whenComplete(() => asking = false);
     });
     s.done.then((_) async {
+      // Вікно сеансу щойно записало свіжу мініатюру — стару з кешу картинок прибираємо.
+      if (thumb != null) await FileImage(thumb).evict();
+      if (mounted) setState(() {});
       final ended = s.ended;
       if (!mounted || ended == null || ended.reason == DisconnectReason.userRequest) return;
       await _bringToFront();
@@ -395,8 +400,127 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _delete(Connection c) async {
     final l = context.l10n;
     if (await confirm(context, title: l.deletePcTitle(c.displayName), ok: l.delete, danger: true)) {
-      repo.deleteConnections([c.id]);
+      _deleteIds([c.id]);
     }
+  }
+
+  /// Видаляє ПК разом із їхніми мініатюрами й картинками (якщо картинку не ділить інший ПК).
+  void _deleteIds(List<String> ids) {
+    final files = AppScope.of(context).sessions.files;
+    final gone = [for (final id in ids) repo.connections[id]].whereType<Connection>().toList();
+    repo.deleteConnections(ids);
+    setState(() => _selected.removeAll(ids));
+    for (final c in gone) {
+      final shared = repo.connections.values.any((x) => x.image == c.image);
+      files?.forget(c.id, image: shared ? null : c.image);
+    }
+  }
+
+  // ── Виділення ───────────────────────────────────────────────────
+
+  final _selected = <String>{};
+  bool get _selecting => _selected.isNotEmpty;
+
+  void _toggleSelect(Connection c) => setState(() => _selected.contains(c.id) ? _selected.remove(c.id) : _selected.add(c.id));
+
+  void _clearSelection() => setState(_selected.clear);
+
+  Future<void> _deleteSelected() async {
+    final l = context.l10n;
+    if (await confirm(context, title: l.deletePcsTitle(_selected.length), ok: l.delete, danger: true)) {
+      _deleteIds(_selected.toList());
+    }
+  }
+
+  Future<void> _moveSelected() async {
+    final l = context.l10n;
+    final groups = repo.groups.values.toList()..sort((a, b) => a.name.compareTo(b.name));
+    final i = await pickOne(context, title: l.moveToGroup, options: [l.savedPcs, ...groups.map((g) => g.name)]);
+    if (i == null) return;
+    repo.moveConnections(_selected, i == 0 ? null : groups[i - 1].id);
+    _clearSelection();
+  }
+
+  /// Перетягнуті ПК відпустили на групі ([groupId] null — «Без групи»).
+  void _dropOn(List<String> ids, String? groupId) {
+    repo.moveConnections(ids, groupId);
+    if (ids.any(_selected.contains)) _clearSelection();
+  }
+
+  /// Що показати на картці: виділення, відкритий сеанс, своя картинка чи мініатюра.
+  PcCardState _cardState(Connection c) {
+    final sessions = AppScope.of(context).sessions;
+    final files = sessions.files;
+    File? preview;
+    if (files != null) {
+      final image = c.image == null ? null : files.image(c.image!);
+      final thumb = files.thumbnail(c.id);
+      if (image != null && image.existsSync()) {
+        preview = image;
+      } else if (repo.settings.showPreviews && thumb.existsSync()) {
+        preview = thumb;
+      }
+    }
+    return PcCardState(
+      selected: _selected.contains(c.id),
+      selecting: _selecting,
+      connected: sessions.forConnection(c.id) != null,
+      preview: preview,
+    );
+  }
+
+  Widget _tile(Connection c) => _DragPc(
+        ids: _selected.contains(c.id) ? _selected.toList() : [c.id],
+        label: c.displayName,
+        onTouchDrag: () => _selected.contains(c.id) ? null : _toggleSelect(c),
+        child: PcTile(connection: c, repo: repo, actions: _actions, state: _cardState(c)),
+      );
+
+  Widget _row(Connection c) => _DragPc(
+        ids: _selected.contains(c.id) ? _selected.toList() : [c.id],
+        label: c.displayName,
+        onTouchDrag: () => _selected.contains(c.id) ? null : _toggleSelect(c),
+        child: PcRow(connection: c, repo: repo, actions: _actions, state: _cardState(c)),
+      );
+
+  /// Куди можна відпустити перетягнуті ПК: група в боковій панелі чи заголовок розділу.
+  Widget _dropTarget(String? groupId, Widget Function(bool hovering) builder) => DragTarget<List<String>>(
+        onAcceptWithDetails: (d) => _dropOn(d.data, groupId),
+        builder: (context, candidates, _) => builder(candidates.isNotEmpty),
+      );
+
+  Widget _selectionBar(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final visible = _visible();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: t.surfaceRaised,
+        borderRadius: BorderRadius.circular(t.radius),
+        border: Border.all(color: t.accent),
+      ),
+      child: Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text(l.selectedCount(_selected.length), style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        TextButton(
+          onPressed: () => setState(() => _selected.addAll(visible.map((c) => c.id))),
+          child: Text(l.selectAll),
+        ),
+        TextButton.icon(
+            icon: const Icon(Icons.drive_file_move_outlined, size: 18),
+            label: Text(l.moveToGroup),
+            onPressed: _moveSelected),
+        TextButton.icon(
+          icon: Icon(Icons.delete_outline, size: 18, color: t.error),
+          label: Text(l.delete, style: TextStyle(color: t.error)),
+          onPressed: _deleteSelected,
+        ),
+        TextButton(onPressed: _clearSelection, child: Text(l.cancel)),
+        Text(l.dragHint, style: TextStyle(color: t.textMuted, fontSize: 12)),
+      ]),
+    );
   }
 
   Future<void> _move(Connection c) async {
@@ -476,6 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
         moveToGroup: _move,
         wake: _wake,
         delete: _delete,
+        select: _toggleSelect,
       );
 
   // ── Дані ────────────────────────────────────────────────────────
@@ -534,9 +659,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: repo,
+      listenable: Listenable.merge([repo, AppScope.of(context).sessions]),
       builder: (context, _) {
         if (!_filter.startsWith('__') && !repo.groups.containsKey(_filter)) _filter = _all;
+        _selected.removeWhere((id) => !repo.connections.containsKey(id));
         final wide = MediaQuery.sizeOf(context).width >= 760;
         final mac = Theme.of(context).platform == TargetPlatform.macOS;
         SingleActivator key(LogicalKeyboardKey k) => SingleActivator(k, meta: mac, control: !mac);
@@ -546,6 +672,9 @@ class _HomeScreenState extends State<HomeScreen> {
             key(LogicalKeyboardKey.keyK): () => _quickFocus.requestFocus(),
             key(LogicalKeyboardKey.keyF): () => _searchFocus.requestFocus(),
             key(LogicalKeyboardKey.comma): _openSettings,
+            const SingleActivator(LogicalKeyboardKey.escape): _clearSelection,
+            const SingleActivator(LogicalKeyboardKey.delete): () => _selecting ? _deleteSelected() : null,
+            key(LogicalKeyboardKey.keyA): () => setState(() => _selected.addAll(_visible().map((c) => c.id))),
           },
           child: Focus(
             autofocus: true,
@@ -643,10 +772,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final l = context.l10n;
     Widget item(String id, String label, int count, {int depth = 0}) {
       final active = _filter == id;
-      return Padding(
-        padding: EdgeInsets.only(left: depth * 14.0),
-        child: Material(
-          color: active ? t.surfaceRaised : Colors.transparent,
+      // На групу й «Без групи» можна перетягнути ПК.
+      final droppable = id == _saved || repo.groups.containsKey(id);
+      Widget box(bool hovering) => Material(
+          color: hovering
+              ? t.accent.withValues(alpha: 0.25)
+              : active
+                  ? t.surfaceRaised
+                  : Colors.transparent,
           borderRadius: BorderRadius.circular(t.radius * 0.7),
           child: InkWell(
             borderRadius: BorderRadius.circular(t.radius * 0.7),
@@ -667,7 +800,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ]),
             ),
           ),
-        ),
+        );
+      return Padding(
+        padding: EdgeInsets.only(left: depth * 14.0),
+        child: droppable ? _dropTarget(id == _saved ? null : id, box) : box(false),
       );
     }
 
@@ -860,6 +996,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         const SizedBox(height: 18),
+        if (_selecting) _selectionBar(context),
         Expanded(
           child: items.isEmpty
               ? _empty(context)
@@ -875,13 +1012,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisSpacing: 16,
                       ),
                       itemCount: items.length,
-                      itemBuilder: (_, i) => PcTile(connection: items[i], repo: repo, actions: _actions),
+                      itemBuilder: (_, i) => _tile(items[i]),
                     )
                   : ListView.separated(
                       padding: const EdgeInsets.only(bottom: 32),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 6),
-                      itemBuilder: (_, i) => PcRow(connection: items[i], repo: repo, actions: _actions),
+                      itemBuilder: (_, i) => _row(items[i]),
                     ),
         ),
       ]),
@@ -922,18 +1059,28 @@ class _HomeScreenState extends State<HomeScreen> {
     return CustomScrollView(slivers: [
       for (final (id, name, pcs) in sections) ...[
         SliverToBoxAdapter(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(t.radius * 0.7),
-            onTap: () => toggle(id),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(children: [
-                Icon(collapsed.contains(id) ? Icons.chevron_right : Icons.expand_more, size: 20, color: t.textMuted),
-                const SizedBox(width: 6),
-                Text(name, style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                Text('${pcs.length}', style: TextStyle(fontFamily: t.fontMono, color: t.textMuted, fontSize: 12)),
-              ]),
+          // На заголовок розділу теж можна перетягнути ПК — перенесуться в цю групу.
+          child: _dropTarget(
+            id == AppSettings.noGroupSection ? null : id,
+            (hovering) => Material(
+              color: hovering ? t.accent.withValues(alpha: 0.25) : Colors.transparent,
+              borderRadius: BorderRadius.circular(t.radius * 0.7),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(t.radius * 0.7),
+                onTap: () => toggle(id),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(children: [
+                    Icon(collapsed.contains(id) ? Icons.chevron_right : Icons.expand_more,
+                        size: 20, color: t.textMuted),
+                    const SizedBox(width: 6),
+                    Text(name, style: TextStyle(color: t.text, fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    Text('${pcs.length}',
+                        style: TextStyle(fontFamily: t.fontMono, color: t.textMuted, fontSize: 12)),
+                  ]),
+                ),
+              ),
             ),
           ),
         ),
@@ -949,12 +1096,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisSpacing: 16,
                     ),
                     itemCount: pcs.length,
-                    itemBuilder: (_, i) => PcTile(connection: pcs[i], repo: repo, actions: _actions),
+                    itemBuilder: (_, i) => _tile(pcs[i]),
                   )
                 : SliverList.separated(
                     itemCount: pcs.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 6),
-                    itemBuilder: (_, i) => PcRow(connection: pcs[i], repo: repo, actions: _actions),
+                    itemBuilder: (_, i) => _row(pcs[i]),
                   ),
           ),
       ],
@@ -986,6 +1133,69 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ]),
       ),
+    );
+  }
+}
+
+/// Картку ПК можна перетягнути на групу. Мишею — одразу, пальцем — після довгого натискання
+/// (інакше палець не міг би гортати список); довге натискання ще й позначає ПК.
+class _DragPc extends StatefulWidget {
+  const _DragPc({required this.ids, required this.label, required this.onTouchDrag, required this.child});
+
+  final List<String> ids;
+  final String label;
+  final VoidCallback onTouchDrag;
+  final Widget child;
+
+  @override
+  State<_DragPc> createState() => _DragPcState();
+}
+
+class _DragPcState extends State<_DragPc> {
+  static bool _touch = false; // останній пристрій — палець (спільне для всіх карток)
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final feedback = Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: t.surface,
+          borderRadius: BorderRadius.circular(t.radius),
+          border: Border.all(color: t.accent, width: 2),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.desktop_windows_outlined, size: 18, color: t.accent),
+          const SizedBox(width: 8),
+          Text(widget.ids.length == 1 ? widget.label : l.pcCount(widget.ids.length),
+              style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
+    final faded = Opacity(opacity: 0.4, child: widget.child);
+    return Listener(
+      onPointerHover: (_) => _touch ? setState(() => _touch = false) : null,
+      onPointerDown: (e) {
+        final touch = e.kind == PointerDeviceKind.touch;
+        if (touch != _touch) setState(() => _touch = touch);
+      },
+      child: _touch
+          ? LongPressDraggable<List<String>>(
+              data: widget.ids,
+              feedback: feedback,
+              childWhenDragging: faded,
+              onDragStarted: widget.onTouchDrag,
+              child: widget.child,
+            )
+          : Draggable<List<String>>(
+              data: widget.ids,
+              feedback: feedback,
+              childWhenDragging: faded,
+              child: widget.child,
+            ),
     );
   }
 }

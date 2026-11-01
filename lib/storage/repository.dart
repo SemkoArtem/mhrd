@@ -165,6 +165,25 @@ class Repository extends ChangeNotifier {
     return copy;
   }
 
+  /// Переносить ПК у групу ([groupId] null — «Без групи») одним записом у базу.
+  void moveConnections(Iterable<String> ids, String? groupId) {
+    final now = DateTime.now();
+    final moved = [
+      for (final id in ids)
+        if (connections[id] case final c? when c.groupId != groupId) c.copyWith(groupId: () => groupId, updatedAt: now),
+    ];
+    if (moved.isEmpty) return;
+    db.transaction(() {
+      for (final c in moved) {
+        db.put(kConnection, c.id, c.toJson());
+      }
+    });
+    for (final c in moved) {
+      connections[c.id] = c;
+    }
+    notifyListeners();
+  }
+
   void deleteConnections(Iterable<String> ids) {
     final list = ids.toList();
     db.transaction(() {
