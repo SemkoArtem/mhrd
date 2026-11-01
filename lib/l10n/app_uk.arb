@@ -327,6 +327,8 @@
   "pinRepeat": "Ще раз",
   "pinCurrent": "Поточний PIN-код",
   "pinWrong": "Неправильний PIN-код.",
+  "pinWait": "Забагато невдалих спроб. Наступна — через {seconds} с.",
+  "@pinWait": {"placeholders": {"seconds": {"type": "int"}}},
   "pinTooShort": "PIN-код — щонайменше 4 цифри.",
   "pinMismatch": "PIN-коди не збігаються.",
   "unlock": "Розблокувати",

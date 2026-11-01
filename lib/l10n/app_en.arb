@@ -296,6 +296,7 @@
   "pinRepeat": "Repeat",
   "pinCurrent": "Current PIN",
   "pinWrong": "Wrong PIN.",
+  "pinWait": "Too many failed attempts. Try again in {seconds} s.",
   "pinTooShort": "The PIN must have at least 4 digits.",
   "pinMismatch": "The PINs don't match.",
   "unlock": "Unlock",

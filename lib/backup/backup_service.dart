@@ -111,7 +111,9 @@ class BackupService {
     o += 4;
     final it = f[o++];
     final par = f[o++];
-    if (mem < 8 || mem > 1048576 || it < 1 || par < 1) {
+    // Параметри беруться з файлу — межа на загальну вартість, інакше підроблений бекап (1 ГБ × 255
+    // проходів) «вішав» би імпорт. Наші бекапи: 64 МБ × 3; запас — у кілька разів.
+    if (mem < 8 || mem > 262144 || it < 1 || it > 10 || par < 1 || par > 16 || mem * it > 1048576) {
       throw BackupException(BackupError.corrupted);
     }
     final salt = f.sublist(o, o + _saltLen);

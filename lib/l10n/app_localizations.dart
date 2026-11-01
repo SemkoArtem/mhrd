@@ -1832,6 +1832,12 @@ abstract class AppLocalizations {
   /// **'Неправильний PIN-код.'**
   String get pinWrong;
 
+  /// No description provided for @pinWait.
+  ///
+  /// In uk, this message translates to:
+  /// **'Забагато невдалих спроб. Наступна — через {seconds} с.'**
+  String pinWait(int seconds);
+
   /// No description provided for @pinTooShort.
   ///
   /// In uk, this message translates to:

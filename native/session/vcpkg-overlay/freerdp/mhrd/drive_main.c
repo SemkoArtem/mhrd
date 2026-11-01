@@ -222,6 +222,47 @@ static WCHAR* mhrd_normalized(const WCHAR* fullpath)
 	return out;
 }
 
+/* Шлях від сервера з «:» — це альтернативний потік NTFS (report.docx:x): у звичайних іменах
+ * Windows двокрапка заборонена. Такий потік «не існує» для перевірки режиму, але пише в
+ * наявний файл (чи змінює Zone.Identifier) — тож не пускаємо його в жодному режимі. */
+static BOOL mhrd_has_stream(const WCHAR* path, size_t chars)
+{
+	for (size_t i = 0; i < chars && path[i]; i++)
+	{
+		if (path[i] == L':')
+			return TRUE;
+	}
+	return FALSE;
+}
+
+/* Чи веде шлях усередині папки крізь символьне посилання чи junction: FreeRDP іде за ними, і тоді
+ * правила режиму діяли б для того, на що вони вказують, — можливо, поза спільною папкою. Сама база
+ * (обрана людиною папка) не перевіряється. */
+static BOOL mhrd_through_reparse(const DRIVE_DEVICE* drive, WCHAR* full)
+{
+#ifdef _WIN32
+	const size_t base = _wcslen(drive->path);
+	const size_t len = _wcslen(full);
+	for (size_t i = base + 1; i <= len; i++)
+	{
+		if (i < len && full[i] != L'\\')
+			continue;
+		const WCHAR saved = full[i];
+		full[i] = 0;
+		const DWORD attr = GetFileAttributesW(full);
+		full[i] = saved;
+		if (attr == INVALID_FILE_ATTRIBUTES)
+			return FALSE; /* далі ще нічого немає — нове */
+		if (attr & FILE_ATTRIBUTE_REPARSE_POINT)
+			return TRUE;
+	}
+#else
+	(void)drive;
+	(void)full;
+#endif
+	return FALSE;
+}
+
 static BOOL mhrd_was_created(DRIVE_DEVICE* drive, const WCHAR* full)
 {
 	const size_t count = ArrayList_Count(drive->mhrdCreatedPaths);
@@ -284,11 +325,26 @@ static UINT drive_process_irp_create(DRIVE_DEVICE* drive, IRP* irp)
 	/* MHRD: перевірка режиму доступу до того, як щось відкрито чи створено. */
 	uint32_t access = DesiredAccess;
 	BOOL mhrdNew = FALSE, mhrdOurs = FALSE;
+	if (mhrd_has_stream(path, PathLength / sizeof(WCHAR)))
+	{
+		irp->IoStatus = STATUS_ACCESS_DENIED;
+		Stream_Write_UINT32(irp->output, 0);
+		Stream_Write_UINT8(irp->output, 0);
+		return CHANNEL_RC_OK;
+	}
 	if (drive->mhrdAccess != MHRD_ACCESS_FULL)
 	{
 		WCHAR* full = mhrd_full_path(drive, path, PathLength / sizeof(WCHAR));
 		if (!full)
 			return CHANNEL_RC_NO_MEMORY;
+		if (mhrd_through_reparse(drive, full))
+		{
+			free(full);
+			irp->IoStatus = STATUS_ACCESS_DENIED;
+			Stream_Write_UINT32(irp->output, 0);
+			Stream_Write_UINT8(irp->output, 0);
+			return CHANNEL_RC_OK;
+		}
 		const DWORD attr = GetFileAttributesW(full);
 		const BOOL exists = attr != INVALID_FILE_ATTRIBUTES;
 		const BOOL isDir = exists && (attr & FILE_ATTRIBUTE_DIRECTORY);
@@ -616,6 +672,23 @@ static UINT drive_process_irp_set_information(DRIVE_DEVICE* drive, IRP* irp)
 					/* перший байт — ReplaceIfExists (MS-RDPEFS 2.2.3.3.9) */
 					mhrdAllow = ours && Stream_GetRemainingLength(irp->input) >= 1 &&
 					            ((const BYTE*)Stream_ConstPointer(irp->input))[0] == 0;
+					/* Нове ім'я: ReplaceIfExists(1) RootDirectory(1) FileNameLength(4) FileName — не потік
+					 * і не крізь посилання/junction (інакше файл пішов би за межі папки). */
+					if (mhrdAllow && Stream_GetRemainingLength(irp->input) >= 6)
+					{
+						const BYTE* in = Stream_ConstPointer(irp->input);
+						const UINT32 nameLen = in[2] | (in[3] << 8) | ((UINT32)in[4] << 16) | ((UINT32)in[5] << 24);
+						if (nameLen > Stream_GetRemainingLength(irp->input) - 6)
+							mhrdAllow = FALSE;
+						else
+						{
+							const WCHAR* name = (const WCHAR*)(in + 6);
+							const size_t chars = nameLen / sizeof(WCHAR);
+							WCHAR* target = mhrd_has_stream(name, chars) ? nullptr : mhrd_full_path(drive, name, chars);
+							mhrdAllow = target && !mhrd_through_reparse(drive, target);
+							free(target);
+						}
+					}
 					break;
 				case FileBasicInformation:
 					mhrdAllow = ours || file->is_dir;

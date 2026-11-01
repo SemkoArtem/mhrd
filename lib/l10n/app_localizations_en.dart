@@ -990,6 +990,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pinWrong => 'Wrong PIN.';
 
   @override
+  String pinWait(int seconds) {
+    return 'Too many failed attempts. Try again in $seconds s.';
+  }
+
+  @override
   String get pinTooShort => 'The PIN must have at least 4 digits.';
 
   @override

@@ -160,4 +160,21 @@ void main() {
     expect(share.toString(), isNot(contains('p@ss')));
     expect(share['secretIncluded'], isFalse);
   }, skip: _skip);
+
+  test('підроблений бекап із величезними параметрами Argon2 — одразу «пошкоджений», а не зависання', () async {
+    Uint8List crafted(int memKiB, int it, int par) => Uint8List.fromList([
+          ...'RDPB2'.codeUnits,
+          ...(ByteData(4)..setUint32(0, memKiB)).buffer.asUint8List(),
+          it,
+          par,
+          ...List.filled(16 + 12 + 16 + 8, 0), // сіль, nonce, тег, «шифротекст»
+        ]);
+    final svc = BackupService(_repo());
+    final watch = Stopwatch()..start();
+    for (final f in [crafted(1048576, 255, 255), crafted(262144, 10, 1), crafted(65536, 3, 200)]) {
+      await expectLater(svc.decrypt(f, 'x'),
+          throwsA(isA<BackupException>().having((e) => e.error, 'error', BackupError.corrupted)));
+    }
+    expect(watch.elapsed, lessThan(const Duration(seconds: 2)));
+  }, skip: _skip);
 }

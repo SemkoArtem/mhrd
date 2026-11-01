@@ -33,7 +33,41 @@ class AppLock {
     repo.updateSettings(repo.settings.copyWith(lockEnabled: true));
   }
 
-  Future<bool> checkPin(String pin) async {
+  static const _failsKey = 'lockFails', _untilKey = 'lockUntil';
+  static const freeTries = 3;
+
+  /// Скільки ще чекати перед наступною спробою PIN (null — можна зараз). Після [freeTries] помилок —
+  /// 5 с, 10 с, 20 с… до 15 хв; лічильник у базі, тож перезапуск MHRD його не скидає.
+  Duration? waitLeft([DateTime? now]) {
+    final until = DateTime.tryParse(repo.db.getMeta(_untilKey) ?? '');
+    final left = until?.difference(now ?? DateTime.now());
+    return left == null || left <= Duration.zero ? null : left;
+  }
+
+  void _recordFailure(DateTime now) {
+    final fails = (int.tryParse(repo.db.getMeta(_failsKey) ?? '') ?? 0) + 1;
+    repo.db.setMeta(_failsKey, '$fails');
+    if (fails >= freeTries) {
+      final secs = (5 * (1 << (fails - freeTries).clamp(0, 8))).clamp(5, 900);
+      repo.db.setMeta(_untilKey, now.add(Duration(seconds: secs)).toIso8601String());
+    }
+  }
+
+  void _resetFailures() {
+    repo.db.deleteMeta(_failsKey);
+    repo.db.deleteMeta(_untilKey);
+  }
+
+  /// Перевіряє PIN з урахуванням паузи після невдалих спроб: поки [waitLeft] — завжди false.
+  Future<bool> checkPin(String pin, {DateTime? now}) async {
+    final at = now ?? DateTime.now();
+    if (waitLeft(at) != null) return false;
+    final ok = await _matches(pin);
+    ok ? _resetFailures() : _recordFailure(at);
+    return ok;
+  }
+
+  Future<bool> _matches(String pin) async {
     final stored = await repo.secrets.read(pinKey);
     final parts = stored?.split(':');
     if (parts == null || parts.length != 3 || parts[0] != 'v1') return false;
@@ -64,7 +98,9 @@ class AppLock {
   /// Системний запит відбитка / Windows Hello. false — скасували, не вдалося або недоступно.
   Future<bool> unlockWithBiometric(String reason) async {
     try {
-      return await _auth.authenticate(localizedReason: reason);
+      final ok = await _auth.authenticate(localizedReason: reason);
+      if (ok) _resetFailures(); // справжній власник — паузу знімаємо
+      return ok;
     } on Exception {
       return false;
     }

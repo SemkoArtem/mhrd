@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -56,18 +58,34 @@ class _LockScreenState extends State<LockScreen> {
     super.initState();
     // Відбиток / Windows Hello — одразу, без зайвого кліку.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && AppScope.of(context).repo.settings.lockBiometric) _biometric();
+      if (!mounted) return;
+      _startWaitTicker(); // пауза могла лишитись з минулого запуску
+      if (AppScope.of(context).repo.settings.lockBiometric) _biometric();
     });
   }
 
   @override
   void dispose() {
+    _tick?.cancel();
     _pin.dispose();
     super.dispose();
   }
 
+  Timer? _tick;
+
+  /// Після кількох невдалих спроб — пауза: кнопка неактивна, видно, скільки ще чекати.
+  void _startWaitTicker() {
+    _tick?.cancel();
+    if (_lock.waitLeft() == null) return;
+    _tick = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() {});
+      if (_lock.waitLeft() == null) t.cancel();
+    });
+  }
+
   Future<void> _submit() async {
-    if (_checking || _pin.text.isEmpty) return;
+    if (_checking || _pin.text.isEmpty || _lock.waitLeft() != null) return;
     setState(() => _checking = true);
     // Збій сховища — як неправильний PIN, а не вічно вимкнена кнопка.
     final ok = await _lock.checkPin(_pin.text).catchError((Object _) => false);
@@ -80,6 +98,7 @@ class _LockScreenState extends State<LockScreen> {
         _wrong = true;
         _pin.clear();
       });
+      _startWaitTicker();
     }
   }
 
@@ -92,6 +111,7 @@ class _LockScreenState extends State<LockScreen> {
     final t = context.mhrd;
     final l = context.l10n;
     final biometric = AppScope.of(context).repo.settings.lockBiometric;
+    final wait = _lock.waitLeft();
     return Scaffold(
       backgroundColor: t.background,
       body: Center(
@@ -113,14 +133,22 @@ class _LockScreenState extends State<LockScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)],
               style: TextStyle(fontFamily: t.fontMono, fontSize: 22, letterSpacing: 8, color: t.text),
-              decoration: InputDecoration(hintText: l.pinHint, errorText: _wrong ? l.pinWrong : null),
+              enabled: wait == null,
+              decoration: InputDecoration(
+                hintText: l.pinHint,
+                errorText: wait != null
+                    ? l.pinWait(wait.inSeconds + 1)
+                    : _wrong
+                        ? l.pinWrong
+                        : null,
+              ),
               onChanged: (_) => _wrong ? setState(() => _wrong = false) : null,
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(onPressed: _checking ? null : _submit, child: Text(l.unlock)),
+              child: FilledButton(onPressed: _checking || wait != null ? null : _submit, child: Text(l.unlock)),
             ),
             if (biometric) ...[
               const SizedBox(height: 8),

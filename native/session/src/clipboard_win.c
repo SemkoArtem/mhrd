@@ -24,6 +24,7 @@
 #define WM_MHRD_SERVER_FORMATS (WM_APP + 1)
 #define RENDER_TIMEOUT_MS 5000
 #define MAX_CLIP_FILES 100000 /* запобіжник від «скопіював увесь диск» */
+#define FILE_CHUNK_MAX (16u * 1024 * 1024) /* найбільший шматок файлу на один запит сервера */
 
 struct MhrdClipboard
 {
@@ -272,9 +273,11 @@ static UINT on_server_file_contents_request(CliprdrClientContext* c, const CLIPR
 		pos.LowPart = req->nPositionLow;
 		pos.HighPart = (LONG)req->nPositionHigh;
 		DWORD got = 0;
+		/* Розмір задає сервер (до 4 ГБ на запит) — без межі зловмисний сервер міг би вичерпати пам'ять.
+		 * Коротша відповідь дозволена (як у кінці файлу): сервер попросить наступний шматок. */
+		const DWORD want = req->cbRequested < FILE_CHUNK_MAX ? req->cbRequested : FILE_CHUNK_MAX;
 		if (cb->openFile != INVALID_HANDLE_VALUE && SetFilePointerEx(cb->openFile, pos, NULL, FILE_BEGIN) &&
-		    (data = malloc(req->cbRequested ? req->cbRequested : 1)) != NULL &&
-		    ReadFile(cb->openFile, data, req->cbRequested, &got, NULL))
+		    (data = malloc(want ? want : 1)) != NULL && ReadFile(cb->openFile, data, want, &got, NULL))
 		{
 			len = got; /* у кінці файлу — менше, ніж просили */
 			resp.common.msgFlags = CB_RESPONSE_OK;
@@ -671,6 +674,33 @@ typedef struct
 	FORMATETC fmts[2];
 } FileDataObject;
 
+/* Ім'я файлу від сервера — лише відносний шлях усередині місця вставки: без літери диска, початкового
+ * «\», частин «.»/«..» і двокрапок (потоки NTFS). Провідник чистить сам, але не покладаємось. */
+static void sanitize_server_name(WCHAR* name)
+{
+	name[MAX_PATH - 1] = 0;
+	WCHAR out[MAX_PATH] = { 0 };
+	size_t n = 0;
+	const WCHAR* p = name;
+	while (*p)
+	{
+		while (*p == L'\\' || *p == L'/')
+			p++;
+		const WCHAR* start = p;
+		while (*p && *p != L'\\' && *p != L'/')
+			p++;
+		const size_t len = (size_t)(p - start);
+		if (len == 0 || (len == 1 && start[0] == L'.') || (len == 2 && start[0] == L'.' && start[1] == L'.'))
+			continue;
+		if (n > 0 && n < MAX_PATH - 1)
+			out[n++] = L'\\';
+		for (size_t i = 0; i < len && n < MAX_PATH - 1; i++)
+			out[n++] = start[i] == L':' ? L'_' : start[i];
+	}
+	out[n] = 0;
+	memcpy(name, out, sizeof(out));
+}
+
 static BOOL fdo_load_desc(FileDataObject* o)
 {
 	if (o->desc)
@@ -687,6 +717,12 @@ static BOOL fdo_load_desc(FileDataObject* o)
 		{
 			memcpy(o->desc, p, size);
 			o->descLen = (UINT32)size;
+			UINT32 count = 0;
+			memcpy(&count, o->desc, sizeof(UINT32));
+			const size_t fit = (size - sizeof(UINT32)) / sizeof(FILEDESCRIPTORW);
+			FILEDESCRIPTORW* d = (FILEDESCRIPTORW*)(o->desc + sizeof(UINT32));
+			for (size_t i = 0; i < count && i < fit; i++)
+				sanitize_server_name(d[i].cFileName);
 		}
 	}
 	if (p)

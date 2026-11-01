@@ -990,6 +990,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get pinWrong => 'Неправильний PIN-код.';
 
   @override
+  String pinWait(int seconds) {
+    return 'Забагато невдалих спроб. Наступна — через $seconds с.';
+  }
+
+  @override
   String get pinTooShort => 'PIN-код — щонайменше 4 цифри.';
 
   @override
