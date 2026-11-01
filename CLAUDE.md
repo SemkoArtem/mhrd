@@ -78,7 +78,8 @@ docs/SPEC.md                   специфікація (джерело прав
   Системне меню вікна: «На весь екран», «Екранна клавіатура» (osk.exe). Сеанс живе незалежно від
   головного вікна (stdin закрито — працює далі). Головне вікно лише питає про сертифікат і пояснює
   відключення. `SessionScreen` у Flutter лишається для Android. Точка відкату до вкладок —
-  тег `v0.2-in-app-session`.
+  тег `backup/in-app-session` (точки відкату — не `v*`: такі теги запускають release.yml і
+  виглядають як версії).
 - Журнал сеансів: `<AppSupport>/logs/session-ДАТА.log`, 7 днів (`lib/sessions/session_log.dart`) —
   stderr FreeRDP + рядок `audio: playback/remoteConsole/capture` і «channel connected: …».
 - **H.264 (AVC444/AVC420)** — через Media Foundation (`WITH_MEDIA_FOUNDATION=ON` в overlay-порті);
