@@ -81,6 +81,14 @@ enum
 	MOUSE_UP
 };
 
+/* Палець на сенсорному екрані. */
+typedef struct
+{
+	SDL_FingerID id;
+	float x, y;   /* зараз, пікселі вікна */
+	float sx, sy; /* де торкнулись */
+} TouchFinger;
+
 static struct
 {
 	WindowConfig cfg;
@@ -144,9 +152,38 @@ static struct
 	SDL_FRect latencyRect;
 
 	Uint64 thumbAt; /* коли зберегти мініатюру (0 — ще немає картинки) */
+
+	/* Сенсорний екран (див. «Дотик»): масштаб щипком і стан жесту. */
+	float zoom, viewX, viewY;
+	TouchFinger fingers[2];
+	int nfingers;
+	int gesture;     /* G_* */
+	Uint64 touchAt;  /* коли торкнулись (довге натискання, дотик двома пальцями) */
+	float twoDist, twoCx, twoCy, twoZoom; /* два пальці: відстань і центр на старті, масштаб на старті */
+	float lastCx, lastCy;                 /* центр двох пальців на попередньому кроці */
 } W;
 
 #define LATENCY_NONE (-2)
+
+/* Жести дотику. */
+enum
+{
+	G_NONE,
+	G_PENDING,   /* один палець торкнувся й ще не рушив: дотик, довге натискання чи перетягування */
+	G_DRAG,      /* один палець тягне — ліва кнопка затиснута */
+	G_LONG_DONE, /* довге натискання вже дало правий клік — до відпускання нічого */
+	G_TWO,       /* два пальці, ще невідомо що */
+	G_SCROLL,    /* два пальці гортають (у збільшеному вигляді — зсувають картинку) */
+	G_PINCH,     /* два пальці масштабують */
+	G_END,       /* жест скінчився — чекаємо, доки піднімуть усі пальці */
+	G_BAR        /* палець на плашці — події йдуть їй, як миша */
+};
+
+#define TOUCH_SLOP 12         /* на скільки пікселів (× масштаб) рушити, щоб це вже був не дотик */
+#define LONG_PRESS_MS 600     /* довге натискання = правий клік */
+#define TWO_TAP_MS 350        /* дотик двома пальцями коротший за це = правий клік */
+#define PINCH_SLOP 28         /* зміна відстані між пальцями, з якої починається масштаб */
+#define ZOOM_MAX 4.0f
 
 /* ── Клавіші: SDL_Scancode (= USB HID usage) → скан-код RDP (PC/AT, набір 1) ── */
 
@@ -301,7 +338,31 @@ static SDL_FRect image_rect(void)
 	r.y = floorf(((float)ph - r.h) / 2.0f);
 	if (W.cfg.resizeMode == 2 && !W.fullscreen)
 		r.x = r.y = 0;
+	if (W.zoom > 1.0f)
+	{
+		/* Збільшено щипком: картинка в zoom разів більша, зсув — viewX/viewY, але без порожнечі по краях. */
+		const SDL_FRect base = r;
+		r.w = floorf(base.w * W.zoom);
+		r.h = floorf(base.h * W.zoom);
+		r.x = SDL_clamp(W.viewX, base.x + base.w - r.w, base.x);
+		r.y = SDL_clamp(W.viewY, base.y + base.h - r.h, base.y);
+	}
 	return r;
+}
+
+/* Піксель вікна → піксель віддаленого екрана. */
+static BOOL px_to_remote(float px, float py, uint16_t* rx, uint16_t* ry)
+{
+	const SDL_FRect r = image_rect();
+	if (r.w <= 0 || r.h <= 0)
+		return FALSE;
+	float fx = (px - r.x) * (float)W.texW / r.w;
+	float fy = (py - r.y) * (float)W.texH / r.h;
+	fx = SDL_clamp(fx, 0.0f, (float)W.texW - 1.0f);
+	fy = SDL_clamp(fy, 0.0f, (float)W.texH - 1.0f);
+	*rx = (uint16_t)fx;
+	*ry = (uint16_t)fy;
+	return TRUE;
 }
 
 /* Точка вікна (координати подій) → піксель віддаленого екрана. */
@@ -895,17 +956,17 @@ static void save_thumbnail(void)
 	{
 		SDL_Surface* src = SDL_CreateSurfaceFrom((int)bw, (int)bh, SDL_PIXELFORMAT_XRGB8888, (void*)buf, (int)stride);
 		const int tw = SDL_min(THUMB_W, (int)bw), th = SDL_max(1, (int)((float)bh * (float)tw / (float)bw));
-		SDL_Surface* small = SDL_CreateSurface(tw, th, SDL_PIXELFORMAT_XRGB8888);
-		if (src && small && SDL_BlitSurfaceScaled(src, NULL, small, NULL, SDL_SCALEMODE_LINEAR))
+		SDL_Surface* scaled = SDL_CreateSurface(tw, th, SDL_PIXELFORMAT_XRGB8888);
+		if (src && scaled && SDL_BlitSurfaceScaled(src, NULL, scaled, NULL, SDL_SCALEMODE_LINEAR))
 		{
-			SDL_Surface* rgb = SDL_ConvertSurface(small, SDL_PIXELFORMAT_BGR24);
+			SDL_Surface* rgb = SDL_ConvertSurface(scaled, SDL_PIXELFORMAT_BGR24);
 			if (rgb)
 			{
 				SDL_SaveBMP(rgb, W.cfg.thumbnailPath);
 				SDL_DestroySurface(rgb);
 			}
 		}
-		SDL_DestroySurface(small);
+		SDL_DestroySurface(scaled);
 		SDL_DestroySurface(src);
 	}
 	W.host.unlock(W.host.ctx);
@@ -1264,6 +1325,8 @@ static void on_key(const SDL_KeyboardEvent* e)
 
 static void on_button(const SDL_MouseButtonEvent* e)
 {
+	if (e->which == SDL_TOUCH_MOUSEID)
+		return; /* миша, яку SDL вигадує з дотику, — дотик обробляємо сам (див. «Дотик») */
 	/* Під час перепідключення миша — лише для «Скасувати». */
 	if (SDL_GetAtomicInt(&W.reconnecting))
 	{
@@ -1302,6 +1365,8 @@ static void on_button(const SDL_MouseButtonEvent* e)
 
 static void on_motion(const SDL_MouseMotionEvent* e)
 {
+	if (e->which == SDL_TOUCH_MOUSEID)
+		return;
 	if (bar_mouse(e->x, e->y, MOUSE_MOVE, 0))
 		return;
 	uint16_t x = 0, y = 0;
@@ -1311,6 +1376,8 @@ static void on_motion(const SDL_MouseMotionEvent* e)
 
 static void on_wheel(const SDL_MouseWheelEvent* e)
 {
+	if (e->which == SDL_TOUCH_MOUSEID)
+		return;
 	uint16_t x = 0, y = 0;
 	if (!to_remote(e->mouse_x, e->mouse_y, &x, &y))
 		return;
@@ -1323,6 +1390,245 @@ static void on_wheel(const SDL_MouseWheelEvent* e)
 		W.host.wheel(W.host.ctx, delta, FALSE, x, y);
 	if (e->x != 0.0f)
 		W.host.wheel(W.host.ctx, (int)SDL_clamp(e->x * dir * 120.0f, -255.0f, 255.0f), TRUE, x, y);
+}
+
+/* ── Дотик ────────────────────────────────────────────────────────
+ * Сенсорний екран керує мишею віддаленого ПК: один палець — як миша (дотик — клік, рух — тягнути
+ * з лівою кнопкою), довге натискання — правий клік, два пальці — гортати в будь-який бік, щипок —
+ * збільшити картинку (у збільшеному вигляді два пальці зсувають її), дотик двома пальцями — правий клік. */
+
+static void remote_click(float px, float py, uint16_t button)
+{
+	uint16_t x = 0, y = 0;
+	if (!px_to_remote(px, py, &x, &y))
+		return;
+	W.host.mouse(W.host.ctx, PTR_FLAGS_MOVE, x, y);
+	W.host.mouse(W.host.ctx, button | PTR_FLAGS_DOWN, x, y);
+	W.host.mouse(W.host.ctx, button, x, y);
+}
+
+static void remote_mouse(float px, float py, uint16_t flags)
+{
+	uint16_t x = 0, y = 0;
+	if (px_to_remote(px, py, &x, &y))
+		W.host.mouse(W.host.ctx, flags, x, y);
+}
+
+static int finger_index(SDL_FingerID id)
+{
+	for (int i = 0; i < W.nfingers; i++)
+	{
+		if (W.fingers[i].id == id)
+			return i;
+	}
+	return -1;
+}
+
+static float two_distance(void)
+{
+	const float dx = W.fingers[1].x - W.fingers[0].x, dy = W.fingers[1].y - W.fingers[0].y;
+	return SDL_sqrtf(dx * dx + dy * dy);
+}
+
+/* Масштаб щипком навколо точки (cx, cy): ця точка картинки лишається під пальцями. */
+static void set_zoom(float zoom, float cx, float cy)
+{
+	const SDL_FRect before = image_rect();
+	zoom = SDL_clamp(zoom, 1.0f, ZOOM_MAX);
+	if (zoom < 1.02f)
+	{
+		W.zoom = 1.0f;
+		return;
+	}
+	const float k = (zoom / SDL_max(W.zoom, 1.0f));
+	W.viewX = cx - (cx - before.x) * k;
+	W.viewY = cy - (cy - before.y) * k;
+	W.zoom = zoom;
+	const SDL_FRect after = image_rect(); /* запам'ятовуємо вже з обмеженнями по краях */
+	W.viewX = after.x;
+	W.viewY = after.y;
+}
+
+static void on_finger(const SDL_TouchFingerEvent* e)
+{
+	int pw = 0, ph = 0;
+	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	const float px = e->x * (float)pw, py = e->y * (float)ph, k = pixel_ratio(), s = ui_scale();
+	const Uint64 now = SDL_GetTicks();
+
+	if (e->type == SDL_EVENT_FINGER_DOWN)
+	{
+		/* Під час перепідключення — лише «Скасувати». */
+		if (SDL_GetAtomicInt(&W.reconnecting))
+		{
+			if (in_rect(&W.cancelRect, px, py))
+				W.host.close(W.host.ctx);
+			return;
+		}
+		if (W.nfingers >= 2)
+			return; /* третій і далі пальці не беремо */
+		W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py };
+		if (W.nfingers == 1)
+		{
+			layout_bar();
+			const BOOL onBar = bar_visible() ? in_rect(&W.hotRect, px, py) : in_rect(&W.handleRect, px, py);
+			if (onBar)
+			{
+				W.gesture = G_BAR;
+				bar_mouse(px / k, py / k, MOUSE_MOVE, 0);
+				bar_mouse(px / k, py / k, MOUSE_DOWN, SDL_BUTTON_LEFT);
+				return;
+			}
+			W.gesture = G_PENDING;
+			W.touchAt = now;
+			remote_mouse(px, py, PTR_FLAGS_MOVE); /* курсор — туди, де палець */
+		}
+		else if (W.gesture == G_PENDING || W.gesture == G_DRAG)
+		{
+			if (W.gesture == G_DRAG)
+				remote_mouse(W.fingers[0].x, W.fingers[0].y, PTR_FLAGS_BUTTON1); /* відпустити ліву */
+			W.gesture = G_TWO;
+			W.touchAt = now;
+			W.twoDist = two_distance();
+			W.twoCx = W.lastCx = (W.fingers[0].x + W.fingers[1].x) / 2.0f;
+			W.twoCy = W.lastCy = (W.fingers[0].y + W.fingers[1].y) / 2.0f;
+			W.twoZoom = W.zoom;
+		}
+		return;
+	}
+
+	const int i = finger_index(e->fingerID);
+	if (i < 0)
+		return;
+	W.fingers[i].x = px;
+	W.fingers[i].y = py;
+
+	if (e->type == SDL_EVENT_FINGER_MOTION)
+	{
+		switch (W.gesture)
+		{
+			case G_BAR:
+				bar_mouse(px / k, py / k, MOUSE_MOVE, 0);
+				break;
+			case G_PENDING:
+			{
+				const float dx = px - W.fingers[0].sx, dy = py - W.fingers[0].sy;
+				if (SDL_sqrtf(dx * dx + dy * dy) < TOUCH_SLOP * s)
+					break;
+				/* Рушив — тягнемо з лівою кнопкою від місця дотику. */
+				remote_mouse(W.fingers[0].sx, W.fingers[0].sy, PTR_FLAGS_BUTTON1 | PTR_FLAGS_DOWN);
+				W.gesture = G_DRAG;
+			}
+				SDL_FALLTHROUGH;
+			case G_DRAG:
+				remote_mouse(px, py, PTR_FLAGS_MOVE);
+				break;
+			case G_TWO:
+			case G_SCROLL:
+			case G_PINCH:
+			{
+				if (W.nfingers < 2)
+					break;
+				const float cx = (W.fingers[0].x + W.fingers[1].x) / 2.0f;
+				const float cy = (W.fingers[0].y + W.fingers[1].y) / 2.0f;
+				const float dist = two_distance();
+				if (W.gesture == G_TWO)
+				{
+					const float moved = SDL_sqrtf((cx - W.twoCx) * (cx - W.twoCx) + (cy - W.twoCy) * (cy - W.twoCy));
+					if (SDL_fabsf(dist - W.twoDist) > PINCH_SLOP * s)
+						W.gesture = G_PINCH;
+					else if (moved > TOUCH_SLOP * s)
+						W.gesture = G_SCROLL;
+				}
+				if (W.gesture == G_PINCH)
+				{
+					set_zoom(W.twoZoom * dist / SDL_max(W.twoDist, 1.0f), cx, cy);
+					/* Пальці ще й рушили — картинка йде за ними. */
+					if (W.zoom > 1.0f)
+					{
+						W.viewX += cx - W.lastCx;
+						W.viewY += cy - W.lastCy;
+					}
+					render();
+				}
+				else if (W.gesture == G_SCROLL && W.zoom > 1.0f)
+				{
+					W.viewX += cx - W.lastCx; /* збільшено — двома пальцями зсуваємо картинку */
+					W.viewY += cy - W.lastCy;
+					const SDL_FRect r = image_rect();
+					W.viewX = r.x;
+					W.viewY = r.y;
+					render();
+				}
+				else if (W.gesture == G_SCROLL)
+				{
+					/* Гортання як на телефоні: пальці вниз — вміст униз (колесо від себе). 1 піксель ≈ 2
+					 * одиниці колеса (120 = один крок). */
+					uint16_t x = 0, y = 0;
+					if (px_to_remote(cx, cy, &x, &y))
+					{
+						W.wheelRest += (cy - W.lastCy) * 2.0f / s;
+						const int delta = (int)SDL_clamp(W.wheelRest, -255.0f, 255.0f);
+						W.wheelRest -= (float)delta;
+						if (delta)
+							W.host.wheel(W.host.ctx, delta, FALSE, x, y);
+						const int hdelta = (int)SDL_clamp(-(cx - W.lastCx) * 2.0f / s, -255.0f, 255.0f);
+						if (hdelta)
+							W.host.wheel(W.host.ctx, hdelta, TRUE, x, y);
+					}
+				}
+				W.lastCx = cx;
+				W.lastCy = cy;
+				break;
+			}
+			default:
+				break;
+		}
+		return;
+	}
+
+	/* Палець підняли (або дотик скасувала система). */
+	const BOOL canceled = e->type == SDL_EVENT_FINGER_CANCELED;
+	switch (W.gesture)
+	{
+		case G_BAR:
+			bar_mouse(px / k, py / k, MOUSE_UP, SDL_BUTTON_LEFT);
+			W.gesture = G_END;
+			break;
+		case G_PENDING:
+			if (!canceled)
+				remote_click(W.fingers[0].sx, W.fingers[0].sy, PTR_FLAGS_BUTTON1); /* дотик = клік */
+			W.gesture = G_END;
+			break;
+		case G_DRAG:
+			remote_mouse(px, py, PTR_FLAGS_BUTTON1);
+			W.gesture = G_END;
+			break;
+		case G_TWO:
+			/* Два пальці торкнулись і майже одразу піднялись, не рушивши, — правий клік. */
+			if (!canceled && now - W.touchAt < TWO_TAP_MS)
+				remote_click(W.twoCx, W.twoCy, PTR_FLAGS_BUTTON2);
+			W.gesture = G_END;
+			break;
+		case G_SCROLL:
+		case G_PINCH:
+			W.gesture = G_END;
+			break;
+		default:
+			break;
+	}
+	W.fingers[i] = W.fingers[--W.nfingers];
+	if (W.nfingers == 0)
+		W.gesture = G_NONE;
+}
+
+/* Палець тримають на місці — правий клік (як довге натискання на телефоні). */
+static void long_press_if_due(void)
+{
+	if (W.gesture != G_PENDING || SDL_GetTicks() - W.touchAt < LONG_PRESS_MS)
+		return;
+	remote_click(W.fingers[0].sx, W.fingers[0].sy, PTR_FLAGS_BUTTON2);
+	W.gesture = G_LONG_DONE;
 }
 
 /* ── Публічне ─────────────────────────────────────────────────── */
@@ -1338,6 +1644,7 @@ BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 	W.cursorShown = SDL_SYSTEM_CURSOR_DEFAULT;
 	SDL_SetAtomicInt(&W.latency, LATENCY_NONE);
 	W.latencyShown = LATENCY_NONE;
+	W.zoom = 1.0f;
 	init_scancodes();
 	/* Іконка вікна — з ресурсів mhrd-session.exe (mhrd-session.rc). */
 	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");
@@ -1364,6 +1671,8 @@ void window_run(void)
 			timeout = W.resizeAt > now ? (Sint32)(W.resizeAt - now) : 0;
 		if (W.barHideAt)
 			timeout = SDL_min(timeout, W.barHideAt > now ? (Sint32)(W.barHideAt - now) : 0);
+		if (W.gesture == G_PENDING) /* довге натискання — вчасно, навіть якщо подій немає */
+			timeout = SDL_min(timeout, (Sint32)SDL_max(0, (Sint64)(W.touchAt + LONG_PRESS_MS) - (Sint64)now));
 		const BOOL tooltipPending = W.hoverButton != BTN_NONE && !W.tooltipShown;
 		if (tooltipPending)
 		{
@@ -1484,6 +1793,13 @@ void window_run(void)
 					case SDL_EVENT_MOUSE_WHEEL:
 						on_wheel(&e.wheel);
 						break;
+					case SDL_EVENT_FINGER_DOWN:
+					case SDL_EVENT_FINGER_MOTION:
+					case SDL_EVENT_FINGER_UP:
+					case SDL_EVENT_FINGER_CANCELED:
+						if (W.window)
+							on_finger(&e.tfinger);
+						break;
 					default:
 						break;
 				}
@@ -1498,6 +1814,7 @@ void window_run(void)
 			W.thumbAt = SDL_GetTicks() + THUMB_EVERY_MS;
 		}
 		hide_bar_if_due();
+		long_press_if_due();
 		if (W.window && W.hoverButton != BTN_NONE && !W.tooltipShown &&
 		    SDL_GetTicks() >= W.hoverSince + TOOLTIP_DELAY_MS)
 		{
