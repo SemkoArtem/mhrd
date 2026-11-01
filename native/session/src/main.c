@@ -1214,8 +1214,8 @@ static DWORD WINAPI rdp_thread(LPVOID arg)
 
 /* Пісочниця, рівень 1. Процес сеансу розбирає все, що надсилає віддалений ПК, тож якщо в цьому
  * розборі колись знайдеться діра, не даємо їй розгорнутись: жодних нових процесів (Job Object з
- * лімітом в один процес + заборона в самому процесі), не можна вимкнути чи перезавантажити Windows
- * або перемкнути робочий стіл, бібліотеки — лише локальні й не з «низьким» рівнем довіри.
+ * лімітом в один процес + заборона в самому процесі), бібліотеки — лише локальні й не з «низьким»
+ * рівнем довіри. Обмеження інтерфейсу Job Object (вихід з Windows, робочі столи) ламають буфер обміну.
  * Політики, що ламають драйвери відеокарти й методи вводу (динамічний код, точки розширення,
  * підписи бібліотек), свідомо не вмикаємо. Кожен крок — найкраще, що вийде: невдача не заважає сеансу. */
 static void harden_process(void)
@@ -1227,9 +1227,9 @@ static void harden_process(void)
 		limits.BasicLimitInformation.LimitFlags =
 		    JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 		limits.BasicLimitInformation.ActiveProcessLimit = 1;
-		JOBOBJECT_BASIC_UI_RESTRICTIONS ui = { JOB_OBJECT_UILIMIT_EXITWINDOWS | JOB_OBJECT_UILIMIT_DESKTOP };
+		/* Без JobObjectBasicUIRestrictions: з будь-яким із них GetClipboardData не віддає дані інших
+		 * програм (ERROR_INVALID_HANDLE) — копіювання з цього ПК на віддалений перестає працювати. */
 		if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits)) ||
-		    !SetInformationJobObject(job, JobObjectBasicUIRestrictions, &ui, sizeof(ui)) ||
 		    !AssignProcessToJobObject(job, GetCurrentProcess()))
 		{
 			WLog_WARN("mhrd", "job object not applied (%lu)", GetLastError());
