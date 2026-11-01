@@ -906,6 +906,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'Width and height must be 200 to 8192 pixels.';
 
   @override
+  String passwordExpiredSaved(String account) {
+    return 'Change the password on the PC itself (or in the domain) and enter the new one here — it will be saved in the account \"$account\" for every PC that uses it.';
+  }
+
+  @override
+  String get passwordExpiredAsk =>
+      'Change the password on the PC itself (or in the domain), then connect with the new one.';
+
+  @override
+  String get newPassword => 'New password';
+
+  @override
+  String get saveAndConnect => 'Connect';
+
+  @override
   String get checkConnection => 'Check connection';
 
   @override

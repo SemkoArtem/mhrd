@@ -1682,6 +1682,30 @@ abstract class AppLocalizations {
   /// **'Ширина й висота — від 200 до 8192 пікселів.'**
   String get screenSizeInvalid;
 
+  /// No description provided for @passwordExpiredSaved.
+  ///
+  /// In uk, this message translates to:
+  /// **'Змініть пароль на самому ПК (або в домені) і введіть тут новий — він збережеться в акаунті «{account}» для всіх ПК, що ним користуються.'**
+  String passwordExpiredSaved(String account);
+
+  /// No description provided for @passwordExpiredAsk.
+  ///
+  /// In uk, this message translates to:
+  /// **'Змініть пароль на самому ПК (або в домені), а потім підключіться з новим.'**
+  String get passwordExpiredAsk;
+
+  /// No description provided for @newPassword.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий пароль'**
+  String get newPassword;
+
+  /// No description provided for @saveAndConnect.
+  ///
+  /// In uk, this message translates to:
+  /// **'Підключитись'**
+  String get saveAndConnect;
+
   /// No description provided for @checkConnection.
   ///
   /// In uk, this message translates to:

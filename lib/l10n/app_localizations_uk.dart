@@ -906,6 +906,21 @@ class AppLocalizationsUk extends AppLocalizations {
   String get screenSizeInvalid => 'Ширина й висота — від 200 до 8192 пікселів.';
 
   @override
+  String passwordExpiredSaved(String account) {
+    return 'Змініть пароль на самому ПК (або в домені) і введіть тут новий — він збережеться в акаунті «$account» для всіх ПК, що ним користуються.';
+  }
+
+  @override
+  String get passwordExpiredAsk =>
+      'Змініть пароль на самому ПК (або в домені), а потім підключіться з новим.';
+
+  @override
+  String get newPassword => 'Новий пароль';
+
+  @override
+  String get saveAndConnect => 'Підключитись';
+
+  @override
   String get checkConnection => 'Перевірити з\'єднання';
 
   @override

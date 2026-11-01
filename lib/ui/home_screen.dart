@@ -247,6 +247,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted || ended == null || ended.reason == DisconnectReason.userRequest) return;
       await _bringToFront();
       if (!mounted) return;
+      if (ended.reason == DisconnectReason.passwordExpired) {
+        await _passwordExpired(c, credentialId);
+        return;
+      }
       final l = context.l10n;
       final t = context.mhrd;
       final retry = await showDialog<bool>(
@@ -279,6 +283,56 @@ class _HomeScreenState extends State<HomeScreen> {
           credentialId: credentialId,
           askPassword: ended.reason == DisconnectReason.authFailed || ended.reason == DisconnectReason.noCredentials);
     });
+  }
+
+  /// Пароль прострочений: людина міняє його на ПК чи в домені, а тут вводить новий — він
+  /// зберігається в акаунті (для всіх ПК з цим акаунтом), і MHRD підключається знову.
+  Future<void> _passwordExpired(Connection c, String? credentialId) async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    final id = credentialId ?? (c.credentialIds.isEmpty ? null : c.credentialIds.first);
+    final cred = id == null ? null : repo.credentials[id];
+    final saved = cred != null && cred.authMode == AuthMode.savedPassword;
+    final pass = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => AlertDialog(
+        icon: Icon(Icons.password, color: t.warn),
+        title: Text(c.displayName),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(l.reasonPasswordExpired),
+            const SizedBox(height: 8),
+            Text(saved ? l.passwordExpiredSaved(cred.label) : l.passwordExpiredAsk,
+                style: TextStyle(color: t.textMuted, fontSize: 13)),
+            if (saved) ...[
+              const SizedBox(height: 14),
+              TextField(
+                controller: pass,
+                autofocus: true,
+                obscureText: true,
+                decoration: InputDecoration(labelText: l.newPassword),
+                onSubmitted: (_) => Navigator.pop(dc, true),
+              ),
+            ],
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.close)),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(l.saveAndConnect)),
+        ],
+      ),
+    );
+    final newPassword = pass.text;
+    pass.dispose();
+    if (ok != true || !mounted) return;
+    if (saved && newPassword.isNotEmpty) {
+      await repo.saveCredential(cred, password: newPassword);
+      if (mounted) _connect(c, credentialId: credentialId);
+    } else {
+      _connect(c, credentialId: credentialId, askPassword: true);
+    }
   }
 
   Future<void> _askCertificate(RdpSession s, CertificateEvent cert) async {
