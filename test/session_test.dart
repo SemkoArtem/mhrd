@@ -106,6 +106,12 @@ void main() {
       final d = events[3] as DisconnectedEvent;
       expect([d.reason, d.code, d.details], [DisconnectReason.authFailed, 0x20009, 'auth']);
     });
+
+    test('вікно просить екранну клавіатуру — застосунок дізнається', () async {
+      final events =
+          await Stream<List<int>>.value(encodeFrame(Msg.evtKeyboard)).transform(const SessionEventDecoder()).toList();
+      expect(events.single, isA<KeyboardEvent>());
+    });
   });
 
   group('скан-коди', () {

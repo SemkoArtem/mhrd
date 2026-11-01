@@ -623,6 +623,86 @@ static BOOL apply_gateway(rdpSettings* s, const cJSON* g)
 	return ok;
 }
 
+#define MAX_MONITORS 16
+
+typedef struct
+{
+	rdpMonitor mons[MAX_MONITORS];
+	UINT32 count;
+} MonitorList;
+
+#ifdef _WIN32
+static BOOL CALLBACK collect_monitor(HMONITOR hm, HDC dc, LPRECT rc, LPARAM lp)
+{
+	(void)dc;
+	(void)rc;
+	MonitorList* list = (MonitorList*)lp;
+	MONITORINFO mi = { sizeof(mi) };
+	if (list->count >= MAX_MONITORS || !GetMonitorInfoW(hm, &mi))
+		return list->count < MAX_MONITORS;
+	rdpMonitor* mon = &list->mons[list->count++];
+	memset(mon, 0, sizeof(*mon));
+	mon->x = mi.rcMonitor.left;
+	mon->y = mi.rcMonitor.top;
+	mon->width = mi.rcMonitor.right - mi.rcMonitor.left;
+	mon->height = mi.rcMonitor.bottom - mi.rcMonitor.top;
+	mon->is_primary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+	mon->orig_screen = list->count - 1;
+	return TRUE;
+}
+#endif
+
+/* «Усі монітори»: віддалений ПК отримує стільки ж моніторів, скільки тут, у тому ж розташуванні
+ * (FreeRDP сам рахує їх відносно основного), а вікно сеансу ляже на весь віртуальний екран.
+ * Монітор один — звичайний режим. */
+static BOOL apply_all_monitors(MhrdContext* m, rdpSettings* s)
+{
+	m->win.allMonitors = FALSE;
+#ifdef _WIN32
+	MonitorList list = { 0 };
+	EnumDisplayMonitors(NULL, NULL, collect_monitor, (LPARAM)&list);
+	if (list.count < 2)
+		return TRUE;
+	INT32 minX = INT32_MAX, minY = INT32_MAX, maxX = INT32_MIN, maxY = INT32_MIN;
+	const rdpMonitor* primary = &list.mons[0];
+	for (UINT32 i = 0; i < list.count; i++)
+	{
+		const rdpMonitor* mon = &list.mons[i];
+		minX = mon->x < minX ? mon->x : minX;
+		minY = mon->y < minY ? mon->y : minY;
+		maxX = mon->x + mon->width > maxX ? mon->x + mon->width : maxX;
+		maxY = mon->y + mon->height > maxY ? mon->y + mon->height : maxY;
+		if (mon->is_primary)
+			primary = mon;
+	}
+	if (!freerdp_settings_set_bool(s, FreeRDP_UseMultimon, TRUE) ||
+	    !freerdp_settings_set_pointer_len(s, FreeRDP_MonitorDefArray, NULL, list.count))
+		return FALSE;
+	for (UINT32 i = 0; i < list.count; i++)
+	{
+		if (!freerdp_settings_set_pointer_array(s, FreeRDP_MonitorDefArray, i, &list.mons[i]))
+			return FALSE;
+	}
+	if (!freerdp_settings_set_uint32(s, FreeRDP_MonitorCount, list.count) ||
+	    !freerdp_settings_set_uint32(s, FreeRDP_DesktopWidth, (UINT32)(maxX - minX)) ||
+	    !freerdp_settings_set_uint32(s, FreeRDP_DesktopHeight, (UINT32)(maxY - minY)))
+		return FALSE;
+	m->win.allMonitors = TRUE;
+	m->win.virtX = minX;
+	m->win.virtY = minY;
+	m->win.virtW = maxX - minX;
+	m->win.virtH = maxY - minY;
+	m->win.primX = primary->x;
+	m->win.primY = primary->y;
+	m->win.primW = primary->width;
+	m->win.primH = primary->height;
+	WLog_INFO("mhrd", "all monitors: %" PRIu32 " (%" PRId32 "x%" PRId32 ")", list.count, maxX - minX, maxY - minY);
+#else
+	(void)s;
+#endif
+	return TRUE;
+}
+
 static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 {
 	rdpSettings* s = m->common.context.settings;
@@ -800,11 +880,16 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.keyboardCapture = jint(j, "keyboardCapture", 0);
 		m->win.resizeMode = jint(j, "resizeMode", 0);
 		m->win.swapMouseButtons = jbool(j, "swapMouse", FALSE);
+		m->win.logicalResolution = jbool(j, "logicalResolution", FALSE);
+		m->win.keepAwake = jbool(j, "keepAwake", TRUE);
+		m->win.allMonitors = jbool(j, "allMonitors", FALSE);
 		const cJSON* bar = cJSON_GetObjectItemCaseSensitive(j, "bar");
 		m->win.barEdge = jint(bar, "edge", 0);
 		m->win.barPos = jint(bar, "pos", 5000);
 		m->win.barLength = jint(bar, "length", 0);
 		m->win.radius = jint(j, "radius", 8);
+		if (m->win.allMonitors && ok)
+			ok = apply_all_monitors(m, s);
 	}
 out:
 	wipe_string(j, "password");
@@ -929,6 +1014,13 @@ static void host_unicode(void* ctx, uint16_t code)
 	freerdp_input_send_unicode_keyboard_event(input, 0, code);
 	freerdp_input_send_unicode_keyboard_event(input, KBD_FLAGS_RELEASE, code);
 	input_end(ctx);
+}
+
+/* Кнопка «Екранна клавіатура»: osk.exe запускає застосунок — цьому процесу інші програми заборонено. */
+static void host_open_keyboard(void* ctx)
+{
+	WINPR_UNUSED(ctx);
+	proto_send(EVT_KEYBOARD, NULL, 0);
 }
 
 /* Плашку перетягнули чи змінили її довжину — застосунок запам'ятає для наступних сеансів. */
@@ -1120,9 +1212,64 @@ static DWORD WINAPI rdp_thread(LPVOID arg)
 	return 0;
 }
 
+/* Пісочниця, рівень 1. Процес сеансу розбирає все, що надсилає віддалений ПК, тож якщо в цьому
+ * розборі колись знайдеться діра, не даємо їй розгорнутись: жодних нових процесів (Job Object з
+ * лімітом в один процес + заборона в самому процесі), не можна вимкнути чи перезавантажити Windows
+ * або перемкнути робочий стіл, бібліотеки — лише локальні й не з «низьким» рівнем довіри.
+ * Політики, що ламають драйвери відеокарти й методи вводу (динамічний код, точки розширення,
+ * підписи бібліотек), свідомо не вмикаємо. Кожен крок — найкраще, що вийде: невдача не заважає сеансу. */
+static void harden_process(void)
+{
+	HANDLE job = CreateJobObjectW(NULL, NULL);
+	if (job)
+	{
+		JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits = { 0 };
+		limits.BasicLimitInformation.LimitFlags =
+		    JOB_OBJECT_LIMIT_ACTIVE_PROCESS | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+		limits.BasicLimitInformation.ActiveProcessLimit = 1;
+		JOBOBJECT_BASIC_UI_RESTRICTIONS ui = { JOB_OBJECT_UILIMIT_EXITWINDOWS | JOB_OBJECT_UILIMIT_DESKTOP };
+		if (!SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits)) ||
+		    !SetInformationJobObject(job, JobObjectBasicUIRestrictions, &ui, sizeof(ui)) ||
+		    !AssignProcessToJobObject(job, GetCurrentProcess()))
+		{
+			WLog_WARN("mhrd", "job object not applied (%lu)", GetLastError());
+			CloseHandle(job);
+		}
+		/* Успіх: дескриптор тримаємо до кінця — закриється разом із процесом. */
+	}
+
+	PROCESS_MITIGATION_CHILD_PROCESS_POLICY child = { 0 };
+	child.NoChildProcessCreation = 1;
+	SetProcessMitigationPolicy(ProcessChildProcessPolicy, &child, sizeof(child));
+
+	PROCESS_MITIGATION_IMAGE_LOAD_POLICY image = { 0 };
+	image.NoRemoteImages = 1;
+	image.NoLowMandatoryLabelImages = 1;
+	image.PreferSystem32Images = 1;
+	SetProcessMitigationPolicy(ProcessImageLoadPolicy, &image, sizeof(image));
+
+	PROCESS_MITIGATION_STRICT_HANDLE_CHECK_POLICY handles = { 0 };
+	handles.RaiseExceptionOnInvalidHandleReference = 1;
+	handles.HandleExceptionsPermanentlyEnabled = 1;
+	SetProcessMitigationPolicy(ProcessStrictHandleCheckPolicy, &handles, sizeof(handles));
+
+	PROCESS_MITIGATION_ASLR_POLICY aslr = { 0 };
+	aslr.EnableBottomUpRandomization = 1;
+	aslr.EnableHighEntropy = 1;
+	SetProcessMitigationPolicy(ProcessASLRPolicy, &aslr, sizeof(aslr));
+
+	/* Шрифти — лише системні для GDI (свої TTF плашка читає сама, через FreeType). */
+	PROCESS_MITIGATION_FONT_DISABLE_POLICY fonts = { 0 };
+	fonts.DisableNonSystemFonts = 1;
+	SetProcessMitigationPolicy(ProcessFontDisablePolicy, &fonts, sizeof(fonts));
+}
+
 int main(void)
 {
 	configure_logging();
+	harden_process();
+	/* Координати моніторів і вікна — у справжніх пікселях кожного монітора («Усі монітори»). */
+	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 	/* Без WSAStartup на Windows не працює жоден мережевий виклик — навіть розбір IP-адреси
 	 * (FreeRDP тоді повідомляє «DNS-ім'я не знайдено»). Клієнти FreeRDP роблять це самі. */
 	WSADATA wsa;
@@ -1174,7 +1321,7 @@ int main(void)
 		/* Вікно — у головному потоці (вимога SDL), FreeRDP — у своєму. */
 		const WindowHost host = { m, host_lock, host_unlock, host_buffer, host_key,
 			                      host_mouse, host_wheel, host_resize, host_close, host_bar_moved, host_touch,
-			                      host_unicode };
+			                      host_unicode, host_open_keyboard };
 		if (window_init(&m->win, &host))
 		{
 			HANDLE t = CreateThread(NULL, 0, rdp_thread, m, 0, NULL);

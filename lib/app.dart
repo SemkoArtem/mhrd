@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'backup/auto_backup.dart';
 import 'l10n/l10n.dart';
 import 'sessions/session_manager.dart';
+import 'storage/file_secret_store.dart';
 import 'storage/repository.dart';
 import 'theme/mhrd_theme.dart';
 import 'ui/home_screen.dart';
 import 'ui/lock_screen.dart';
+import 'ui/portable_gate.dart';
 
 /// Доступ до сервісів з будь-якого віджета: `AppScope.of(context).repo`.
 class AppScope extends InheritedWidget {
@@ -67,7 +69,10 @@ class MhrdApp extends StatelessWidget {
               ),
               child: child!,
             ),
-            home: const LockGate(child: HomeScreen()),
+            // Портативна версія: замість PIN — майстер-пароль файлу секретів (він і є замком).
+            home: repo.secrets is FileSecretStore
+                ? PortableGate(store: repo.secrets as FileSecretStore, child: const HomeScreen())
+                : const LockGate(child: HomeScreen()),
           );
         },
       ),

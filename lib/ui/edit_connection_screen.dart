@@ -436,6 +436,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         contentPadding: EdgeInsets.zero,
         value: d.useAllMonitors,
         title: Text(l.useAllMonitors),
+        subtitle: Text(l.useAllMonitorsHint, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
         onChanged: (v) => setD(d.copyWith(useAllMonitors: v)),
       ),
       const SizedBox(height: 8),
@@ -484,7 +485,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         contentPadding: EdgeInsets.zero,
         value: d.hiDpi,
         title: Text(l.hiDpi),
-        subtitle: Text(l.hiDpiWarning, style: TextStyle(color: t.warn, fontSize: 12.5)),
+        subtitle: Text(l.hiDpiWarning, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
         onChanged: (v) => setD(d.copyWith(hiDpi: v)),
       ),
     ];

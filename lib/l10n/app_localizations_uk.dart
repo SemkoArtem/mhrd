@@ -595,10 +595,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get remoteScale => 'Масштаб елементів на віддаленому ПК';
 
   @override
-  String get hiDpi => 'Повна чіткість на Retina / HiDPI';
+  String get hiDpi => 'Повна чіткість (HiDPI)';
 
   @override
-  String get hiDpiWarning => 'Приблизно вчетверо більше трафіку';
+  String get hiDpiWarning =>
+      'Вимкніть на повільному з\'єднанні: на екранах 150–200 % трафіку стане в 2–4 рази менше, а картинка — трохи м\'якшою.';
 
   @override
   String get clipboard => 'Буфер обміну';
@@ -1452,4 +1453,73 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get fileTypeTheme => 'Тема MHRD';
+
+  @override
+  String get portableTitle => 'Портативна MHRD';
+
+  @override
+  String get portableCreateHint =>
+      'Паролі й ключі зберігатимуться в зашифрованому файлі поруч із програмою. Придумайте майстер-пароль: без нього їх не відкрити й не відновити.';
+
+  @override
+  String get portableUnlockHint => 'Введіть майстер-пароль.';
+
+  @override
+  String get portableImportHint =>
+      'Щоб перенести ПК з іншої MHRD, зробіть там повний бекап, а тут відновіть його: Налаштування → Бекап.';
+
+  @override
+  String get portableFileBroken =>
+      'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте mhrd-data\\secrets.mhrd (паролі доведеться ввести знову).';
+
+  @override
+  String get portableCreate => 'Створити';
+
+  @override
+  String get portableSection => 'Портативна версія';
+
+  @override
+  String get portableSectionHint =>
+      'Дані — у теці mhrd-data поруч із програмою. Замість PIN-коду — майстер-пароль.';
+
+  @override
+  String get masterPassword => 'Майстер-пароль';
+
+  @override
+  String get masterPasswordRepeat => 'Повторіть майстер-пароль';
+
+  @override
+  String get masterPasswordNew => 'Новий майстер-пароль';
+
+  @override
+  String masterPasswordTooShort(int min) {
+    return 'Щонайменше $min символів.';
+  }
+
+  @override
+  String get masterPasswordMismatch => 'Паролі не збігаються.';
+
+  @override
+  String get masterPasswordWrong => 'Неправильний майстер-пароль.';
+
+  @override
+  String get masterPasswordChange => 'Змінити майстер-пароль';
+
+  @override
+  String get masterPasswordChanged => 'Майстер-пароль змінено.';
+
+  @override
+  String get createShortcut => 'Ярлик на робочому столі';
+
+  @override
+  String shortcutCreated(String name) {
+    return 'Ярлик «$name» — на робочому столі.';
+  }
+
+  @override
+  String get shortcutFailed => 'Не вдалося створити ярлик.';
+
+  @override
+  String get useAllMonitorsHint =>
+      'Вікно сеансу — на всіх моніторах одразу, розкладка — як на цьому ПК. Плашка — на основному моніторі.';
 }

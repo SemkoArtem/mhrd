@@ -15,7 +15,7 @@ class DisplaySettings {
     this.startFullscreen,
     this.resizeMode = ResizeMode.changeResolution,
     this.colorDepth = 32,
-    this.hiDpi = false,
+    this.hiDpi = true,
     this.scalePercent = 100,
     this.width,
     this.height,
@@ -30,6 +30,7 @@ class DisplaySettings {
 
   /// 15, 16, 24 або 32.
   final int colorDepth;
+  /// Повна чіткість (фізичні пікселі екрана); вимкнено — логічна роздільність, ~4× менше трафіку.
   final bool hiDpi;
 
   /// Масштаб елементів на віддаленому ПК, 100–300.
@@ -70,7 +71,7 @@ class DisplaySettings {
         'startFullscreen': startFullscreen,
         'resizeMode': resizeMode.name,
         'colorDepth': colorDepth,
-        'hiDpi': hiDpi,
+        'hiDpiOn': hiDpi,
         'scalePercent': scalePercent,
         'width': width,
         'height': height,
@@ -82,7 +83,8 @@ class DisplaySettings {
         startFullscreen: j['startFullscreen'] is bool ? j['startFullscreen'] as bool : null,
         resizeMode: enumByName(ResizeMode.values, j['resizeMode'], ResizeMode.changeResolution),
         colorDepth: intOr(j['colorDepth'], 32),
-        hiDpi: boolOr(j['hiDpi'], false),
+        // Старе поле «hiDpi» ніколи нічого не вмикало (сеанс і так ішов у повній чіткості) — не читаємо.
+        hiDpi: boolOr(j['hiDpiOn'], true),
         scalePercent: intOr(j['scalePercent'], 100),
         width: j['width'] is int ? j['width'] as int : null,
         height: j['height'] is int ? j['height'] as int : null,

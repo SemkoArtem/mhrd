@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../security/app_lock.dart';
+import '../storage/file_secret_store.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import 'dialogs.dart';
+import 'portable_gate.dart';
 
 /// Показує [child] лише після PIN-коду чи відбитка / Windows Hello, якщо блокування ввімкнено.
 class LockGate extends StatefulWidget {
@@ -219,6 +221,13 @@ Future<String?> askNewPin(BuildContext context) {
 /// Без PIN і без Windows Hello — підказка ввімкнути блокування, дії немає.
 Future<bool> authorizeSensitive(BuildContext context, Repository repo) async {
   final l = context.l10n;
+  final secrets = repo.secrets;
+  if (secrets is FileSecretStore) {
+    // Портативна версія: замість PIN — майстер-пароль.
+    final ok = await confirmMasterPassword(context, secrets);
+    if (!ok && context.mounted) toast(context, l.masterPasswordWrong);
+    return ok;
+  }
   final lock = AppLock(repo);
   if (repo.settings.lockEnabled) {
     if (repo.settings.lockBiometric && await lock.unlockWithBiometric(l.authEditReason)) return true;

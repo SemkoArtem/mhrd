@@ -12,9 +12,11 @@ import '../backup/backup_service.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../platform/portable.dart';
 import '../security/app_lock.dart';
 import '../sessions/route_health.dart' show probeProxy;
 import '../sessions/session_manager.dart' show HealthState, RouteHealth, RouteStatus, TunnelError;
+import '../storage/file_secret_store.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -23,6 +25,7 @@ import 'credential_dialog.dart';
 import 'dialogs.dart';
 import 'file_actions.dart';
 import 'lock_screen.dart';
+import 'portable_gate.dart';
 import 'theme_editor.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -148,6 +151,29 @@ class _GeneralTab extends StatelessWidget {
           onChanged: (v) => set(s.copyWith(keyboardCapture: v)),
         ),
       ),
+      if (repo.secrets case final FileSecretStore store) ...[
+        // Портативна версія: замок — майстер-пароль файлу секретів, PIN і Windows Hello не потрібні.
+        _caption(context, l.portableSection),
+        ListTile(
+          leading: const Icon(Icons.usb_outlined),
+          title: Text(l.portableSectionHint),
+        ),
+        ListTile(
+          leading: const Icon(Icons.key_outlined),
+          title: Text(l.masterPasswordChange),
+          onTap: () async {
+            if (!await confirmMasterPassword(context, store)) {
+              if (context.mounted) toast(context, l.masterPasswordWrong);
+              return;
+            }
+            if (!context.mounted) return;
+            final pw = await askNewMasterPassword(context);
+            if (pw == null) return;
+            await store.changePassword(pw);
+            if (context.mounted) toast(context, l.masterPasswordChanged);
+          },
+        ),
+      ] else ...[
       _caption(context, l.lockSection),
       SwitchListTile(
         value: s.lockEnabled,
@@ -180,6 +206,7 @@ class _GeneralTab extends StatelessWidget {
                   },
                 ),
         ),
+      ],
     ]);
   }
 }
@@ -951,7 +978,7 @@ class _BackupTab extends StatelessWidget {
     if (!ok) return;
     if (replace) {
       // Страховка: поточний стан шифруємо тим самим паролем і кладемо поруч з базою.
-      final dir = await getApplicationSupportDirectory();
+      final dir = Portable.dataDir ?? await getApplicationSupportDirectory();
       final safety = File(p.join(dir.path, 'auto-before-restore-${DateTime.now().millisecondsSinceEpoch}.rdpbackup'));
       await safety.writeAsBytes(await svc.exportEncrypted(pw), flush: true);
     }

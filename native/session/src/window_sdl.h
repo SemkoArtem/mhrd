@@ -29,6 +29,8 @@ typedef struct
 	BOOL (*touch)(void* ctx, uint32_t flags, int finger, int x, int y);
 	/* Символ без клавіші (сенсорна клавіатура, автозаповнення паролів, емодзі): одиниця UTF-16. */
 	void (*unicode)(void* ctx, uint16_t code);
+	/* Кнопка «Екранна клавіатура»: osk.exe запускає головна програма (сеансу запускати процеси не можна). */
+	void (*openKeyboard)(void* ctx);
 } WindowHost;
 
 /* Налаштування з MSG_CONNECT. Рядки належать викликачу до window_run включно. */
@@ -62,6 +64,12 @@ typedef struct
 	int keyboardCapture; /* 0 — лише на весь екран, 1 — завжди, 2 — ніколи */
 	int resizeMode;      /* 0 — змінювати роздільність, 1 — масштабувати, 2 — без змін */
 	BOOL swapMouseButtons;
+	BOOL logicalResolution; /* економія трафіку: роздільність у логічних пікселях (вікно збільшує картинку) */
+	BOOL keepAwake;         /* не давати Windows гасити екран і засинати, поки відкрите вікно сеансу */
+	BOOL allMonitors;       /* сеанс на всі монітори (MonitorDefArray), вікно — на весь віртуальний екран */
+	/* Для allMonitors (заповнює main.c, коли моніторів справді кілька): віртуальний екран і основний
+	 * монітор у пікселях Windows. */
+	int virtX, virtY, virtW, virtH, primX, primY, primW, primH;
 	/* Плашка: край вікна (0 верх, 1 низ, 2 ліво, 3 право), центр уздовж краю (0..10000),
 	 * довжина в одиницях інтерфейсу (0 — типова); радіус заокруглення, як у темі MHRD. */
 	int barEdge, barPos, barLength, radius;

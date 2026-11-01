@@ -42,18 +42,32 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   // Друга копія MHRD знаходить це вікно за властивістю (shell::ForwardToRunningInstance).
-  ::SetPropW(GetHandle(), shell::kMainWindowProp, reinterpret_cast<HANDLE>(1));
+  ::SetPropW(GetHandle(), shell::kMainWindowProp, reinterpret_cast<HANDLE>(shell::InstanceKey()));
   shell_channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
       flutter_controller_->engine()->messenger(), "mhrd/shell",
       &flutter::StandardMethodCodec::GetInstance());
   shell_channel_->SetMethodCallHandler([](const auto& call, auto result) {
-    if (call.method_name() != "setRecent") {
+    const std::string& method = call.method_name();
+    if (method == "openKeyboard") {
+      result->Success(EncodableValue(shell::OpenOnScreenKeyboard()));
+      return;
+    }
+    if (method != "setRecent" && method != "createShortcut") {
       result->NotImplemented();
       return;
     }
     const auto* args = std::get_if<EncodableMap>(call.arguments());
     if (!args) {
       result->Error("args", "map expected");
+      return;
+    }
+    if (method == "createShortcut") {
+      const std::wstring path = shell::CreateDesktopShortcut(StringField(*args, "id"), StringField(*args, "name"));
+      if (path.empty()) {
+        result->Error("shortcut", "could not create the shortcut");
+        return;
+      }
+      result->Success();
       return;
     }
     std::vector<shell::RecentItem> items;

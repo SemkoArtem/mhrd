@@ -70,6 +70,13 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" windows\installer\mhrd.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # Позначка портативної версії (лише в zip, після інсталятора): дані — у mhrd-data поруч,
+          # паролі — у зашифрованому файлі під майстер-паролем (lib/platform/portable.dart).
+          @(
+            'MHRD portable: data is kept in the mhrd-data folder next to mhrd.exe;',
+            'passwords and keys are encrypted with your master password.',
+            'Delete this file to make MHRD use the normal per-user data folder instead.'
+          ) | Set-Content -Encoding utf8 build\windows\x64\runner\Release\portable.txt
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "build\installer\mhrd-${{ steps.ver.outputs.version }}-x64-portable.zip"
           # Контрольні суми — щоб кожен міг перевірити завантажене (Get-FileHash … -Algorithm SHA256).
           Get-ChildItem build\installer -File | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } |

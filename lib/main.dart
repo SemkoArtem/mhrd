@@ -3,14 +3,17 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'backup/auto_backup.dart';
+import 'platform/portable.dart';
 import 'platform/shell_bridge.dart';
 import 'sessions/session_manager.dart';
 import 'storage/database.dart';
+import 'storage/file_secret_store.dart';
 import 'storage/repository.dart';
 import 'storage/secret_store.dart';
 import 'util/app_files.dart';
@@ -21,9 +24,13 @@ Future<void> main(List<String> args) async {
   // Керування вікном (повний екран сеансу) — лише на десктопах.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) await windowManager.ensureInitialized();
   LicenseRegistry.addLicense(_fontLicenses);
-  final dir = await getApplicationSupportDirectory();
+  // Портативна версія — усе поруч із програмою, паролі — у файлі під майстер-паролем (PortableGate).
+  final portable = Portable.dataDir;
+  final dir = portable ?? await getApplicationSupportDirectory();
+  if (portable != null) await portable.create(recursive: true);
   final db = MhrdDatabase.open(dir);
-  final repo = Repository(db, SystemSecretStore());
+  final repo = Repository(
+      db, portable != null ? FileSecretStore(File(p.join(dir.path, Portable.secretsFileName))) : SystemSecretStore());
   final sessions = SessionManager(repo,
       log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')), files: AppFiles(dir));
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв

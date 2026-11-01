@@ -599,6 +599,8 @@ static BOOL bar_visible(void)
 
 static BOOL button_shown(int i)
 {
+	if (i == BTN_FULLSCREEN)
+		return !W.cfg.allMonitors; /* на всіх моніторах «у вікно» немає */
 	return i != BTN_MINIMIZE || W.fullscreen;
 }
 
@@ -655,6 +657,20 @@ static unsigned bar_corners(void)
 	}
 }
 
+/* Де живе плашка (пікселі вікна): усе вікно, а на всіх моніторах — лише основний монітор. */
+static SDL_FRect bar_area(void)
+{
+	int pw = 0, ph = 0;
+	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	if (W.cfg.allMonitors && W.cfg.primW > 0 && W.cfg.primH > 0)
+	{
+		const float k = W.cfg.virtW > 0 && pw > 0 ? (float)pw / (float)W.cfg.virtW : 1.0f; /* пікселі Windows → вікна */
+		return (SDL_FRect){ (float)(W.cfg.primX - W.cfg.virtX) * k, (float)(W.cfg.primY - W.cfg.virtY) * k,
+			                (float)W.cfg.primW * k, (float)W.cfg.primH * k };
+	}
+	return (SDL_FRect){ 0, 0, (float)pw, (float)ph };
+}
+
 /* Прямокутник у координатах плашки (уздовж краю, впоперек) → пікселі вікна. */
 static SDL_FRect place(float along, float across, float length, float thickness)
 {
@@ -666,11 +682,11 @@ static SDL_FRect place(float along, float across, float length, float thickness)
  * «Відключитись». Найкоротша плашка — самі піктограми. */
 static void layout_bar(void)
 {
-	int pw = 0, ph = 0;
-	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	const SDL_FRect area = bar_area();
 	const float s = ui_scale();
 	const BOOL vertical = bar_vertical();
-	const float extent = (float)(vertical ? ph : pw), cross = (float)(vertical ? pw : ph);
+	const float extent = vertical ? area.h : area.w, cross = vertical ? area.w : area.h;
+	const float o = vertical ? area.y : area.x, oc = vertical ? area.x : area.y; /* початок області */
 	const float thick = BAR_H * s, margin = BAR_MARGIN * s, pad = BAR_PAD * s, gap = 2 * s;
 	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD, BTN_CTRLALTDEL };
 
@@ -682,14 +698,15 @@ static void layout_bar(void)
 	}
 	const float maxLen = SDL_max(minLen, extent - 2 * margin);
 	const float len = SDL_clamp(W.barLen * s, minLen, maxLen);
-	const float start = SDL_clamp(W.barPos * extent - len / 2.0f, margin, SDL_max(margin, extent - margin - len));
+	const float start =
+	    o + SDL_clamp(W.barPos * extent - len / 2.0f, margin, SDL_max(margin, extent - margin - len));
 	const BOOL nearSide = W.barEdge == EDGE_TOP || W.barEdge == EDGE_LEFT;
-	const float across = nearSide ? 0 : cross - thick; /* притулена до краю */
+	const float across = oc + (nearSide ? 0 : cross - thick); /* притулена до краю */
 
 	W.barRect = place(start, across, len, thick);
 	W.hotRect = W.barRect;
-	W.handleRect = place(start + (len - HANDLE_W * s) / 2.0f, nearSide ? 0 : cross - HANDLE_H * s, HANDLE_W * s,
-	                     HANDLE_H * s);
+	W.handleRect = place(start + (len - HANDLE_W * s) / 2.0f, oc + (nearSide ? 0 : cross - HANDLE_H * s),
+	                     HANDLE_W * s, HANDLE_H * s);
 
 	const float bAcross = across + 4 * s, bThick = thick - 8 * s;
 	float a = start + pad;
@@ -755,8 +772,6 @@ static void draw_tooltip(void)
 	SDL_Texture* t = button_label(W.hoverButton);
 	if (!t)
 		return;
-	int pw = 0, ph = 0;
-	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
 	const float s = ui_scale();
 	float tw = 0, th = 0;
 	SDL_GetTextureSize(t, &tw, &th);
@@ -783,8 +798,9 @@ static void draw_tooltip(void)
 			box.y = bar->y + bar->h + 6 * s;
 			break;
 	}
-	box.x = SDL_clamp(box.x, 4 * s, SDL_max(4 * s, (float)pw - box.w - 4 * s));
-	box.y = SDL_clamp(box.y, 4 * s, SDL_max(4 * s, (float)ph - box.h - 4 * s));
+	const SDL_FRect a = bar_area();
+	box.x = SDL_clamp(box.x, a.x + 4 * s, SDL_max(a.x + 4 * s, a.x + a.w - box.w - 4 * s));
+	box.y = SDL_clamp(box.y, a.y + 4 * s, SDL_max(a.y + 4 * s, a.y + a.h - box.h - 4 * s));
 	draw_panel(&box, (float)W.cfg.radius * 0.7f * s, CORNER_ALL);
 	draw_label(t, &box, FALSE);
 }
@@ -889,7 +905,8 @@ static void draw_reconnecting(void)
 	/* Напис, під ним — «Скасувати» (відключитись, не чекаючи решти спроб). */
 	const float button = W.cancelLabel ? ch + 16 * s : 0;
 	const float w = SDL_max(tw, cw + 32 * s) + 40 * s, h = th + 24 * s + (button > 0 ? button + 12 * s : 0);
-	const SDL_FRect box = { floorf(((float)pw - w) / 2.0f), floorf(((float)ph - h) / 2.0f), w, h };
+	const SDL_FRect a = bar_area(); /* на всіх моніторах — по центру основного */
+	const SDL_FRect box = { floorf(a.x + (a.w - w) / 2.0f), floorf(a.y + (a.h - h) / 2.0f), w, h };
 	fill_round(&box, radius, CORNER_ALL, W.cfg.colorSurface, 255);
 	stroke_round(&box, radius, CORNER_ALL, W.cfg.colorAccent);
 	const SDL_FRect text = { box.x, box.y + 12 * s, box.w, th };
@@ -1026,6 +1043,8 @@ static void release_keys(void)
 
 static void set_fullscreen(BOOL on)
 {
+	if (W.cfg.allMonitors)
+		return; /* вікно й так на всіх моніторах */
 	release_keys();
 	W.fullscreen = on;
 	W.barHover = FALSE;
@@ -1035,13 +1054,12 @@ static void set_fullscreen(BOOL on)
 	apply_keyboard_grab();
 }
 
-/* Екранна клавіатура ОС: її натискання йдуть у це вікно, а звідси — на віддалений ПК. */
+/* Екранна клавіатура ОС: її натискання йдуть у це вікно, а звідси — на віддалений ПК. Запускає її
+ * головна програма: процесу сеансу запускати інші програми заборонено (main.c, harden_process). */
 static void open_keyboard(void)
 {
-#ifdef _WIN32
-	/* osk.exe вимагає uiAccess — CreateProcess відмовить, ShellExecute запускає правильно. */
-	ShellExecuteW(NULL, L"open", L"osk.exe", NULL, NULL, SW_SHOWNORMAL);
-#endif
+	if (W.host.openKeyboard)
+		W.host.openKeyboard(W.host.ctx);
 }
 
 #ifdef _WIN32
@@ -1113,22 +1131,42 @@ static void create_window(void)
 	if (!bw || !bh)
 		bw = 1280, bh = 800;
 
-	W.window = SDL_CreateWindow(W.cfg.title, (int)bw, (int)bh,
-	                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
-	if (!W.window)
-		return;
-	W.renderer = SDL_CreateRenderer(W.window, NULL);
-	/* Розмір вікна в його координатах: віддалений екран у фізичних пікселях / пікселів на одиницю. */
-	const float k = pixel_ratio();
-	int w = (int)((float)bw / k), h = (int)((float)bh / k);
-	SDL_Rect usable;
-	if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(W.window), &usable))
+	if (W.cfg.allMonitors)
 	{
-		w = SDL_min(w, usable.w);
-		h = SDL_min(h, usable.h);
+		/* Усі монітори: вікно без рамки на весь віртуальний екран, піксель у піксель із віддаленим. */
+		W.window = SDL_CreateWindow(W.cfg.title, W.cfg.virtW, W.cfg.virtH,
+		                            SDL_WINDOW_BORDERLESS | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+		if (!W.window)
+			return;
+		W.renderer = SDL_CreateRenderer(W.window, NULL);
+		SDL_SetWindowPosition(W.window, W.cfg.virtX, W.cfg.virtY);
+		W.fullscreen = TRUE; /* для клавіш Win/Alt+Tab і кнопки «Згорнути» — як повний екран */
 	}
-	SDL_SetWindowSize(W.window, w, h);
-	SDL_SetWindowPosition(W.window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	else
+	{
+		W.window = SDL_CreateWindow(W.cfg.title, (int)bw, (int)bh,
+		                            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+		if (!W.window)
+			return;
+		W.renderer = SDL_CreateRenderer(W.window, NULL);
+		/* Розмір вікна в його координатах: віддалений екран у фізичних пікселях / пікселів на одиницю;
+		 * в економному режимі віддалений екран у логічних пікселях — вікно в стільки ж разів більше. */
+		const float k = pixel_ratio() / (W.cfg.logicalResolution ? ui_scale() : 1.0f);
+		int w = (int)((float)bw / k), h = (int)((float)bh / k);
+		SDL_Rect usable;
+		if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(W.window), &usable))
+		{
+			w = SDL_min(w, usable.w);
+			h = SDL_min(h, usable.h);
+		}
+		SDL_SetWindowSize(W.window, w, h);
+		SDL_SetWindowPosition(W.window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+	}
+#ifdef _WIN32
+	/* «Не вимикати екран»: і екран, і сон Windows — поки відкрите вікно сеансу. */
+	if (W.cfg.keepAwake)
+		SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
+#endif
 	load_labels();
 #ifdef _WIN32
 	add_system_menu();
@@ -1136,7 +1174,7 @@ static void create_window(void)
 	SDL_ShowWindow(W.window);
 	SDL_StartTextInput(W.window); /* символи без клавіші — див. on_text */
 	SDL_RaiseWindow(W.window);
-	if (W.cfg.startFullscreen)
+	if (W.cfg.startFullscreen && !W.cfg.allMonitors)
 		set_fullscreen(TRUE);
 	else
 		apply_keyboard_grab();
@@ -1147,10 +1185,16 @@ static void request_resize_now(void)
 {
 	W.resizeAt = 0;
 	const BOOL follow = W.fullscreen || W.cfg.resizeMode == 0;
-	if (!follow)
+	if (!follow || W.cfg.allMonitors) /* усі монітори — розкладка фіксована з підключення */
 		return;
 	int pw = 0, ph = 0;
 	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
+	if (W.cfg.logicalResolution) /* економний режим: роздільність у логічних пікселях */
+	{
+		const float s = ui_scale();
+		pw = (int)((float)pw / s);
+		ph = (int)((float)ph / s);
+	}
 	if (pw <= 0 || ph <= 0)
 		return;
 	if ((uint32_t)pw == W.texW && (uint32_t)ph == W.texH)
@@ -1218,11 +1262,12 @@ static int resize_end(float px, float py)
 /* Перетягування: плашка липне до найближчого краю вікна, центр — під мишею. */
 static void drag_move(float px, float py)
 {
-	int pw = 0, ph = 0;
-	SDL_GetWindowSizeInPixels(W.window, &pw, &ph);
-	if (pw <= 0 || ph <= 0)
+	const SDL_FRect a = bar_area();
+	if (a.w <= 0 || a.h <= 0)
 		return;
-	const float d[4] = { py, (float)ph - py, px, (float)pw - px }; /* до верху, низу, лівого, правого */
+	px -= a.x;
+	py -= a.y;
+	const float d[4] = { py, a.h - py, px, a.w - px }; /* до верху, низу, лівого, правого */
 	int edge = EDGE_TOP;
 	for (int i = 1; i < 4; i++)
 	{
@@ -1230,7 +1275,7 @@ static void drag_move(float px, float py)
 			edge = i;
 	}
 	W.barEdge = edge;
-	W.barPos = SDL_clamp(bar_vertical() ? py / (float)ph : px / (float)pw, 0.0f, 1.0f);
+	W.barPos = SDL_clamp(bar_vertical() ? py / a.h : px / a.w, 0.0f, 1.0f);
 }
 
 /* Зміна довжини: плашка росте в обидва боки від центру. */
@@ -1826,6 +1871,8 @@ BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 	SDL_SetHint(SDL_HINT_ALLOW_ALT_TAB_WHILE_GRABBED, "0");
 	/* Прийом тексту (on_text) не має сам відкривати екранну клавіатуру — її відкриває кнопка плашки. */
 	SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
+	/* «Не вимикати екран» вимкнено — нехай Windows гасить екран як завжди (SDL типово забороняє). */
+	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, W.cfg.keepAwake ? "0" : "1");
 	if (!SDL_Init(SDL_INIT_VIDEO))
 		return FALSE;
 	TTF_Init();
@@ -2011,6 +2058,10 @@ void window_run(void)
 
 void window_shutdown(void)
 {
+#ifdef _WIN32
+	if (W.cfg.keepAwake)
+		SetThreadExecutionState(ES_CONTINUOUS); /* знову можна гасити екран і спати */
+#endif
 	for (int i = 0; i <= BTN_COUNT; i++)
 	{
 		if (W.labels[i])

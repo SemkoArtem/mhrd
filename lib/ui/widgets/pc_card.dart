@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 import '../../l10n/l10n.dart';
 import '../../models/connection.dart';
 import '../../models/entities.dart';
+import '../../platform/shell_bridge.dart';
 import '../../storage/repository.dart';
 import '../../theme/mhrd_theme.dart';
+import '../dialogs.dart';
 
 /// Дії над ПК, які передає головний екран.
 class PcActions {
@@ -259,6 +261,10 @@ class PcMenu extends StatelessWidget {
               actions.moveToGroup(c);
             case 'wake':
               actions.wake(c);
+            case 'shortcut':
+              ShellBridge.instance.createShortcut(c).then((ok) {
+                if (context.mounted) toast(context, ok ? l.shortcutCreated(c.displayName) : l.shortcutFailed);
+              });
             case 'delete':
               actions.delete(c);
           }
@@ -274,6 +280,9 @@ class PcMenu extends StatelessWidget {
         PopupMenuItem(value: 'rdp', child: Text(l.exportRdp)),
         PopupMenuItem(value: 'move', child: Text(l.moveToGroup)),
         if (c.wakeOnLan != null) PopupMenuItem(value: 'wake', child: Text(l.wakeOnLan)),
+        // Лише збережений ПК: ярлик запускає `mhrd.exe --connect <id>`.
+        if (Platform.isWindows && repo.connections.containsKey(c.id))
+          PopupMenuItem(value: 'shortcut', child: Text(l.createShortcut)),
         const PopupMenuDivider(),
         PopupMenuItem(value: 'delete', child: Text(l.delete)),
       ],

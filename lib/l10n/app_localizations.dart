@@ -1139,13 +1139,13 @@ abstract class AppLocalizations {
   /// No description provided for @hiDpi.
   ///
   /// In uk, this message translates to:
-  /// **'Повна чіткість на Retina / HiDPI'**
+  /// **'Повна чіткість (HiDPI)'**
   String get hiDpi;
 
   /// No description provided for @hiDpiWarning.
   ///
   /// In uk, this message translates to:
-  /// **'Приблизно вчетверо більше трафіку'**
+  /// **'Вимкніть на повільному з\'єднанні: на екранах 150–200 % трафіку стане в 2–4 рази менше, а картинка — трохи м\'якшою.'**
   String get hiDpiWarning;
 
   /// No description provided for @clipboard.
@@ -2629,6 +2629,126 @@ abstract class AppLocalizations {
   /// In uk, this message translates to:
   /// **'Тема MHRD'**
   String get fileTypeTheme;
+
+  /// No description provided for @portableTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Портативна MHRD'**
+  String get portableTitle;
+
+  /// No description provided for @portableCreateHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Паролі й ключі зберігатимуться в зашифрованому файлі поруч із програмою. Придумайте майстер-пароль: без нього їх не відкрити й не відновити.'**
+  String get portableCreateHint;
+
+  /// No description provided for @portableUnlockHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Введіть майстер-пароль.'**
+  String get portableUnlockHint;
+
+  /// No description provided for @portableImportHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Щоб перенести ПК з іншої MHRD, зробіть там повний бекап, а тут відновіть його: Налаштування → Бекап.'**
+  String get portableImportHint;
+
+  /// No description provided for @portableFileBroken.
+  ///
+  /// In uk, this message translates to:
+  /// **'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте mhrd-data\\secrets.mhrd (паролі доведеться ввести знову).'**
+  String get portableFileBroken;
+
+  /// No description provided for @portableCreate.
+  ///
+  /// In uk, this message translates to:
+  /// **'Створити'**
+  String get portableCreate;
+
+  /// No description provided for @portableSection.
+  ///
+  /// In uk, this message translates to:
+  /// **'Портативна версія'**
+  String get portableSection;
+
+  /// No description provided for @portableSectionHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Дані — у теці mhrd-data поруч із програмою. Замість PIN-коду — майстер-пароль.'**
+  String get portableSectionHint;
+
+  /// No description provided for @masterPassword.
+  ///
+  /// In uk, this message translates to:
+  /// **'Майстер-пароль'**
+  String get masterPassword;
+
+  /// No description provided for @masterPasswordRepeat.
+  ///
+  /// In uk, this message translates to:
+  /// **'Повторіть майстер-пароль'**
+  String get masterPasswordRepeat;
+
+  /// No description provided for @masterPasswordNew.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий майстер-пароль'**
+  String get masterPasswordNew;
+
+  /// No description provided for @masterPasswordTooShort.
+  ///
+  /// In uk, this message translates to:
+  /// **'Щонайменше {min} символів.'**
+  String masterPasswordTooShort(int min);
+
+  /// No description provided for @masterPasswordMismatch.
+  ///
+  /// In uk, this message translates to:
+  /// **'Паролі не збігаються.'**
+  String get masterPasswordMismatch;
+
+  /// No description provided for @masterPasswordWrong.
+  ///
+  /// In uk, this message translates to:
+  /// **'Неправильний майстер-пароль.'**
+  String get masterPasswordWrong;
+
+  /// No description provided for @masterPasswordChange.
+  ///
+  /// In uk, this message translates to:
+  /// **'Змінити майстер-пароль'**
+  String get masterPasswordChange;
+
+  /// No description provided for @masterPasswordChanged.
+  ///
+  /// In uk, this message translates to:
+  /// **'Майстер-пароль змінено.'**
+  String get masterPasswordChanged;
+
+  /// No description provided for @createShortcut.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ярлик на робочому столі'**
+  String get createShortcut;
+
+  /// No description provided for @shortcutCreated.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ярлик «{name}» — на робочому столі.'**
+  String shortcutCreated(String name);
+
+  /// No description provided for @shortcutFailed.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося створити ярлик.'**
+  String get shortcutFailed;
+
+  /// No description provided for @useAllMonitorsHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вікно сеансу — на всіх моніторах одразу, розкладка — як на цьому ПК. Плашка — на основному моніторі.'**
+  String get useAllMonitorsHint;
 }
 
 class _AppLocalizationsDelegate

@@ -119,6 +119,9 @@ class RdpSession extends ChangeNotifier {
   /// Плашку у власному вікні сеансу перемістили — щоб запам'ятати для наступних сеансів.
   void Function(BarEvent e)? onBarMoved;
 
+  /// Вікно сеансу просить екранну клавіатуру ОС.
+  void Function()? onKeyboard;
+
   /// Поточна картинка віддаленого екрана.
   ui.Image? image;
   int width = 0, height = 0;
@@ -177,6 +180,9 @@ class RdpSession extends ChangeNotifier {
         state = e.reason == DisconnectReason.userRequest ? SessionState.disconnected : SessionState.failed;
       case BarEvent():
         onBarMoved?.call(e);
+        return;
+      case KeyboardEvent():
+        onKeyboard?.call();
         return;
     }
     _notify();

@@ -22,6 +22,7 @@ abstract final class Msg {
   static const evtCertificate = 0x84;
   static const evtDisconnected = 0x85;
   static const evtBar = 0x86;
+  static const evtKeyboard = 0x87;
 }
 
 /// Кнопки миші в протоколі.
@@ -151,6 +152,11 @@ class BarEvent extends SessionEvent {
   final int length;
 }
 
+/// Кнопка «Екранна клавіатура» у вікні сеансу: osk.exe запускає застосунок (сеансу не можна).
+class KeyboardEvent extends SessionEvent {
+  const KeyboardEvent();
+}
+
 /// Перетворює байти з stdout процесу на події. Незнайомі типи пропускає.
 class SessionEventDecoder extends StreamTransformerBase<List<int>, SessionEvent> {
   const SessionEventDecoder();
@@ -208,6 +214,8 @@ class SessionEventDecoder extends StreamTransformerBase<List<int>, SessionEvent>
         return DisconnectedEvent(r, u32(1), utf8.decode(d.sublist(5), allowMalformed: true));
       case Msg.evtBar when d.length >= 5:
         return BarEvent(d[0], bd.getUint16(1, Endian.little), bd.getUint16(3, Endian.little));
+      case Msg.evtKeyboard:
+        return const KeyboardEvent();
       default:
         return null;
     }

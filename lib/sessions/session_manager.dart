@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../models/connection.dart';
 import '../models/entities.dart';
 import '../storage/repository.dart';
+import '../platform/shell_bridge.dart';
 import '../util/app_files.dart';
 import 'rdp_session.dart';
 import 'route_health.dart';
@@ -234,6 +235,7 @@ class SessionManager extends ChangeNotifier {
     sessions.add(s);
     s.onBarMoved = (e) => repo.updateSettings(repo.settings.copyWith(
         bar: BarPlacement(edge: BarEdge.values[e.edge.clamp(0, 3)], pos: e.pos, length: e.length)));
+    s.onKeyboard = () => ShellBridge.instance.openKeyboard();
     s.start({
       'host': host,
       'port': port,

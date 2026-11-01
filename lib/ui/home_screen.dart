@@ -199,14 +199,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final assets = p.join(p.dirname(sessions.enginePath!), 'data', 'flutter_assets');
     // Шаблон екрана (фіксована роздільність) або під розмір вікна.
     final fixed = repo.settings.resolutionFor(screen: c.display.screen, width: c.display.width, height: c.display.height);
+    // Повна чіткість — фізичні пікселі й масштаб ОС на сервері; без неї — логічна роздільність при
+    // 100 % (картинку збільшує вікно): приблизно вчетверо менше трафіку на екранах 200 %.
+    final dpr = c.display.hiDpi ? 1.0 : display.devicePixelRatio;
     toast(context, l.connectingTo(c.address));
     return sessions.start(
       c,
       username: username,
       password: password,
-      width: fixed?.$1 ?? even(display.size.width * k, 640, 8192),
-      height: fixed?.$2 ?? even(display.size.height * k, 480, 8192),
-      scale: (display.devicePixelRatio * 100).round(),
+      width: fixed?.$1 ?? even(display.size.width * k / dpr, 640, 8192),
+      height: fixed?.$2 ?? even(display.size.height * k / dpr, 480, 8192),
+      scale: c.display.hiDpi ? (display.devicePixelRatio * 100).round() : 100,
       gatewayPassword: gatewayPassword,
       window: {
         'title': '${c.displayName} — MHRD',
@@ -264,6 +267,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ? ResizeMode.scale.index
             : c.display.resizeMode.index,
         'swapMouse': c.swapMouseButtons,
+        'logicalResolution': !c.display.hiDpi, // нова роздільність під вікно — теж у логічних пікселях
+        'keepAwake': repo.settings.keepScreenAwake, // екран і сон Windows — поки відкрите вікно сеансу
+        'allMonitors': c.display.useAllMonitors,
       },
     );
   }

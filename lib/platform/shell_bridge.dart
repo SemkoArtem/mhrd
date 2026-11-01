@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/connection.dart';
+import 'portable.dart';
 
 /// Зв'язок з оболонкою Windows (windows/runner/shell_integration.cpp): список «Недавні» на
 /// значку MHRD у панелі завдань і «підключитись до ПК», коли його вибрали в цьому списку.
@@ -39,9 +40,35 @@ class ShellBridge {
           .take(limit)
           .toList();
 
-  /// Оновлює «Недавні» на значку, лише якщо список змінився.
-  Future<void> setRecent(String category, List<Connection> pcs) async {
+  /// Екранна клавіатура Windows — на прохання вікна сеансу (йому запускати програми заборонено).
+  Future<void> openKeyboard() async {
     if (!Platform.isWindows) return;
+    try {
+      await _channel.invokeMethod('openKeyboard');
+    } on MissingPluginException {
+      // не Windows-раннер MHRD
+    } on PlatformException {
+      // не відкрилась — нічого не вдієш
+    }
+  }
+
+  /// Ярлик на робочому столі, що одразу підключає до ПК. false — не вдалося.
+  Future<bool> createShortcut(Connection c) async {
+    if (!Platform.isWindows) return false;
+    try {
+      await _channel.invokeMethod('createShortcut', {'id': c.id, 'name': c.displayName});
+      return true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Оновлює «Недавні» на значку, лише якщо список змінився. Портативна версія списку не веде:
+  /// він лежав би в профілі Windows, а не поруч із програмою.
+  Future<void> setRecent(String category, List<Connection> pcs) async {
+    if (!Platform.isWindows || Portable.enabled) return;
     final items = [
       for (final c in pcs) {'id': c.id, 'title': c.displayName},
     ];

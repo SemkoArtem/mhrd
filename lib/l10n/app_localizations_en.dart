@@ -595,10 +595,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get remoteScale => 'Scale of items on the remote PC';
 
   @override
-  String get hiDpi => 'Full sharpness on Retina / HiDPI';
+  String get hiDpi => 'Full sharpness (HiDPI)';
 
   @override
-  String get hiDpiWarning => 'About four times more traffic';
+  String get hiDpiWarning =>
+      'Turn off on a slow connection: on 150–200 % screens traffic drops 2–4×, and the picture gets a little softer.';
 
   @override
   String get clipboard => 'Clipboard';
@@ -1452,4 +1453,73 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fileTypeTheme => 'MHRD theme';
+
+  @override
+  String get portableTitle => 'Portable MHRD';
+
+  @override
+  String get portableCreateHint =>
+      'Passwords and keys will be kept in an encrypted file next to the app. Choose a master password: without it they can\'t be opened or recovered.';
+
+  @override
+  String get portableUnlockHint => 'Enter the master password.';
+
+  @override
+  String get portableImportHint =>
+      'To bring PCs over from another MHRD, make a full backup there and restore it here: Settings → Backup.';
+
+  @override
+  String get portableFileBroken =>
+      'The password file is damaged or not from MHRD. To start over, rename mhrd-data\\secrets.mhrd (you\'ll have to enter the passwords again).';
+
+  @override
+  String get portableCreate => 'Create';
+
+  @override
+  String get portableSection => 'Portable version';
+
+  @override
+  String get portableSectionHint =>
+      'Data lives in the mhrd-data folder next to the app. A master password replaces the PIN.';
+
+  @override
+  String get masterPassword => 'Master password';
+
+  @override
+  String get masterPasswordRepeat => 'Repeat the master password';
+
+  @override
+  String get masterPasswordNew => 'New master password';
+
+  @override
+  String masterPasswordTooShort(int min) {
+    return 'At least $min characters.';
+  }
+
+  @override
+  String get masterPasswordMismatch => 'The passwords don\'t match.';
+
+  @override
+  String get masterPasswordWrong => 'Wrong master password.';
+
+  @override
+  String get masterPasswordChange => 'Change master password';
+
+  @override
+  String get masterPasswordChanged => 'Master password changed.';
+
+  @override
+  String get createShortcut => 'Desktop shortcut';
+
+  @override
+  String shortcutCreated(String name) {
+    return 'Shortcut “$name” is on the desktop.';
+  }
+
+  @override
+  String get shortcutFailed => 'Couldn\'t create the shortcut.';
+
+  @override
+  String get useAllMonitorsHint =>
+      'The session window spans all monitors, laid out as on this PC. The bar stays on the main monitor.';
 }
