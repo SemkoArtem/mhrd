@@ -859,6 +859,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The proxy works but won\'t let you through to the PC. Such proxies often allow only websites (port 443) and block RDP (3389).';
 
   @override
+  String get probeErrPc =>
+      'The PC doesn\'t answer on the RDP port: it\'s off, a firewall blocks it, or the address or port is wrong.';
+
+  @override
+  String get probeErrGateway =>
+      'The RD Gateway doesn\'t answer. Check the gateway address and port.';
+
+  @override
   String get addProxy => 'Add proxy';
 
   @override
@@ -1153,6 +1161,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusReconnecting => 'Reconnecting';
+
+  @override
+  String reconnectAttempt(String n, String max) {
+    return 'attempt $n of $max';
+  }
+
+  @override
+  String latencyMs(String n) {
+    return '$n ms';
+  }
 
   @override
   String get statusError => 'Error';

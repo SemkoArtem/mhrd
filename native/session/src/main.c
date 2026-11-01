@@ -39,6 +39,8 @@
 #include "shm.h"
 #include "window_sdl.h"
 
+#define RECONNECT_MAX 5 /* спроб перепідключення, далі — відключення */
+
 typedef struct
 {
 	rdpClientContext common;
@@ -58,7 +60,7 @@ typedef struct
 
 	BOOL nativeWindow;            /* власне вікно сеансу (десктоп) */
 	WindowConfig win;
-	char* winStrings[14];        /* копії рядків для win (живуть до кінця процесу) */
+	char* winStrings[18];       /* копії рядків для win (живуть до кінця процесу) */
 	volatile LONG reconnecting;   /* зв'язок відновлюється — ввід із вікна не надсилаємо */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
 } MhrdContext;
@@ -628,6 +630,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_uint32(s, FreeRDP_ColorDepth, (UINT32)jint(j, "colorDepth", 32)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_ConsoleSession, jbool(j, "adminSession", FALSE)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_AutoReconnectionEnabled, jbool(j, "reconnect", TRUE)) &&
+	     /* 5 спроб, далі — відключення з «Підключитись знову» (SPEC → «Сеанс»). */
+	     freerdp_settings_set_uint32(s, FreeRDP_AutoReconnectMaxRetries, RECONNECT_MAX) &&
 	     freerdp_settings_set_bool(s, FreeRDP_RedirectClipboard, jbool(j, "clipboard", TRUE)) &&
 	     freerdp_settings_set_bool(s, FreeRDP_AudioCapture, jbool(j, "microphone", FALSE));
 	/* Масштаб: картинка у фізичних пікселях, а інтерфейс ПК збільшено як у ОС клієнта —
@@ -716,7 +720,8 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 			jstr(labels, "unpin"),     jstr(labels, "minimize"),     jstr(labels, "exitFullscreen"),
 			jstr(labels, "disconnect"), jstr(labels, "fullscreen"),  jstr(labels, "keyboard"),
 			jstr(labels, "menuFullscreen"), jstr(labels, "menuKeyboard"), jstr(j, "iconFontPath"),
-			jstr(labels, "reconnecting"), jstr(j, "barTitle")
+			jstr(labels, "reconnecting"), jstr(j, "barTitle"), jstr(labels, "ctrlAltDel"),
+			jstr(labels, "reconnectAttempt"), jstr(labels, "cancel"), jstr(labels, "latency")
 		};
 		for (size_t i = 0; i < ARRAYSIZE(src); i++)
 			m->winStrings[i] = _strdup(src[i] ? src[i] : "");
@@ -734,6 +739,11 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.iconFontPath = m->winStrings[11];
 		m->win.labelReconnecting = m->winStrings[12];
 		m->win.barTitle = m->winStrings[13][0] ? m->winStrings[13] : m->win.title;
+		m->win.labelCtrlAltDel = m->winStrings[14];
+		m->win.labelReconnectAttempt = m->winStrings[15];
+		m->win.labelCancel = m->winStrings[16];
+		m->win.labelLatency = m->winStrings[17];
+		m->win.reconnectMax = RECONNECT_MAX;
 		const cJSON* icons = cJSON_GetObjectItemCaseSensitive(j, "icons");
 		m->win.iconPin = (uint32_t)jint(icons, "pin", 0);
 		m->win.iconUnpin = (uint32_t)jint(icons, "unpin", 0);
@@ -742,11 +752,14 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 		m->win.iconFullscreen = (uint32_t)jint(icons, "fullscreen", 0);
 		m->win.iconExitFullscreen = (uint32_t)jint(icons, "exitFullscreen", 0);
 		m->win.iconDisconnect = (uint32_t)jint(icons, "disconnect", 0);
+		m->win.iconCtrlAltDel = (uint32_t)jint(icons, "ctrlAltDel", 0);
 		m->win.colorSurface = (uint32_t)jint(colors, "surface", 0x141619);
 		m->win.colorBorder = (uint32_t)jint(colors, "border", 0x2C3036);
 		m->win.colorText = (uint32_t)jint(colors, "text", 0xE8EAED);
 		m->win.colorAccent = (uint32_t)jint(colors, "accent", 0xC6F432);
 		m->win.colorError = (uint32_t)jint(colors, "error", 0xFF8A7A);
+		m->win.colorOk = (uint32_t)jint(colors, "ok", 0x7BD88F);
+		m->win.colorWarn = (uint32_t)jint(colors, "warn", 0xF2C14E);
 		m->win.startFullscreen = jbool(j, "startFullscreen", FALSE);
 		m->win.keyboardCapture = jint(j, "keyboardCapture", 0);
 		m->win.resizeMode = jint(j, "resizeMode", 0);
@@ -891,6 +904,10 @@ static void handle_input(MhrdContext* m)
 				if (m->nativeWindow)
 					window_post_focus();
 				break;
+			case MSG_LATENCY:
+				if (m->nativeWindow && msg->len >= 4)
+					window_post_latency((int32_t)(d[0] | (d[1] << 8) | (d[2] << 16) | ((uint32_t)d[3] << 24)));
+				break;
 			case MSG_DISCONNECT:
 				m->userDisconnect = TRUE;
 				freerdp_abort_connect_context(&m->common.context);
@@ -940,6 +957,8 @@ static SSIZE_T mhrd_retry_dialog(freerdp* instance, const char* what, size_t cur
 	if (m->userDisconnect)
 		return -1;
 	WLog_INFO("mhrd", "reconnect attempt %" PRIuz, current + 1);
+	if (m->nativeWindow)
+		window_post_reconnecting((int)current + 1); /* «спроба 2 з 5» */
 	return 3000; /* мс до наступної спроби, якщо ця не вдасться */
 }
 
@@ -951,11 +970,11 @@ static BOOL reconnect(MhrdContext* m)
 	InterlockedExchange(&m->reconnecting, 1);
 	send_state(3);
 	if (m->nativeWindow)
-		window_post_reconnecting(TRUE);
+		window_post_reconnecting(1);
 	const BOOL ok = client_auto_reconnect_ex(instance, NULL);
 	InterlockedExchange(&m->reconnecting, 0);
 	if (m->nativeWindow)
-		window_post_reconnecting(FALSE);
+		window_post_reconnecting(0);
 	WLog_INFO("mhrd", "reconnect %s", ok ? "succeeded" : "gave up");
 	if (ok)
 		send_state(2);

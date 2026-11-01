@@ -42,11 +42,17 @@ typedef struct
 	const char* labelDisconnect;
 	/* Піктограми кнопок: шрифт піктограм і коди символів у ньому (0 — немає, тоді текст) */
 	const char* iconFontPath;
-	uint32_t iconPin, iconUnpin, iconKeyboard, iconMinimize, iconFullscreen, iconExitFullscreen, iconDisconnect;
+	uint32_t iconPin, iconUnpin, iconKeyboard, iconMinimize, iconFullscreen, iconExitFullscreen, iconDisconnect,
+	    iconCtrlAltDel;
+	const char* labelCtrlAltDel;
+	const char* labelReconnectAttempt; /* «спроба {n} з {max}» */
+	const char* labelCancel;           /* кнопка під «Перепідключення…» */
+	const char* labelLatency;          /* «{n} мс» */
+	int reconnectMax;
 	const char* menuFullscreen; /* пункти системного меню вікна (Windows) */
 	const char* menuKeyboard;
 	const char* labelReconnecting; /* поверх картинки, поки зв'язок відновлюється */
-	uint32_t colorSurface, colorBorder, colorText, colorAccent, colorError; /* 0xRRGGBB */
+	uint32_t colorSurface, colorBorder, colorText, colorAccent, colorError, colorOk, colorWarn; /* 0xRRGGBB */
 	BOOL startFullscreen;
 	int keyboardCapture; /* 0 — лише на весь екран, 1 — завжди, 2 — ніколи */
 	int resizeMode;      /* 0 — змінювати роздільність, 1 — масштабувати, 2 — без змін */
@@ -67,5 +73,6 @@ void window_shutdown(void);
 void window_post_surface(void);                         /* новий буфер (перший кадр чи нова роздільність) */
 void window_post_frame(int x, int y, int w, int h);     /* ділянка оновилась */
 void window_post_focus(void);                           /* застосунок просить показати вікно */
-void window_post_reconnecting(BOOL on);                 /* зв'язок обірвався / відновився */
+void window_post_reconnecting(int attempt);             /* спроба перепідключення N; 0 — зв'язок відновився */
+void window_post_latency(int ms);                       /* затримка до ПК (−1 — не відповів) */
 void window_post_quit(void);                            /* сеанс завершився */

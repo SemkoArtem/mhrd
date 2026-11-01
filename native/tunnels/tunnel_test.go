@@ -109,6 +109,12 @@ func TestWireGuardThroughNetstack(t *testing.T) {
 	}
 	defer d.Close()
 	roundTrip(t, d, "10.9.0.1:3389")
+	if _, err := dialTime(d, "10.9.0.1:3389"); err != nil { // замір затримки для плашки
+		t.Fatalf("dialTime: %v", err)
+	}
+	if _, err := dialTime(d, "10.9.0.1:3390"); err == nil {
+		t.Fatal("dialTime to a closed port should fail")
+	}
 }
 
 // Перевірка стану: сервер, що знає клієнта, відповідає на рукостискання; чужий — ні.

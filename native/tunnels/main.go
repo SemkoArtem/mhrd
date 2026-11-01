@@ -5,12 +5,16 @@
 //	{"type":"wireguard","target":"host:port","wireguard":{...}}
 //	{"watchPid":1234}             — процес mhrd-session; коли він завершиться, тунель теж
 //
-// Або перевірка, чи тунель живий (без цілі): {"type":"wireguard","check":true,"wireguard":{...}}.
+//	{"ping":true}                 — заміряти затримку до ПК крізь тунель (відповідь — pong)
+//
+// Або перевірка, чи тунель живий: {"type":"wireguard","check":true,"wireguard":{...}}; з "target" —
+// ще й чи відповідає ПК крізь тунель.
 //
 // У stdout — рядки JSON-подій:
 //
 //	{"event":"listening","port":54321}   — можна підключатися до 127.0.0.1:port
-//	{"event":"ok","handshakeMs":120}     — відповідь на перевірку: сервер відповів
+//	{"event":"ok","handshakeMs":120,"targetMs":35} — відповідь на перевірку
+//	{"event":"pong","ms":35} / {"event":"pong","error":"..."}
 //	{"event":"error","code":"...","detail":"..."}
 //
 // WireGuard працює в програмному мережевому стеку (wireguard-go netstack): без драйвера, без
@@ -35,6 +39,7 @@ type request struct {
 	WireGuard *wireGuardConf  `json:"wireguard"`
 	WatchPid  int             `json:"watchPid"`
 	Check     bool            `json:"check"`
+	Ping      bool            `json:"ping"`
 }
 
 // Скільки чекати рукостискання під час перевірки (wireguard-go повторює спробу кожні 5 с).
@@ -75,8 +80,9 @@ func main() {
 		fail("config", err)
 	}
 
-	// Подальші повідомлення: PID сеансу.
+	// Подальші повідомлення: PID сеансу і заміри затримки.
 	watch := make(chan int, 1)
+	pings := make(chan struct{}, 4)
 	go func() {
 		for in.Scan() {
 			var m request
@@ -85,6 +91,12 @@ func main() {
 			}
 			if m.WatchPid > 0 {
 				watch <- m.WatchPid
+			}
+			if m.Ping {
+				select {
+				case pings <- struct{}{}:
+				default: // попередні заміри ще не відповіли — цей пропускаємо
+				}
 			}
 		}
 		close(watch) // stdin закрито: якщо PID ще не прийшов — застосунок пішов, тунель не потрібен
@@ -118,19 +130,24 @@ func main() {
 			d.Close()
 			fail("handshake", err)
 		}
-		emit(map[string]any{"event": "ok", "handshakeMs": took.Milliseconds()})
+		ok := map[string]any{"event": "ok", "handshakeMs": took.Milliseconds()}
+		if req.Target != "" { // перевірка ПК через тунель: ще й чи відповідає сам ПК
+			ms, err := dialTime(d, req.Target)
+			if err != nil {
+				d.Close()
+				fail("unreachable", err)
+			}
+			ok["targetMs"] = ms
+		}
+		emit(ok)
 		return
 	}
 
 	// Перевіряємо, що ПК справді досяжний через тунель, — інакше користувач бачив би
 	// загадкову помилку RDP замість зрозумілої «тунель є, а ПК не відповідає».
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	probe, err := d.DialContext(ctx, "tcp", req.Target)
-	cancel()
-	if err != nil {
+	if _, err := dialTime(d, req.Target); err != nil {
 		fail("unreachable", err)
 	}
-	probe.Close()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -139,12 +156,37 @@ func main() {
 	go serve(ln, d, req.Target)
 	emit(map[string]any{"event": "listening", "port": ln.Addr().(*net.TCPAddr).Port})
 
+	// Затримка до ПК через увесь тунель — для плашки сеансу.
+	go func() {
+		for range pings {
+			if ms, err := dialTime(d, req.Target); err != nil {
+				emit(map[string]any{"event": "pong", "error": err.Error()})
+			} else {
+				emit(map[string]any{"event": "pong", "ms": ms})
+			}
+		}
+	}()
+
 	// Живемо, поки живий сеанс: FreeRDP при перепідключенні знову прийде на цей самий порт.
 	pid, ok := <-watch
 	if !ok {
 		return
 	}
 	waitProcess(pid)
+}
+
+// dialTime — скільки мс триває TCP-з'єднання з ціллю крізь тунель (≈ затримка в обидва боки).
+func dialTime(d dialer, target string) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	start := time.Now()
+	c, err := d.DialContext(ctx, "tcp", target)
+	if err != nil {
+		return 0, err
+	}
+	ms := time.Since(start).Milliseconds()
+	c.Close()
+	return ms, nil
 }
 
 func serve(ln net.Listener, d dialer, target string) {

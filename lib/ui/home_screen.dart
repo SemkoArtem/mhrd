@@ -188,6 +188,10 @@ class _HomeScreenState extends State<HomeScreen> {
           'menuFullscreen': l.fullscreen,
           'menuKeyboard': l.onScreenKeyboard,
           'reconnecting': '${l.statusReconnecting}…',
+          'reconnectAttempt': l.reconnectAttempt('{n}', '{max}'), // числа підставляє вікно
+          'cancel': l.cancel,
+          'ctrlAltDel': 'Ctrl+Alt+Del',
+          'latency': l.latencyMs('{n}'),
         },
         // Піктограми кнопок — зі шрифту Material Icons, який Flutter кладе поруч. Посилання на
         // Icons.* тут потрібні ще й тому, що збірка лишає у шрифті лише використані піктограми.
@@ -200,6 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'fullscreen': Icons.fullscreen.codePoint,
           'exitFullscreen': Icons.fullscreen_exit.codePoint,
           'disconnect': Icons.power_settings_new.codePoint,
+          'ctrlAltDel': Icons.lock_reset.codePoint,
         },
         'colors': {
           'surface': rgb(t.surface),
@@ -207,6 +212,8 @@ class _HomeScreenState extends State<HomeScreen> {
           'text': rgb(t.text),
           'accent': rgb(t.accent),
           'error': rgb(t.error),
+          'ok': rgb(t.ok),
+          'warn': rgb(t.warn),
         },
         'radius': t.radius.round(), // кути плашки — як в усьому інтерфейсі
         'startFullscreen': fullscreen,

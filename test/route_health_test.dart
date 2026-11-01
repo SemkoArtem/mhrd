@@ -207,6 +207,24 @@ void main() {
       expect(noEngine.statusOf('wg').error, RouteError.tunnelEngineMissing);
     });
 
+    test('затримка до ПК: напряму — з\'єднання з портом RDP, через тунель — ПК крізь тунель', () async {
+      final now = DateTime.utc(2026);
+      final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      server.listen((s) => s.destroy());
+      final h = RouteHealth(repo, tunnelPath: 'mhrd-tunnel.exe', tunnelFactory: (_) async => FakeTunnel([
+            {'event': 'ok', 'handshakeMs': 5, 'targetMs': 33}
+          ]));
+      addTearDown(h.dispose);
+      final direct = Connection(id: 'pc', name: '', host: '127.0.0.1', port: server.port, createdAt: now, updatedAt: now);
+      expect(await h.measure(direct), greaterThanOrEqualTo(0));
+      await server.close();
+      await expectLater(h.measure(direct),
+          throwsA(isA<ProbeException>().having((e) => e.error, 'error', ProbeError.pcUnreachable)));
+      final viaTunnel = direct.copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg');
+      expect(await h.measure(viaTunnel), 33);
+    });
+
     test('проксі перевіряється до ПК, що через нього ходить; видалений профіль зникає', () async {
       final connect = Completer<List<int>>();
       final server = await fakeProxy((s, input) async {

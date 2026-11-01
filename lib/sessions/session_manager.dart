@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -12,7 +13,8 @@ import 'session_log.dart';
 import 'tunnel.dart';
 
 export 'rdp_session.dart' show RdpSession, SessionState;
-export 'route_health.dart' show HealthState, ProxyError, RouteHealth, RouteStatus;
+export 'route_health.dart'
+    show HealthState, ProbeError, ProbeException, ProxyError, ProxyException, RouteHealth, RouteStatus;
 export 'session_log.dart' show SessionLog;
 export 'tunnel.dart' show TunnelError, TunnelException;
 
@@ -56,6 +58,7 @@ class SessionManager extends ChangeNotifier {
     String? tunnelPath,
     TunnelFactory? tunnelFactory,
     this.log,
+    this.latencyInterval = const Duration(seconds: 10),
   })  : enginePath = enginePath ?? _defaultEnginePath(),
         tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel.exe'),
         _channelFactory = channelFactory ?? ProcessChannel.start,
@@ -72,6 +75,9 @@ class SessionManager extends ChangeNotifier {
 
   /// Куди записати сеанс, коли він завершився (null — не записувати).
   final SessionLog? log;
+
+  /// Як часто міряти затримку до ПК для плашки вікна сеансу.
+  final Duration latencyInterval;
 
   /// Шлях до `mhrd-session`; null — модуля підключення немає (наприклад, ще не зібрано).
   final String? enginePath;
@@ -248,13 +254,31 @@ class SessionManager extends ChangeNotifier {
     final log = this.log;
     if (log != null) s.done.then((_) => log.write(s));
     if (window != null) {
+      final timer = _watchLatency(s, tunnel);
       s.done.then((_) {
+        timer.cancel();
         if (sessions.remove(s)) notifyListeners();
         s.dispose();
       });
     }
     notifyListeners();
     return s;
+  }
+
+  /// Поки сеанс підключений — затримка до ПК через увесь маршрут на плашку, кожні [latencyInterval].
+  Timer _watchLatency(RdpSession s, TunnelChannel? tunnel) {
+    var busy = false;
+    return Timer.periodic(latencyInterval, (_) async {
+      if (busy || s.state != SessionState.connected) return;
+      busy = true;
+      try {
+        s.sendLatency(await health.measure(s.connection, sessionTunnel: tunnel));
+      } on Exception {
+        s.sendLatency(-1);
+      } finally {
+        busy = false;
+      }
+    });
   }
 
   /// Користувач довіряє сертифікату: запам'ятовуємо відбиток у ПК (для швидкого

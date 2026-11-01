@@ -860,6 +860,14 @@ class AppLocalizationsUk extends AppLocalizations {
       'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.';
 
   @override
+  String get probeErrPc =>
+      'ПК не відповідає на порт RDP: вимкнений, блокує брандмауер або неправильна адреса чи порт.';
+
+  @override
+  String get probeErrGateway =>
+      'RD Gateway не відповідає. Перевірте адресу й порт шлюзу.';
+
+  @override
   String get addProxy => 'Додати проксі';
 
   @override
@@ -1154,6 +1162,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get statusReconnecting => 'Перепідключення';
+
+  @override
+  String reconnectAttempt(String n, String max) {
+    return 'спроба $n з $max';
+  }
+
+  @override
+  String latencyMs(String n) {
+    return '$n мс';
+  }
 
   @override
   String get statusError => 'Помилка';

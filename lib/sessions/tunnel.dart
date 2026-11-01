@@ -22,13 +22,15 @@ class TunnelProcess implements TunnelChannel {
   static Future<TunnelProcess> start(String executable) async =>
       TunnelProcess._(await Process.start(executable, const [], runInShell: false));
 
+  /// Спільний для всіх слухачів: спершу чекаємо відкриття тунелю, потім — заміри затримки.
   @override
-  Stream<Map<String, Object?>> get events => _p.stdout
+  late final Stream<Map<String, Object?>> events = _p.stdout
       .transform(utf8.decoder)
       .transform(const LineSplitter())
       .map((l) => jsonDecode(l))
       .where((e) => e is Map)
-      .map((e) => (e as Map).cast<String, Object?>());
+      .map((e) => (e as Map).cast<String, Object?>())
+      .asBroadcastStream();
 
   @override
   void send(Map<String, Object?> message) {
@@ -72,9 +74,31 @@ Future<int> openTunnel(TunnelChannel channel, Map<String, Object?> request) =>
     _request(channel, request, 'listening', 'port');
 
 /// Перевірка, чи тунель живий ([request] з `"check": true`). Повертає, за скільки мс сервер
-/// відповів на рукостискання.
+/// відповів на рукостискання, а якщо в [request] є `target` — за скільки відповів ПК крізь тунель.
 Future<int> checkTunnel(TunnelChannel channel, Map<String, Object?> request) =>
-    _request(channel, request, 'ok', 'handshakeMs');
+    _request(channel, request, 'ok', request['target'] != null ? 'targetMs' : 'handshakeMs');
+
+/// Затримка до ПК крізь уже відкритий тунель сеансу, мс.
+Future<int> pingTunnel(TunnelChannel channel) {
+  final done = Completer<int>();
+  late final StreamSubscription<Map<String, Object?>> sub;
+  sub = channel.events.listen(
+    (e) {
+      if (e['event'] != 'pong' || done.isCompleted) return;
+      final ms = e['ms'];
+      ms is int
+          ? done.complete(ms)
+          : done.completeError(TunnelException(TunnelError.unreachable, '${e['error'] ?? ''}'));
+    },
+    onDone: () {
+      if (!done.isCompleted) done.completeError(const TunnelException(TunnelError.failed));
+    },
+  );
+  channel.send({'ping': true});
+  return done.future
+      .timeout(const Duration(seconds: 25), onTimeout: () => throw const TunnelException(TunnelError.unreachable))
+      .whenComplete(sub.cancel);
+}
 
 Future<int> _request(TunnelChannel channel, Map<String, Object?> request, String okEvent, String field) {
   final done = Completer<int>();

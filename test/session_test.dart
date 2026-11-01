@@ -41,7 +41,7 @@ class FakeChannel implements SessionChannel {
 /// Фальшивий mhrd-tunnel: на запит відповідає подіями зі [script]; як і справжній, після
 /// hostKey мовчить, доки не прийде trustHostKey.
 class FakeTunnel implements TunnelChannel {
-  final _events = StreamController<Map<String, Object?>>();
+  final _events = StreamController<Map<String, Object?>>.broadcast();
   final sent = <Map<String, Object?>>[];
   List<Map<String, Object?>> script = [];
   bool killed = false;
@@ -49,11 +49,13 @@ class FakeTunnel implements TunnelChannel {
   @override
   Stream<Map<String, Object?>> get events => _events.stream;
 
-  /// Відповідь тунелю ([script]) — на перший запит.
+  /// Відповідь тунелю ([script]) — на перший запит; на заміри затримки — 42 мс.
   @override
   void send(Map<String, Object?> message) {
     sent.add(message);
-    if (sent.length == 1) {
+    if (message['ping'] == true) {
+      scheduleMicrotask(() => _events.add({'event': 'pong', 'ms': 42}));
+    } else if (sent.length == 1) {
       for (final e in script) {
         scheduleMicrotask(() => _events.add(e));
       }
@@ -353,6 +355,31 @@ void main() {
         expect(tun.sent.last, {'watchPid': 4242}); // тунель житиме, поки живе сеанс
         final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
         expect([json['host'], json['port']], ['127.0.0.1', 50123]);
+      });
+
+      test('затримка на плашку — крізь тунель сеансу, поки сеанс підключений', () async {
+        m = SessionManager(repo,
+            enginePath: 'mhrd-session.exe',
+            channelFactory: (_) async => ch,
+            tunnelPath: 'mhrd-tunnel.exe',
+            tunnelFactory: (_) async => tun,
+            latencyInterval: const Duration(milliseconds: 20));
+        await repo.saveTunnel(const TunnelProfile(id: 'wg', name: 'WG', type: TunnelType.wireguard));
+        tun.script = [
+          {'event': 'listening', 'port': 50123}
+        ];
+        final s = await m.start(pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg'),
+            username: 'u', password: 'p', width: 800, height: 600, window: const {});
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(ch.sentTypes, isNot(contains(Msg.latency))); // ще не підключено — не міряємо
+        ch.emit(Msg.evtState, [2]);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        final frame = ch.sent.lastWhere((f) => f[4] == Msg.latency);
+        expect(ByteData.sublistView(frame, 5).getInt32(0, Endian.little), 42);
+        expect(tun.sent.where((x) => x['ping'] == true), isNotEmpty);
+        s.disconnect();
+        ch.exit.complete(0);
+        await s.done;
       });
 
       test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {

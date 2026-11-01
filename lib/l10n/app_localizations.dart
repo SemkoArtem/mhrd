@@ -1598,6 +1598,18 @@ abstract class AppLocalizations {
   /// **'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.'**
   String get proxyErrRefused;
 
+  /// No description provided for @probeErrPc.
+  ///
+  /// In uk, this message translates to:
+  /// **'ПК не відповідає на порт RDP: вимкнений, блокує брандмауер або неправильна адреса чи порт.'**
+  String get probeErrPc;
+
+  /// No description provided for @probeErrGateway.
+  ///
+  /// In uk, this message translates to:
+  /// **'RD Gateway не відповідає. Перевірте адресу й порт шлюзу.'**
+  String get probeErrGateway;
+
   /// No description provided for @addProxy.
   ///
   /// In uk, this message translates to:
@@ -2107,6 +2119,18 @@ abstract class AppLocalizations {
   /// In uk, this message translates to:
   /// **'Перепідключення'**
   String get statusReconnecting;
+
+  /// No description provided for @reconnectAttempt.
+  ///
+  /// In uk, this message translates to:
+  /// **'спроба {n} з {max}'**
+  String reconnectAttempt(String n, String max);
+
+  /// No description provided for @latencyMs.
+  ///
+  /// In uk, this message translates to:
+  /// **'{n} мс'**
+  String latencyMs(String n);
 
   /// No description provided for @statusError.
   ///

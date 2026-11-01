@@ -36,6 +36,7 @@ enum
 	EV_MENU_FULLSCREEN, /* пункти системного меню вікна */
 	EV_MENU_KEYBOARD,
 	EV_RECONNECTING, /* стан — у W.reconnecting */
+	EV_LATENCY,      /* значення — у W.latency */
 	EV_COUNT
 };
 
@@ -47,6 +48,7 @@ enum
 	BTN_MINIMIZE, /* лише в повному екрані: у вікні є кнопка в заголовку */
 	BTN_FULLSCREEN,
 	BTN_DISCONNECT,
+	BTN_CTRLALTDEL,
 	BTN_COUNT,
 	BTN_NONE = -1
 };
@@ -128,9 +130,18 @@ static struct
 	Uint64 hoverSince; /* коли мишу навели на поточну кнопку */
 	BOOL tooltipShown;
 
-	SDL_AtomicInt reconnecting; /* 1 — зв'язок обірвався, FreeRDP відновлює (пише потік FreeRDP) */
-	SDL_Texture* reconnectLabel;
+	SDL_AtomicInt reconnecting; /* номер спроби перепідключення, 0 — зв'язок є (пише потік FreeRDP) */
+	SDL_Texture* reconnectLabel; /* «Перепідключення… спроба 2 з 5» — перебудовується зі спробою */
+	SDL_Texture* cancelLabel;
+	SDL_FRect cancelRect; /* кнопка «Скасувати» під написом */
+
+	SDL_AtomicInt latency; /* мс до ПК через маршрут; −1 — не відповів, LATENCY_NONE — ще не міряли */
+	SDL_Texture* latencyLabel;
+	int latencyShown;
+	SDL_FRect latencyRect;
 } W;
+
+#define LATENCY_NONE (-2)
 
 /* ── Клавіші: SDL_Scancode (= USB HID usage) → скан-код RDP (PC/AT, набір 1) ── */
 
@@ -238,10 +249,16 @@ void window_post_quit(void)
 	push(EV_QUIT);
 }
 
-void window_post_reconnecting(BOOL on)
+void window_post_reconnecting(int attempt)
 {
-	SDL_SetAtomicInt(&W.reconnecting, on ? 1 : 0);
+	SDL_SetAtomicInt(&W.reconnecting, attempt);
 	push(EV_RECONNECTING);
+}
+
+void window_post_latency(int ms)
+{
+	SDL_SetAtomicInt(&W.latency, ms);
+	push(EV_LATENCY);
 }
 
 /* ── Геометрія ────────────────────────────────────────────────── */
@@ -411,6 +428,29 @@ static void load_icons(void)
 	W.icons[BTN_FULLSCREEN] = make_icon(W.cfg.iconExitFullscreen);
 	W.fullscreenIcon = make_icon(W.cfg.iconFullscreen);
 	W.icons[BTN_DISCONNECT] = make_icon(W.cfg.iconDisconnect);
+	W.icons[BTN_CTRLALTDEL] = make_icon(W.cfg.iconCtrlAltDel);
+}
+
+/* Шаблон із застосунку («спроба {n} з {max}», «{n} мс») → текст. */
+static void fill_template(const char* tpl, int n, int max, char* out, size_t cap)
+{
+	size_t o = 0;
+	for (const char* p = tpl ? tpl : ""; *p && o + 12 < cap;)
+	{
+		if (strncmp(p, "{n}", 3) == 0)
+		{
+			o += (size_t)SDL_snprintf(out + o, cap - o, "%d", n);
+			p += 3;
+		}
+		else if (strncmp(p, "{max}", 5) == 0)
+		{
+			o += (size_t)SDL_snprintf(out + o, cap - o, "%d", max);
+			p += 5;
+		}
+		else
+			out[o++] = *p++;
+	}
+	out[o] = '\0';
 }
 
 static void load_labels(void)
@@ -428,8 +468,49 @@ static void load_labels(void)
 	W.labels[BTN_FULLSCREEN] = make_label(W.cfg.labelExitFullscreen);
 	W.fullscreenLabel = make_label(W.cfg.labelFullscreen);
 	W.labels[BTN_DISCONNECT] = make_label(W.cfg.labelDisconnect);
+	W.labels[BTN_CTRLALTDEL] = make_label(W.cfg.labelCtrlAltDel);
 	W.labels[BTN_COUNT] = make_label(W.cfg.barTitle ? W.cfg.barTitle : W.cfg.title);
 	W.reconnectLabel = make_label(W.cfg.labelReconnecting);
+	W.cancelLabel = make_label(W.cfg.labelCancel);
+}
+
+/* «Перепідключення… спроба 2 з 5» для поточної спроби. */
+static void update_reconnect_label(void)
+{
+	const int attempt = SDL_GetAtomicInt(&W.reconnecting);
+	if (!attempt || !W.font)
+		return;
+	char tail[128], text[512];
+	fill_template(W.cfg.labelReconnectAttempt, attempt, W.cfg.reconnectMax, tail, sizeof(tail));
+	SDL_snprintf(text, sizeof(text), "%s %s", W.cfg.labelReconnecting ? W.cfg.labelReconnecting : "", tail);
+	if (W.reconnectLabel)
+		SDL_DestroyTexture(W.reconnectLabel);
+	W.reconnectLabel = make_label(text);
+}
+
+/* «28 мс» на плашці; «—», якщо ПК не відповів. */
+static void update_latency_label(void)
+{
+	const int ms = SDL_GetAtomicInt(&W.latency);
+	if (ms == W.latencyShown || !W.font)
+		return;
+	W.latencyShown = ms;
+	if (W.latencyLabel)
+		SDL_DestroyTexture(W.latencyLabel);
+	char text[64];
+	if (ms >= 0)
+		fill_template(W.cfg.labelLatency && W.cfg.labelLatency[0] ? W.cfg.labelLatency : "{n} ms", ms, 0, text,
+		              sizeof(text));
+	else
+		SDL_strlcpy(text, "\xE2\x80\x94", sizeof(text)); /* — */
+	W.latencyLabel = make_label(text);
+}
+
+/* Колір затримки: до 80 мс — добре, до 200 — помітно, далі або без відповіді — погано. */
+static uint32_t latency_color(void)
+{
+	const int ms = W.latencyShown;
+	return ms < 0 ? W.cfg.colorError : ms <= 80 ? W.cfg.colorOk : ms <= 200 ? W.cfg.colorWarn : W.cfg.colorError;
 }
 
 static BOOL bar_visible(void)
@@ -512,7 +593,7 @@ static void layout_bar(void)
 	const BOOL vertical = bar_vertical();
 	const float extent = (float)(vertical ? ph : pw), cross = (float)(vertical ? pw : ph);
 	const float thick = BAR_H * s, margin = BAR_MARGIN * s, pad = BAR_PAD * s, gap = 2 * s;
-	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD };
+	const int order[] = { BTN_DISCONNECT, BTN_FULLSCREEN, BTN_MINIMIZE, BTN_KEYBOARD, BTN_CTRLALTDEL };
 
 	float minLen = 2 * pad + GRIP_W * s + gap + button_width(BTN_PIN, s);
 	for (size_t i = 0; i < SDL_arraysize(order); i++)
@@ -550,6 +631,19 @@ static void layout_bar(void)
 		b -= w;
 		W.buttons[order[i]] = place(b, bAcross, w, bThick);
 		b -= gap;
+	}
+	/* Затримка — перед кнопками (лише на горизонтальній плашці і якщо вміщається поруч із назвою). */
+	W.latencyRect = (SDL_FRect){ 0, 0, 0, 0 };
+	if (!vertical && W.latencyLabel)
+	{
+		float tw = 0, th = 0;
+		SDL_GetTextureSize(W.latencyLabel, &tw, &th);
+		const float lw = tw + 22 * s; /* крапка + відступи */
+		if (b - a - lw >= 24 * s)
+		{
+			b -= lw;
+			W.latencyRect = place(b, across, lw, thick);
+		}
 	}
 	const float titleLen = vertical ? 0 : b - a - 18 * s;
 	W.titleRect = titleLen >= 24 * s ? place(a + 10 * s, across, titleLen, thick) : (SDL_FRect){ 0, 0, 0, 0 };
@@ -664,6 +758,16 @@ static void draw_bar(void)
 		else
 			draw_label(button_label(i), &W.buttons[i], FALSE);
 	}
+	/* Затримка: кольорова крапка й «28 мс». */
+	if (W.latencyRect.w > 0)
+	{
+		const SDL_FRect* r = &W.latencyRect;
+		const float d = floorf(8 * s);
+		const SDL_FRect dot = { r->x + 6 * s, floorf(r->y + (r->h - d) / 2.0f), d, d };
+		fill_round(&dot, d / 2.0f, CORNER_ALL, latency_color(), 255);
+		const SDL_FRect text = { dot.x + d + 6 * s, r->y, r->w - d - 12 * s, r->h };
+		draw_label(W.latencyLabel, &text, TRUE);
+	}
 	/* Назва ПК — між «Закріпити» і правими кнопками, якщо вміщається. */
 	const SDL_FRect* name = &W.titleRect;
 	if (name->w > 0 && W.labels[BTN_COUNT])
@@ -687,14 +791,27 @@ static void draw_reconnecting(void)
 	SDL_RenderFillRect(W.renderer, &all);
 	if (!W.reconnectLabel)
 		return;
-	const float s = ui_scale();
-	float tw = 0, th = 0;
+	const float s = ui_scale(), radius = (float)W.cfg.radius * s;
+	float tw = 0, th = 0, cw = 0, ch = 0;
 	SDL_GetTextureSize(W.reconnectLabel, &tw, &th);
-	const SDL_FRect box = { floorf(((float)pw - tw) / 2.0f - 20 * s), floorf(((float)ph - th) / 2.0f - 12 * s),
-		                    tw + 40 * s, th + 24 * s };
-	fill_round(&box, (float)W.cfg.radius * s, CORNER_ALL, W.cfg.colorSurface, 255);
-	stroke_round(&box, (float)W.cfg.radius * s, CORNER_ALL, W.cfg.colorAccent);
-	draw_label(W.reconnectLabel, &box, FALSE);
+	if (W.cancelLabel)
+		SDL_GetTextureSize(W.cancelLabel, &cw, &ch);
+	/* Напис, під ним — «Скасувати» (відключитись, не чекаючи решти спроб). */
+	const float button = W.cancelLabel ? ch + 16 * s : 0;
+	const float w = SDL_max(tw, cw + 32 * s) + 40 * s, h = th + 24 * s + (button > 0 ? button + 12 * s : 0);
+	const SDL_FRect box = { floorf(((float)pw - w) / 2.0f), floorf(((float)ph - h) / 2.0f), w, h };
+	fill_round(&box, radius, CORNER_ALL, W.cfg.colorSurface, 255);
+	stroke_round(&box, radius, CORNER_ALL, W.cfg.colorAccent);
+	const SDL_FRect text = { box.x, box.y + 12 * s, box.w, th };
+	draw_label(W.reconnectLabel, &text, FALSE);
+	W.cancelRect = (SDL_FRect){ 0, 0, 0, 0 };
+	if (button > 0)
+	{
+		W.cancelRect = (SDL_FRect){ floorf(box.x + (box.w - cw - 32 * s) / 2.0f), text.y + th + 12 * s, cw + 32 * s,
+			                        button };
+		fill_round(&W.cancelRect, radius * 0.6f, CORNER_ALL, W.cfg.colorError, 70);
+		draw_label(W.cancelLabel, &W.cancelRect, FALSE);
+	}
 }
 
 static void render(void)
@@ -923,6 +1040,16 @@ static BOOL in_rect(const SDL_FRect* r, float px, float py)
 	return px >= r->x && px < r->x + r->w && py >= r->y && py < r->y + r->h;
 }
 
+/* Ctrl+Alt+Del на віддалений ПК (локально цю комбінацію перехоплює Windows). */
+static void send_ctrl_alt_del(void)
+{
+	const uint16_t keys[] = { 0x1D, 0x38, RDP_EXT | 0x53 }; /* Ctrl, Alt, Delete */
+	for (size_t i = 0; i < SDL_arraysize(keys); i++)
+		W.host.key(W.host.ctx, keys[i], TRUE, FALSE);
+	for (size_t i = SDL_arraysize(keys); i-- > 0;)
+		W.host.key(W.host.ctx, keys[i], FALSE, FALSE);
+}
+
 static void set_cursor(SDL_SystemCursor c)
 {
 	if (W.cursorShown == c)
@@ -1055,6 +1182,9 @@ static BOOL bar_mouse(float x, float y, int action, Uint8 button)
 			case BTN_FULLSCREEN:
 				set_fullscreen(!W.fullscreen);
 				break;
+			case BTN_CTRLALTDEL:
+				send_ctrl_alt_del();
+				break;
 			case BTN_DISCONNECT:
 				W.host.close(W.host.ctx);
 				break;
@@ -1100,6 +1230,14 @@ static void on_key(const SDL_KeyboardEvent* e)
 
 static void on_button(const SDL_MouseButtonEvent* e)
 {
+	/* Під час перепідключення миша — лише для «Скасувати». */
+	if (SDL_GetAtomicInt(&W.reconnecting))
+	{
+		const float k = pixel_ratio();
+		if (e->down && e->button == SDL_BUTTON_LEFT && in_rect(&W.cancelRect, e->x * k, e->y * k))
+			W.host.close(W.host.ctx);
+		return;
+	}
 	if (bar_mouse(e->x, e->y, e->down ? MOUSE_DOWN : MOUSE_UP, e->button))
 		return;
 	uint16_t x = 0, y = 0;
@@ -1164,6 +1302,8 @@ BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 	W.barPos = (float)SDL_clamp(cfg->barPos, 0, 10000) / 10000.0f;
 	W.barLen = cfg->barLength > 0 ? (float)cfg->barLength : (float)BAR_W;
 	W.cursorShown = SDL_SYSTEM_CURSOR_DEFAULT;
+	SDL_SetAtomicInt(&W.latency, LATENCY_NONE);
+	W.latencyShown = LATENCY_NONE;
 	init_scancodes();
 	/* Іконка вікна — з ресурсів mhrd-session.exe (mhrd-session.rc). */
 	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "1");
@@ -1245,6 +1385,12 @@ void window_run(void)
 						break;
 					case EV_RECONNECTING:
 						release_keys(); /* після відновлення на ПК не має лишитись натиснутих клавіш */
+						update_reconnect_label();
+						if (W.window)
+							render();
+						break;
+					case EV_LATENCY:
+						update_latency_label();
 						if (W.window)
 							render();
 						break;
@@ -1332,6 +1478,10 @@ void window_shutdown(void)
 		SDL_DestroyTexture(W.fullscreenLabel);
 	if (W.reconnectLabel)
 		SDL_DestroyTexture(W.reconnectLabel);
+	if (W.cancelLabel)
+		SDL_DestroyTexture(W.cancelLabel);
+	if (W.latencyLabel)
+		SDL_DestroyTexture(W.latencyLabel);
 	for (int i = 0; i < BTN_COUNT; i++)
 	{
 		if (W.icons[i])

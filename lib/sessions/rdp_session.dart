@@ -301,6 +301,11 @@ class RdpSession extends ChangeNotifier {
     if (isActive) _channel.send(encodeFocus());
   }
 
+  /// Затримка до ПК через маршрут — показати на плашці (−1 — ПК не відповів).
+  void sendLatency(int ms) {
+    if (isActive) _channel.send(encodeLatency(ms));
+  }
+
   /// Просить процес відключитись сам; за 5 с — закриває примусово (SPEC → «Архітектура»).
   void disconnect() {
     if (!isActive && _killTimer == null) {

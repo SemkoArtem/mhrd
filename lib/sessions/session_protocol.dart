@@ -14,6 +14,7 @@ abstract final class Msg {
   static const disconnect = 0x07;
   static const resize = 0x08;
   static const focus = 0x09;
+  static const latency = 0x0A;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -77,6 +78,10 @@ Uint8List encodeResize(int width, int height) => encodeFrame(Msg.resize, _u16s([
 
 /// Показати власне вікно сеансу (режим nativeWindow) — розгорнути й вивести наперед.
 Uint8List encodeFocus() => encodeFrame(Msg.focus);
+
+/// Затримка до ПК через увесь маршрут для плашки вікна сеансу: мс, −1 — ПК не відповів.
+Uint8List encodeLatency(int ms) =>
+    encodeFrame(Msg.latency, (ByteData(4)..setInt32(0, ms, Endian.little)).buffer.asUint8List());
 
 List<int> _u16s(List<int> values) => [
       for (final v in values) ...[v.clamp(0, 0xFFFF) & 0xFF, (v.clamp(0, 0xFFFF) >> 8) & 0xFF],

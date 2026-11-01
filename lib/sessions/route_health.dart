@@ -41,6 +41,22 @@ enum ProxyError {
   refused,
 }
 
+/// Чому ПК не відповідає при перевірці маршруту «напряму» чи через RD Gateway.
+enum ProbeError {
+  /// ПК не приймає з'єднання на порт RDP (вимкнений, брандмауер, неправильна адреса).
+  pcUnreachable,
+  /// RD Gateway не приймає з'єднання.
+  gatewayUnreachable,
+}
+
+class ProbeException implements Exception {
+  const ProbeException(this.error, [this.detail = '']);
+  final ProbeError error;
+  final String detail;
+  @override
+  String toString() => 'ProbeException(${error.name}: $detail)';
+}
+
 class ProxyException implements Exception {
   const ProxyException(this.error, [this.detail = '']);
   final ProxyError error;
@@ -151,6 +167,56 @@ class RouteHealth extends ChangeNotifier {
     final target = users.firstOrNull;
     final password = p.username.isEmpty ? '' : (await repo.secrets.read(p.secretKey) ?? '');
     return probeProxy(p, password: password, targetHost: target?.host, targetPort: target?.port ?? 3389);
+  }
+
+  /// Затримка до ПК через увесь його маршрут, мс: напряму — з'єднання з портом RDP; через RD Gateway —
+  /// зі шлюзом; через проксі — проксі разом із ПК за ним; через тунель — ПК крізь тунель
+  /// ([sessionTunnel] — тунель уже відкритого сеансу, інакше піднімаємо окремий на час заміру).
+  /// Кидає [ProbeException], [ProxyException], [TunnelException] або [RouteException].
+  Future<int> measure(Connection c, {TunnelChannel? sessionTunnel}) async {
+    final target = c.host.contains(':') ? '[${c.host}]:${c.port}' : '${c.host}:${c.port}';
+    switch (c.route) {
+      case RouteKind.tunnel:
+        if (sessionTunnel != null) return pingTunnel(sessionTunnel);
+        final t = repo.tunnels[c.routeRefId];
+        if (t == null) throw const RouteException(RouteError.tunnelMissing);
+        final exe = tunnelPath;
+        if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
+        final ch = await _tunnelFactory(exe);
+        try {
+          return await checkTunnel(ch, {
+            'type': 'wireguard',
+            'check': true,
+            'target': target,
+            'wireguard': await repo.wireGuardConfig(t),
+          }).timeout(const Duration(seconds: 45), onTimeout: () => throw const TunnelException(TunnelError.handshake));
+        } finally {
+          ch.kill();
+        }
+      case RouteKind.proxy:
+        final p = repo.proxies[c.routeRefId];
+        if (p == null) throw const RouteException(RouteError.proxyMissing);
+        final password = p.username.isEmpty ? '' : (await repo.secrets.read(p.secretKey) ?? '');
+        return probeProxy(p, password: password, targetHost: c.host, targetPort: c.port);
+      case RouteKind.direct:
+        final g = c.gatewayId == null ? null : repo.gateways[c.gatewayId];
+        if (c.gatewayId != null && g == null) throw const RouteException(RouteError.gatewayMissing);
+        return g != null
+            ? _tcpTime(g.host, g.port, ProbeError.gatewayUnreachable)
+            : _tcpTime(c.host, c.port, ProbeError.pcUnreachable);
+    }
+  }
+
+  static Future<int> _tcpTime(String host, int port, ProbeError error) async {
+    final watch = Stopwatch()..start();
+    try {
+      final s = await Socket.connect(host, port, timeout: const Duration(seconds: 10));
+      final ms = watch.elapsedMilliseconds;
+      s.destroy();
+      return ms;
+    } on SocketException catch (e) {
+      throw ProbeException(error, e.osError?.message ?? e.message);
+    }
   }
 
   void _set(String id, RouteStatus s) {

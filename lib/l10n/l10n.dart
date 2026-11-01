@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
-import '../sessions/session_manager.dart' show ProxyError, RouteError, TunnelError;
+import '../sessions/session_manager.dart' show ProbeError, ProxyError, RouteError, TunnelError;
 import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
@@ -76,6 +76,8 @@ extension L10nMessages on AppLocalizations {
   String healthError(Object e) => switch (e) {
         final TunnelError t => tunnelError(t),
         final ProxyError p => proxyError(p),
+        ProbeError.pcUnreachable => probeErrPc,
+        ProbeError.gatewayUnreachable => probeErrGateway,
         final RouteError r => routeError(r),
         _ => tunnelErrFailed,
       };
