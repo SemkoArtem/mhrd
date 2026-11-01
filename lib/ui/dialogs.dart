@@ -10,6 +10,15 @@ String formatDateTime(DateTime d) {
   return '${two(l.day)}.${two(l.month)}.${l.year} ${two(l.hour)}:${two(l.minute)}';
 }
 
+/// Сторінка налаштувань: вміст завширшки до [maxWidth] посередині, але сам список — на всю
+/// ширину, щоб гортати коліщатком можна було з будь-якого місця, а не лише над текстом.
+Widget centeredList(List<Widget> children, {required double maxWidth}) => LayoutBuilder(
+      builder: (context, box) {
+        final side = ((box.maxWidth - maxWidth) / 2).clamp(20.0, double.infinity);
+        return ListView(padding: EdgeInsets.fromLTRB(side, 20, side, 20), children: children);
+      },
+    );
+
 void toast(BuildContext context, String text, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()

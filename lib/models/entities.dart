@@ -198,6 +198,44 @@ enum PcListView { tiles, list }
 /// Куди йдуть Win, Alt+Tab тощо.
 enum KeyboardCapture { fullscreenOnly, always, never }
 
+/// Шаблон екрана: роздільність віддаленого ПК. Стандартні — [builtins], свої — у налаштуваннях.
+class ScreenTemplate {
+  const ScreenTemplate({required this.id, required this.name, required this.width, required this.height});
+
+  final String id;
+
+  /// Для стандартних — порожня: назву показують самі розміри (і «вертикальний» з орієнтації).
+  final String name;
+  final int width, height;
+
+  bool get portrait => height > width;
+  bool get builtin => id.startsWith('builtin:');
+
+  /// «Під розмір вікна» — роздільність підлаштовується під вікно сеансу (типово).
+  static const auto = 'auto';
+
+  static const builtins = [
+    ScreenTemplate(id: 'builtin:hd', name: 'HD', width: 1280, height: 720),
+    ScreenTemplate(id: 'builtin:hdplus', name: 'HD+', width: 1600, height: 900),
+    ScreenTemplate(id: 'builtin:fhd', name: 'Full HD', width: 1920, height: 1080),
+    ScreenTemplate(id: 'builtin:wuxga', name: 'WUXGA', width: 1920, height: 1200),
+    ScreenTemplate(id: 'builtin:qhd', name: 'QHD', width: 2560, height: 1440),
+    ScreenTemplate(id: 'builtin:uwqhd', name: 'UltraWide', width: 3440, height: 1440),
+    ScreenTemplate(id: 'builtin:4k', name: '4K', width: 3840, height: 2160),
+    ScreenTemplate(id: 'builtin:fhd-portrait', name: 'Full HD', width: 1080, height: 1920),
+    ScreenTemplate(id: 'builtin:hd-portrait', name: 'HD', width: 720, height: 1280),
+  ];
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'width': width, 'height': height};
+
+  factory ScreenTemplate.fromJson(Map<String, dynamic> j) => ScreenTemplate(
+        id: strOr(j['id'], ''),
+        name: strOr(j['name'], ''),
+        width: intOr(j['width'], 1920).clamp(200, 8192),
+        height: intOr(j['height'], 1080).clamp(200, 8192),
+      );
+}
+
 /// Край вікна сеансу, до якого притулена плашка. Порядок = номери в native/session (barEdge).
 enum BarEdge { top, bottom, left, right }
 
@@ -234,6 +272,8 @@ class AppSettings {
     this.bar = const BarPlacement(),
     this.sidebarShown = true,
     this.collapsedGroups = const [noGroupSection],
+    this.screenTemplates = const [],
+    this.defaultScreen = ScreenTemplate.auto,
     this.lastBackupAt,
   });
 
@@ -257,7 +297,26 @@ class AppSettings {
 
   /// Згорнуті розділи списку «Усі ПК»: id груп і [noGroupSection].
   final List<String> collapsedGroups;
+
+  /// Свої шаблони екрана (стандартні — [ScreenTemplate.builtins]).
+  final List<ScreenTemplate> screenTemplates;
+
+  /// Типовий шаблон для ПК, у яких «як у загальних»: id шаблону або [ScreenTemplate.auto].
+  final String defaultScreen;
   final DateTime? lastBackupAt;
+
+  /// Усі шаблони: стандартні, потім свої.
+  List<ScreenTemplate> get allScreenTemplates => [...ScreenTemplate.builtins, ...screenTemplates];
+
+  ScreenTemplate? screenTemplate(String? id) => allScreenTemplates.where((t) => t.id == id).firstOrNull;
+
+  /// Фіксована роздільність для ПК або null — під розмір вікна. [screen], [width], [height] — з
+  /// налаштувань екрана ПК: вибраний шаблон, інакше старі власні розміри, інакше типовий шаблон.
+  (int, int)? resolutionFor({String? screen, int? width, int? height}) {
+    if (screen == null && width != null && height != null) return (width, height);
+    final t = screenTemplate(screen ?? defaultScreen); // зниклий шаблон — під вікно
+    return t == null ? null : (t.width, t.height);
+  }
 
   AppSettings copyWith({
     String? language,
@@ -270,6 +329,8 @@ class AppSettings {
     BarPlacement? bar,
     bool? sidebarShown,
     List<String>? collapsedGroups,
+    List<ScreenTemplate>? screenTemplates,
+    String? defaultScreen,
     DateTime? lastBackupAt,
   }) =>
       AppSettings(
@@ -283,6 +344,8 @@ class AppSettings {
         bar: bar ?? this.bar,
         sidebarShown: sidebarShown ?? this.sidebarShown,
         collapsedGroups: collapsedGroups ?? this.collapsedGroups,
+        screenTemplates: screenTemplates ?? this.screenTemplates,
+        defaultScreen: defaultScreen ?? this.defaultScreen,
         lastBackupAt: lastBackupAt ?? this.lastBackupAt,
       );
 
@@ -297,6 +360,8 @@ class AppSettings {
         'bar': bar.toJson(),
         'sidebarShown': sidebarShown,
         'collapsedGroups': collapsedGroups,
+        'screenTemplates': [for (final t in screenTemplates) t.toJson()],
+        'defaultScreen': defaultScreen,
         'lastBackupAt': lastBackupAt?.toIso8601String(),
       };
 
@@ -312,6 +377,12 @@ class AppSettings {
         bar: BarPlacement.fromJson(mapOr(j['bar'])),
         sidebarShown: boolOr(j['sidebarShown'], true),
         collapsedGroups: j.containsKey('collapsedGroups') ? stringList(j['collapsedGroups']) : const [noGroupSection],
+        screenTemplates: [
+          if (j['screenTemplates'] is List)
+            for (final x in j['screenTemplates'] as List)
+              if (x is Map) ScreenTemplate.fromJson(x.cast<String, dynamic>()),
+        ],
+        defaultScreen: strOr(j['defaultScreen'], ScreenTemplate.auto),
         lastBackupAt: dateOrNull(j['lastBackupAt']),
       );
 }

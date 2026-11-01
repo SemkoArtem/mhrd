@@ -1598,6 +1598,102 @@ abstract class AppLocalizations {
   /// **'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.'**
   String get proxyErrRefused;
 
+  /// No description provided for @resolution.
+  ///
+  /// In uk, this message translates to:
+  /// **'Роздільність віддаленого екрана'**
+  String get resolution;
+
+  /// No description provided for @resolutionHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Під розмір вікна — підлаштовується, коли тягнете вікно. Шаблон — завжди та сама роздільність, картинка масштабується.'**
+  String get resolutionHint;
+
+  /// No description provided for @screenAuto.
+  ///
+  /// In uk, this message translates to:
+  /// **'Під розмір вікна'**
+  String get screenAuto;
+
+  /// No description provided for @screenPortrait.
+  ///
+  /// In uk, this message translates to:
+  /// **'вертикальний'**
+  String get screenPortrait;
+
+  /// No description provided for @asInGeneralSettingsWith.
+  ///
+  /// In uk, this message translates to:
+  /// **'Як у загальних налаштуваннях ({name})'**
+  String asInGeneralSettingsWith(String name);
+
+  /// No description provided for @screenTemplates.
+  ///
+  /// In uk, this message translates to:
+  /// **'Шаблони екрана'**
+  String get screenTemplates;
+
+  /// No description provided for @defaultScreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Роздільність за замовчуванням для всіх ПК'**
+  String get defaultScreen;
+
+  /// No description provided for @customScreens.
+  ///
+  /// In uk, this message translates to:
+  /// **'Свої шаблони'**
+  String get customScreens;
+
+  /// No description provided for @noCustomScreens.
+  ///
+  /// In uk, this message translates to:
+  /// **'Поки немає. Стандартні — HD, Full HD, QHD, 4K, вертикальні — уже в списку.'**
+  String get noCustomScreens;
+
+  /// No description provided for @addScreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додати шаблон'**
+  String get addScreen;
+
+  /// No description provided for @screenName.
+  ///
+  /// In uk, this message translates to:
+  /// **'Назва'**
+  String get screenName;
+
+  /// No description provided for @screenWidth.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ширина'**
+  String get screenWidth;
+
+  /// No description provided for @screenHeight.
+  ///
+  /// In uk, this message translates to:
+  /// **'Висота'**
+  String get screenHeight;
+
+  /// No description provided for @screenSizeInvalid.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ширина й висота — від 200 до 8192 пікселів.'**
+  String get screenSizeInvalid;
+
+  /// No description provided for @checkConnection.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевірити з\'єднання'**
+  String get checkConnection;
+
+  /// No description provided for @pcResponds.
+  ///
+  /// In uk, this message translates to:
+  /// **'ПК відповідає · {ms} мс через увесь маршрут'**
+  String pcResponds(int ms);
+
   /// No description provided for @probeErrPc.
   ///
   /// In uk, this message translates to:

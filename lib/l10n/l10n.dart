@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
+import '../models/entities.dart' show ScreenTemplate;
 import '../sessions/session_manager.dart' show ProbeError, ProxyError, RouteError, TunnelError;
 import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
@@ -81,6 +82,13 @@ extension L10nMessages on AppLocalizations {
         final RouteError r => routeError(r),
         _ => tunnelErrFailed,
       };
+
+  /// «Full HD · 1920×1080», «Full HD · 1080×1920 · вертикальний», «Мій · 1366×768».
+  String screenTemplateName(ScreenTemplate t) => [
+        if (t.name.isNotEmpty) t.name,
+        '${t.width}×${t.height}',
+        if (t.portrait) screenPortrait,
+      ].join(' · ');
 
   String inUseKind(InUseKind k) => switch (k) {
         InUseKind.credential => inUseCredential,

@@ -16,6 +16,21 @@ void main() {
     expect(back.collapsedGroups, isEmpty); // усе розгорнуто — так і лишається
   });
 
+  test('шаблони екрана: ПК → свій шаблон / старі розміри / типовий / під вікно', () {
+    const mine = ScreenTemplate(id: 'm1', name: 'Мій', width: 1366, height: 768);
+    const s = AppSettings(screenTemplates: [mine], defaultScreen: 'builtin:fhd');
+    expect(s.resolutionFor(), (1920, 1080)); // «як у загальних» → типовий Full HD
+    expect(s.resolutionFor(screen: 'm1'), (1366, 768));
+    expect(s.resolutionFor(screen: 'builtin:fhd-portrait'), (1080, 1920));
+    expect(s.resolutionFor(screen: ScreenTemplate.auto), isNull);
+    expect(s.resolutionFor(width: 1024, height: 768), (1024, 768)); // старі власні розміри ПК
+    expect(s.resolutionFor(screen: 'gone'), isNull); // шаблон видалили — під вікно
+    expect(const AppSettings().resolutionFor(), isNull); // типово — під вікно
+    final back = AppSettings.fromJson(s.toJson());
+    expect(back.screenTemplates.single.name, 'Мій');
+    expect(back.defaultScreen, 'builtin:fhd');
+  });
+
   group('parseAddress', () {
     test('ім\'я без порту → 3389', () {
       expect(parseAddress('MyDesktop'), const ParsedAddress('MyDesktop', 3389));

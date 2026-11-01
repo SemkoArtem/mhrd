@@ -859,6 +859,61 @@ class AppLocalizationsEn extends AppLocalizations {
       'The proxy works but won\'t let you through to the PC. Such proxies often allow only websites (port 443) and block RDP (3389).';
 
   @override
+  String get resolution => 'Remote screen resolution';
+
+  @override
+  String get resolutionHint =>
+      'Fit to window follows the window as you resize it. A template always keeps the same resolution and scales the picture.';
+
+  @override
+  String get screenAuto => 'Fit to window';
+
+  @override
+  String get screenPortrait => 'portrait';
+
+  @override
+  String asInGeneralSettingsWith(String name) {
+    return 'As in general settings ($name)';
+  }
+
+  @override
+  String get screenTemplates => 'Screen templates';
+
+  @override
+  String get defaultScreen => 'Default resolution for all PCs';
+
+  @override
+  String get customScreens => 'Your templates';
+
+  @override
+  String get noCustomScreens =>
+      'None yet. The standard ones — HD, Full HD, QHD, 4K, portrait — are already in the list.';
+
+  @override
+  String get addScreen => 'Add template';
+
+  @override
+  String get screenName => 'Name';
+
+  @override
+  String get screenWidth => 'Width';
+
+  @override
+  String get screenHeight => 'Height';
+
+  @override
+  String get screenSizeInvalid =>
+      'Width and height must be 200 to 8192 pixels.';
+
+  @override
+  String get checkConnection => 'Check connection';
+
+  @override
+  String pcResponds(int ms) {
+    return 'The PC responds · $ms ms over the whole route';
+  }
+
+  @override
   String get probeErrPc =>
       'The PC doesn\'t answer on the RDP port: it\'s off, a firewall blocks it, or the address or port is wrong.';
 

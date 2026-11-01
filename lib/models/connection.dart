@@ -19,6 +19,7 @@ class DisplaySettings {
     this.scalePercent = 100,
     this.width,
     this.height,
+    this.screen,
   });
 
   final bool useAllMonitors;
@@ -34,9 +35,12 @@ class DisplaySettings {
   /// Масштаб елементів на віддаленому ПК, 100–300.
   final int scalePercent;
 
-  /// null = розмір вікна клієнта («обрати за мене»).
+  /// Старі власні розміри (до шаблонів екрана); діють, лише якщо [screen] не вибрано.
   final int? width;
   final int? height;
+
+  /// Шаблон екрана: null — як у загальних налаштуваннях, `auto` — під розмір вікна, інакше id шаблону.
+  final String? screen;
 
   DisplaySettings copyWith({
     bool? useAllMonitors,
@@ -47,8 +51,10 @@ class DisplaySettings {
     int? scalePercent,
     int? Function()? width,
     int? Function()? height,
+    String? Function()? screen,
   }) =>
       DisplaySettings(
+        screen: screen != null ? screen() : this.screen,
         useAllMonitors: useAllMonitors ?? this.useAllMonitors,
         startFullscreen: startFullscreen != null ? startFullscreen() : this.startFullscreen,
         resizeMode: resizeMode ?? this.resizeMode,
@@ -68,6 +74,7 @@ class DisplaySettings {
         'scalePercent': scalePercent,
         'width': width,
         'height': height,
+        'screen': screen,
       };
 
   factory DisplaySettings.fromJson(Map<String, dynamic> j) => DisplaySettings(
@@ -79,6 +86,7 @@ class DisplaySettings {
         scalePercent: intOr(j['scalePercent'], 100),
         width: j['width'] is int ? j['width'] as int : null,
         height: j['height'] is int ? j['height'] as int : null,
+        screen: strOrNull(j['screen']),
       );
 }
 

@@ -161,13 +161,15 @@ class _HomeScreenState extends State<HomeScreen> {
     int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
     int rgb(Color color) => color.toARGB32() & 0xFFFFFF;
     final assets = p.join(p.dirname(sessions.enginePath!), 'data', 'flutter_assets');
+    // Шаблон екрана (фіксована роздільність) або під розмір вікна.
+    final fixed = repo.settings.resolutionFor(screen: c.display.screen, width: c.display.width, height: c.display.height);
     toast(context, l.connectingTo(c.address));
     return sessions.start(
       c,
       username: username,
       password: password,
-      width: c.display.width ?? even(display.size.width * k, 640, 8192),
-      height: c.display.height ?? even(display.size.height * k, 480, 8192),
+      width: fixed?.$1 ?? even(display.size.width * k, 640, 8192),
+      height: fixed?.$2 ?? even(display.size.height * k, 480, 8192),
       scale: (display.devicePixelRatio * 100).round(),
       gatewayPassword: gatewayPassword,
       window: {
@@ -204,7 +206,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'fullscreen': Icons.fullscreen.codePoint,
           'exitFullscreen': Icons.fullscreen_exit.codePoint,
           'disconnect': Icons.power_settings_new.codePoint,
-          'ctrlAltDel': Icons.lock_reset.codePoint,
+          // Замок — Ctrl+Alt+Del відкриває екран безпеки. Лише піктограми з основного діапазону
+          // (до U+FFFF): вищі, як lock_reset, вікно сеансу не малює.
+          'ctrlAltDel': Icons.lock_outline.codePoint,
         },
         'colors': {
           'surface': rgb(t.surface),
@@ -218,7 +222,11 @@ class _HomeScreenState extends State<HomeScreen> {
         'radius': t.radius.round(), // кути плашки — як в усьому інтерфейсі
         'startFullscreen': fullscreen,
         'keyboardCapture': repo.settings.keyboardCapture.index, // 0 лише на весь екран, 1 завжди, 2 ніколи
-        'resizeMode': c.display.resizeMode.index, // 0 змінювати роздільність, 1 масштабувати, 2 ні
+        // 0 змінювати роздільність, 1 масштабувати, 2 ні. Фіксована роздільність шаблону не змінюється
+        // під вікно — тоді картинку лише масштабуємо.
+        'resizeMode': fixed != null && c.display.resizeMode == ResizeMode.changeResolution
+            ? ResizeMode.scale.index
+            : c.display.resizeMode.index,
         'swapMouse': c.swapMouseButtons,
       },
     );

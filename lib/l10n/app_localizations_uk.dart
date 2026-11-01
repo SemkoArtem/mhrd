@@ -860,6 +860,60 @@ class AppLocalizationsUk extends AppLocalizations {
       'Проксі працює, але не пускає до ПК. Часто такі проксі дозволяють лише вебсайти (порт 443), а RDP (3389) блокують.';
 
   @override
+  String get resolution => 'Роздільність віддаленого екрана';
+
+  @override
+  String get resolutionHint =>
+      'Під розмір вікна — підлаштовується, коли тягнете вікно. Шаблон — завжди та сама роздільність, картинка масштабується.';
+
+  @override
+  String get screenAuto => 'Під розмір вікна';
+
+  @override
+  String get screenPortrait => 'вертикальний';
+
+  @override
+  String asInGeneralSettingsWith(String name) {
+    return 'Як у загальних налаштуваннях ($name)';
+  }
+
+  @override
+  String get screenTemplates => 'Шаблони екрана';
+
+  @override
+  String get defaultScreen => 'Роздільність за замовчуванням для всіх ПК';
+
+  @override
+  String get customScreens => 'Свої шаблони';
+
+  @override
+  String get noCustomScreens =>
+      'Поки немає. Стандартні — HD, Full HD, QHD, 4K, вертикальні — уже в списку.';
+
+  @override
+  String get addScreen => 'Додати шаблон';
+
+  @override
+  String get screenName => 'Назва';
+
+  @override
+  String get screenWidth => 'Ширина';
+
+  @override
+  String get screenHeight => 'Висота';
+
+  @override
+  String get screenSizeInvalid => 'Ширина й висота — від 200 до 8192 пікселів.';
+
+  @override
+  String get checkConnection => 'Перевірити з\'єднання';
+
+  @override
+  String pcResponds(int ms) {
+    return 'ПК відповідає · $ms мс через увесь маршрут';
+  }
+
+  @override
   String get probeErrPc =>
       'ПК не відповідає на порт RDP: вимкнений, блокує брандмауер або неправильна адреса чи порт.';
 

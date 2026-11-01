@@ -29,7 +29,7 @@ class SettingsScreen extends StatelessWidget {
     final l = context.l10n;
     final repo = AppScope.of(context).repo;
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: t.surface,
@@ -43,6 +43,7 @@ class SettingsScreen extends StatelessWidget {
               Tab(text: l.accounts),
               Tab(text: l.tabRoutes),
               Tab(text: l.groups),
+              Tab(text: l.screenTemplates),
               Tab(text: l.tabBackup),
             ],
           ),
@@ -55,6 +56,7 @@ class SettingsScreen extends StatelessWidget {
             _AccountsTab(repo: repo),
             _RoutesTab(repo: repo),
             _GroupsTab(repo: repo),
+            _ScreensTab(repo: repo),
             _BackupTab(repo: repo),
           ]),
         ),
@@ -63,13 +65,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-Widget _pane(List<Widget> children) => Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: ListView(padding: const EdgeInsets.all(20), children: children),
-      ),
-    );
+Widget _pane(List<Widget> children) => centeredList(children, maxWidth: 720);
 
 Widget _caption(BuildContext context, String s) => Padding(
       padding: const EdgeInsets.only(top: 20, bottom: 8),
@@ -426,6 +422,116 @@ class _RoutesTab extends StatelessWidget {
 }
 
 // ── Групи ─────────────────────────────────────────────────────────
+
+/// Шаблони екрана: типова роздільність для всіх ПК і свої шаблони (стандартні вже є).
+class _ScreensTab extends StatelessWidget {
+  const _ScreensTab({required this.repo});
+  final Repository repo;
+
+  Future<void> _add(BuildContext context) async {
+    final l = context.l10n;
+    final name = TextEditingController(), w = TextEditingController(), h = TextEditingController();
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (dc, setState) => AlertDialog(
+          title: Text(l.addScreen),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: name, autofocus: true, decoration: InputDecoration(labelText: l.screenName)),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                    controller: w,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: l.screenWidth))),
+              const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('×')),
+              Expanded(
+                child: TextField(
+                    controller: h,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(labelText: l.screenHeight))),
+            ]),
+            if (error != null) ...[
+              const SizedBox(height: 10),
+              Text(error!, style: TextStyle(color: context.mhrd.error)),
+            ],
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.cancel)),
+            FilledButton(
+              onPressed: () {
+                final wi = int.tryParse(w.text.trim()), hi = int.tryParse(h.text.trim());
+                if (wi == null || hi == null || wi < 200 || hi < 200 || wi > 8192 || hi > 8192) {
+                  setState(() => error = l.screenSizeInvalid);
+                  return;
+                }
+                Navigator.pop(dc, true);
+              },
+              child: Text(l.add),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true) {
+      final s = repo.settings;
+      // Парна роздільність — так її приймає RDP.
+      final t = ScreenTemplate(
+          id: newId(),
+          name: name.text.trim(),
+          width: int.parse(w.text.trim()) ~/ 2 * 2,
+          height: int.parse(h.text.trim()) ~/ 2 * 2);
+      repo.updateSettings(s.copyWith(screenTemplates: [...s.screenTemplates, t]));
+    }
+    name.dispose();
+    w.dispose();
+    h.dispose();
+  }
+
+  void _delete(ScreenTemplate t) {
+    final s = repo.settings;
+    repo.updateSettings(s.copyWith(
+      screenTemplates: s.screenTemplates.where((x) => x.id != t.id).toList(),
+      defaultScreen: s.defaultScreen == t.id ? ScreenTemplate.auto : null,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final s = repo.settings;
+    final ids = {ScreenTemplate.auto, ...s.allScreenTemplates.map((x) => x.id)};
+    return _pane([
+      DropdownButtonFormField<String>(
+        initialValue: ids.contains(s.defaultScreen) ? s.defaultScreen : ScreenTemplate.auto,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: l.defaultScreen, helperText: l.resolutionHint, helperMaxLines: 2),
+        items: [
+          DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
+          for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
+        ],
+        onChanged: (v) => repo.updateSettings(s.copyWith(defaultScreen: v)),
+      ),
+      _caption(context, l.customScreens),
+      if (s.screenTemplates.isEmpty) Text(l.noCustomScreens, style: TextStyle(color: t.textMuted)),
+      for (final x in s.screenTemplates)
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(x.portrait ? Icons.stay_current_portrait : Icons.desktop_windows_outlined),
+          title: Text(l.screenTemplateName(x)),
+          trailing: IconButton(tooltip: l.delete, icon: const Icon(Icons.delete_outline), onPressed: () => _delete(x)),
+        ),
+      const SizedBox(height: 12),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: FilledButton.icon(icon: const Icon(Icons.add), label: Text(l.addScreen), onPressed: () => _add(context)),
+      ),
+    ]);
+  }
+}
 
 class _GroupsTab extends StatelessWidget {
   const _GroupsTab({required this.repo});

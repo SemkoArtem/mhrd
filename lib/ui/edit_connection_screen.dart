@@ -6,6 +6,7 @@ import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../sessions/session_manager.dart';
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -65,6 +66,46 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   Repository get repo => AppScope.of(context).repo;
 
   void _set(Connection c) => setState(() => _c = c);
+
+  bool _checking = false, _checkOk = false;
+  String? _checkText;
+
+  /// «Перевірити з'єднання»: чи відповідає ПК через вибраний маршрут і з якою затримкою —
+  /// з тим, що зараз у формі, навіть ще не збереженим.
+  Future<void> _check() async {
+    final l = context.l10n;
+    final addr = parseAddress(_address.text);
+    if (addr == null) {
+      setState(() => _addressError = l.addressRequired);
+      return;
+    }
+    final health = AppScope.of(context).sessions.health;
+    setState(() {
+      _checking = true;
+      _checkText = null;
+    });
+    String text;
+    var ok = false;
+    try {
+      final ms = await health.measure(_c.copyWith(host: addr.host, port: addr.port));
+      text = l.pcResponds(ms);
+      ok = true;
+    } on TunnelException catch (e) {
+      text = l.tunnelError(e.error);
+    } on ProxyException catch (e) {
+      text = l.proxyError(e.error);
+    } on ProbeException catch (e) {
+      text = l.healthError(e.error);
+    } on RouteException catch (e) {
+      text = l.routeError(e.error);
+    }
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _checkOk = ok;
+      _checkText = text;
+    });
+  }
 
   void _save() {
     final l = context.l10n;
@@ -132,13 +173,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     );
   }
 
-  Widget _page(List<Widget> children) => Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
-          child: ListView(padding: const EdgeInsets.all(20), children: children),
-        ),
-      );
+  Widget _page(List<Widget> children) => centeredList(children, maxWidth: 640);
 
   Widget _section(String title) => Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 8),
@@ -280,6 +315,21 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           title: Text(l.bypassGatewayLocal),
           onChanged: (v) => _set(_c.copyWith(gatewayBypassLocal: v)),
         ),
+      const SizedBox(height: 12),
+      Row(children: [
+        OutlinedButton.icon(
+          icon: _checking
+              ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.network_check),
+          label: Text(l.checkConnection),
+          onPressed: _checking ? null : _check,
+        ),
+        const SizedBox(width: 12),
+        if (_checkText != null)
+          Expanded(
+            child: Text(_checkText!, style: TextStyle(color: _checkOk ? t.ok : t.error, fontSize: 13)),
+          ),
+      ]),
 
       _section(l.sectionConnection),
       SwitchListTile(
@@ -311,7 +361,24 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final t = context.mhrd;
     final l = context.l10n;
     void setD(DisplaySettings x) => _set(_c.copyWith(display: x));
+    final s = repo.settings;
+    final screenIds = {null, ScreenTemplate.auto, ...s.allScreenTemplates.map((x) => x.id)};
+    final defaultName = s.screenTemplate(s.defaultScreen) == null
+        ? l.screenAuto
+        : l.screenTemplateName(s.screenTemplate(s.defaultScreen)!);
     return [
+      DropdownButtonFormField<String?>(
+        initialValue: screenIds.contains(d.screen) ? d.screen : null,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: l.resolution, helperText: l.resolutionHint, helperMaxLines: 2),
+        items: [
+          DropdownMenuItem(value: null, child: Text(l.asInGeneralSettingsWith(defaultName))),
+          DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
+          for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
+        ],
+        onChanged: (v) => setD(d.copyWith(screen: () => v, width: () => null, height: () => null)),
+      ),
+      const SizedBox(height: 8),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         value: d.useAllMonitors,
