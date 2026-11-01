@@ -14,6 +14,7 @@ import '../models/connection.dart';
 import '../models/entities.dart';
 import '../security/app_lock.dart';
 import '../sessions/route_health.dart' show probeProxy;
+import '../sessions/session_manager.dart' show HealthState, TunnelError;
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -380,39 +381,212 @@ class _RoutesTab extends StatelessWidget {
     await repo.saveProxy(profile, password: username.isEmpty ? '' : (pass.text.isEmpty ? null : pass.text));
   }
 
-  Future<void> _importWireGuard(BuildContext context) async {
+  /// Імпорт .conf: новий тунель або, з [into], оновлення наявного (те саме id — ПК лишаються на ньому,
+  /// назва не змінюється). Спершу перевірка рукостискання, потім збереження.
+  Future<void> _importWireGuard(BuildContext context, {TunnelProfile? into}) async {
     final l = context.l10n;
     final f = await openBytes(wgTypes(l));
     if (f == null) return;
     try {
       final conf = parseWireGuardConf(utf8.decode(f.$2, allowMalformed: true));
-      final name = f.$1.replaceAll(RegExp(r'\.conf$', caseSensitive: false), '');
-      // Спершу — чи відповідає сервер з цими ключами, і лише потім зберігаємо.
+      final file = f.$1.replaceAll(RegExp(r'\.conf$', caseSensitive: false), '');
+      final name = into?.name ?? 'WireGuard · $file';
       if (!context.mounted) return;
-      final health = AppScope.of(context).sessions.health;
-      final save = await checkBeforeSave(
-        context,
-        title: 'WireGuard · $name',
-        check: () => health.checkWireGuard({...conf.config, ...conf.secrets}),
-        okText: (ms) => l.wgCheckOk(ms, tunnelAddress(conf.config) ?? '—'),
-      );
-      if (!save) return;
-      await repo.saveTunnel(
-        TunnelProfile(
-          id: newId(),
-          name: 'WireGuard · $name',
-          type: TunnelType.wireguard,
-          config: conf.config,
-          secretFields: conf.secrets.keys.toList(),
-        ),
-        secretValues: conf.secrets,
-      );
+      if (!await _saveTunnelChecked(context, id: into?.id, name: name, config: conf.config, secrets: conf.secrets)) {
+        return;
+      }
       if (context.mounted) {
-        toast(context, conf.config['extraPeersIgnored'] == true ? l.wgImportedExtraPeers : l.wgImported(name));
+        toast(context, conf.config['extraPeersIgnored'] == true ? l.wgImportedExtraPeers : l.wgImported(file));
       }
     } on WireGuardConfException catch (e) {
       if (context.mounted) toast(context, l.wireGuardError(e.error));
     }
+  }
+
+  /// Перевіряє налаштування WireGuard (рукостискання з сервером) і, якщо людина погодилась, зберігає.
+  /// Зайві старі секрети (наприклад, прибраний PSK) видаляє зі сховища.
+  Future<bool> _saveTunnelChecked(BuildContext context,
+      {String? id, required String name, required Map<String, dynamic> config, required Map<String, String> secrets}) async {
+    final l = context.l10n;
+    final health = AppScope.of(context).sessions.health;
+    final save = await checkBeforeSave(
+      context,
+      title: name,
+      check: () => health.checkWireGuard({...config, ...secrets}),
+      okText: (ms) => l.wgCheckOk(ms, tunnelAddress(config) ?? '—'),
+    );
+    if (!save) return false;
+    final profile = TunnelProfile(
+      id: id ?? newId(),
+      name: name,
+      type: TunnelType.wireguard,
+      config: config,
+      secretFields: secrets.keys.toList(),
+    );
+    final old = id == null ? null : repo.tunnels[id];
+    for (final f in old?.secretFields ?? const <String>[]) {
+      if (!secrets.containsKey(f)) await repo.secrets.delete(profile.secretKey(f));
+    }
+    await repo.saveTunnel(profile, secretValues: secrets);
+    if (id != null) health.check(profile.id); // стан у лівій панелі — за новими даними
+    return true;
+  }
+
+  /// Редагування тунелю — лише після PIN-коду MHRD або відбитка / Windows Hello: тут видно ключі.
+  Future<void> _editTunnel(BuildContext context, TunnelProfile tu) async {
+    final l = context.l10n;
+    if (!await authorizeSensitive(context, repo)) return;
+    final cfg = await repo.wireGuardConfig(tu);
+    if (!context.mounted) return;
+    String list(Object? v) => v is List ? v.join(', ') : '${v ?? ''}';
+    final c = {
+      'name': TextEditingController(text: tu.name),
+      'addresses': TextEditingController(text: list(cfg['addresses'])),
+      'dns': TextEditingController(text: list(cfg['dns'])),
+      'mtu': TextEditingController(text: cfg['mtu'] == null ? '' : '${cfg['mtu']}'),
+      'privateKey': TextEditingController(text: '${cfg['privateKey'] ?? ''}'),
+      'peerPublicKey': TextEditingController(text: '${cfg['peerPublicKey'] ?? ''}'),
+      'presharedKey': TextEditingController(text: '${cfg['presharedKey'] ?? ''}'),
+      'endpoint': TextEditingController(text: '${cfg['endpoint'] ?? ''}'),
+      'allowedIps': TextEditingController(text: list(cfg['allowedIps'])),
+      'keepalive': TextEditingController(text: cfg['keepalive'] == null ? '' : '${cfg['keepalive']}'),
+    };
+    var showKeys = false;
+    String? error;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (dc, set) {
+          final t = dc.mhrd;
+          Widget field(String key, String label, {bool secret = false, bool mono = true, String? hint}) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TextField(
+                  controller: c[key],
+                  obscureText: secret && !showKeys,
+                  style: mono ? TextStyle(fontFamily: t.fontMono, fontSize: 13) : null,
+                  decoration: InputDecoration(labelText: label, hintText: hint, isDense: true),
+                ),
+              );
+          return AlertDialog(
+            title: Text(l.wgEditTitle),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  field('name', l.name, mono: false),
+                  _caption(dc, '[Interface]'),
+                  field('privateKey', 'PrivateKey', secret: true),
+                  field('addresses', 'Address', hint: '10.8.0.2/32'),
+                  field('dns', 'DNS', hint: '1.1.1.1'),
+                  field('mtu', 'MTU', hint: '1420'),
+                  _caption(dc, '[Peer]'),
+                  field('peerPublicKey', 'PublicKey'),
+                  field('presharedKey', 'PresharedKey', secret: true),
+                  field('endpoint', 'Endpoint', hint: 'vpn.example.com:51820'),
+                  field('allowedIps', 'AllowedIPs', hint: '10.8.0.0/24'),
+                  field('keepalive', 'PersistentKeepalive', hint: '25'),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: showKeys,
+                    title: Text(l.showKeys),
+                    onChanged: (v) => set(() => showKeys = v ?? false),
+                  ),
+                  if (error != null) Text(error!, style: TextStyle(color: t.error)),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.cancel)),
+              FilledButton(
+                onPressed: () {
+                  if (c['privateKey']!.text.trim().isEmpty || c['peerPublicKey']!.text.trim().isEmpty) {
+                    set(() => error = l.wgKeysRequired);
+                  } else if (parseAddress(c['endpoint']!.text, defaultPort: 51820) == null) {
+                    set(() => error = l.invalidAddress);
+                  } else {
+                    Navigator.pop(dc, true);
+                  }
+                },
+                child: Text(l.save),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    final values = {for (final e in c.entries) e.key: e.value.text.trim()};
+    for (final x in c.values) {
+      x.dispose();
+    }
+    if (ok != true || !context.mounted) return;
+    List<String> split(String s) => s.split(',').map((x) => x.trim()).where((x) => x.isNotEmpty).toList();
+    final config = <String, dynamic>{
+      ...tu.config,
+      'addresses': split(values['addresses']!),
+      'dns': split(values['dns']!),
+      'mtu': int.tryParse(values['mtu']!),
+      'peerPublicKey': values['peerPublicKey'],
+      'endpoint': values['endpoint'],
+      'allowedIps': split(values['allowedIps']!),
+      'keepalive': int.tryParse(values['keepalive']!),
+    }..removeWhere((_, v) => v == null);
+    final secrets = {
+      'privateKey': values['privateKey']!,
+      if (values['presharedKey']!.isNotEmpty) 'presharedKey': values['presharedKey']!,
+    };
+    final name = values['name']!.isEmpty ? tu.name : values['name']!;
+    await _saveTunnelChecked(context, id: tu.id, name: name, config: config, secrets: secrets);
+  }
+
+  /// Рядок тунелю: адреса → сервер, стан і затримка; перевірити, оновити з .conf, редагувати, видалити.
+  Widget _tunnelTile(BuildContext context, TunnelProfile tu) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final health = AppScope.of(context).sessions.health;
+    return ListenableBuilder(
+      listenable: health,
+      builder: (context, _) {
+        final s = health.statusOf(tu.id);
+        final (status, color) = switch (s.state) {
+          HealthState.ok => (l.healthOk(s.latencyMs ?? 0), t.ok),
+          HealthState.failed => (l.healthError(s.error ?? TunnelError.failed), t.error),
+          HealthState.checking => (l.healthChecking, t.textMuted),
+          HealthState.unknown => (l.healthUnknown, t.textMuted),
+        };
+        return ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.shield_outlined, color: s.state == HealthState.ok ? t.ok : null),
+          title: Text(tu.name),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                '${tunnelAddress(tu.config) ?? ''} → ${tu.config['endpoint'] ?? ''} · ${l.pcCount(repo.usersOfTunnel(tu.id))}',
+                style: t.mono),
+            Text(status, style: TextStyle(color: color, fontSize: 12.5)),
+          ]),
+          isThreeLine: true,
+          trailing: Wrap(children: [
+            IconButton(
+              tooltip: l.checkNow,
+              icon: s.state == HealthState.checking
+                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.network_check),
+              onPressed: s.state == HealthState.checking ? null : () => health.check(tu.id),
+            ),
+            IconButton(
+              tooltip: l.wgUpdateFromConf,
+              icon: const Icon(Icons.sync),
+              onPressed: () => _importWireGuard(context, into: tu),
+            ),
+            IconButton(tooltip: l.edit, icon: const Icon(Icons.edit_outlined), onPressed: () => _editTunnel(context, tu)),
+            IconButton(
+              tooltip: l.delete,
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _guardedDelete(context, (force) => repo.deleteTunnel(tu.id, force: force)),
+            ),
+          ]),
+        );
+      },
+    );
   }
 
   @override
@@ -441,19 +615,7 @@ class _RoutesTab extends StatelessWidget {
       _caption(context, l.builtInTunnels),
       Text(l.tunnelsHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
       const SizedBox(height: 8),
-      for (final tu in repo.tunnels.values)
-        ListTile(
-          leading: const Icon(Icons.shield_outlined),
-          title: Text(tu.name),
-          subtitle: Text(
-              '${tunnelAddress(tu.config) ?? ''} → ${tu.config['endpoint'] ?? ''} · ${l.pcCount(repo.usersOfTunnel(tu.id))}',
-              style: t.mono),
-          trailing: IconButton(
-            tooltip: l.delete,
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _guardedDelete(context, (force) => repo.deleteTunnel(tu.id, force: force)),
-          ),
-        ),
+      for (final tu in repo.tunnels.values) _tunnelTile(context, tu),
       Wrap(spacing: 8, children: [
         TextButton.icon(
           icon: const Icon(Icons.file_open_outlined),

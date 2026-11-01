@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../security/app_lock.dart';
+import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
+import 'dialogs.dart';
 
 /// Показує [child] лише після PIN-коду чи відбитка / Windows Hello, якщо блокування ввімкнено.
 class LockGate extends StatefulWidget {
@@ -181,6 +183,23 @@ Future<String?> askNewPin(BuildContext context) {
       },
     ),
   );
+}
+
+/// Дозвіл на чутливу дію (редагування ключів тунелю): PIN-код MHRD або відбиток / Windows Hello.
+/// Без PIN і без Windows Hello — підказка ввімкнути блокування, дії немає.
+Future<bool> authorizeSensitive(BuildContext context, Repository repo) async {
+  final l = context.l10n;
+  final lock = AppLock(repo);
+  if (repo.settings.lockEnabled) {
+    if (repo.settings.lockBiometric && await lock.unlockWithBiometric(l.authEditReason)) return true;
+    if (!context.mounted) return false;
+    final ok = await confirmPin(context, lock);
+    if (!ok && context.mounted) toast(context, l.pinWrong);
+    return ok;
+  }
+  if (await lock.biometricAvailable()) return lock.unlockWithBiometric(l.authEditReason);
+  if (context.mounted) toast(context, l.authNeedPin);
+  return false;
 }
 
 /// Діалог «поточний PIN» (щоб вимкнути блокування). true — PIN правильний.

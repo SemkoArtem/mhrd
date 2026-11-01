@@ -1856,6 +1856,42 @@ abstract class AppLocalizations {
   /// **'Відбиток / Windows Hello'**
   String get unlockBiometric;
 
+  /// No description provided for @wgEditTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Налаштування WireGuard'**
+  String get wgEditTitle;
+
+  /// No description provided for @wgUpdateFromConf.
+  ///
+  /// In uk, this message translates to:
+  /// **'Оновити з .conf (ПК лишаються на цьому тунелі)'**
+  String get wgUpdateFromConf;
+
+  /// No description provided for @wgKeysRequired.
+  ///
+  /// In uk, this message translates to:
+  /// **'Потрібні PrivateKey і PublicKey сервера.'**
+  String get wgKeysRequired;
+
+  /// No description provided for @showKeys.
+  ///
+  /// In uk, this message translates to:
+  /// **'Показати ключі'**
+  String get showKeys;
+
+  /// No description provided for @authEditReason.
+  ///
+  /// In uk, this message translates to:
+  /// **'Редагування ключів тунелю MHRD'**
+  String get authEditReason;
+
+  /// No description provided for @authNeedPin.
+  ///
+  /// In uk, this message translates to:
+  /// **'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.'**
+  String get authNeedPin;
+
   /// No description provided for @checkingRoute.
   ///
   /// In uk, this message translates to:

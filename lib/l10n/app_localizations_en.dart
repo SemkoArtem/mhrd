@@ -1002,6 +1002,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unlockBiometric => 'Fingerprint / Windows Hello';
 
   @override
+  String get wgEditTitle => 'WireGuard settings';
+
+  @override
+  String get wgUpdateFromConf => 'Update from .conf (PCs stay on this tunnel)';
+
+  @override
+  String get wgKeysRequired =>
+      'PrivateKey and the server\'s PublicKey are required.';
+
+  @override
+  String get showKeys => 'Show keys';
+
+  @override
+  String get authEditReason => 'Editing MHRD tunnel keys';
+
+  @override
+  String get authNeedPin =>
+      'To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.';
+
+  @override
   String get checkingRoute => 'Checking the connection…';
 
   @override

@@ -1002,6 +1002,26 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unlockBiometric => 'Відбиток / Windows Hello';
 
   @override
+  String get wgEditTitle => 'Налаштування WireGuard';
+
+  @override
+  String get wgUpdateFromConf =>
+      'Оновити з .conf (ПК лишаються на цьому тунелі)';
+
+  @override
+  String get wgKeysRequired => 'Потрібні PrivateKey і PublicKey сервера.';
+
+  @override
+  String get showKeys => 'Показати ключі';
+
+  @override
+  String get authEditReason => 'Редагування ключів тунелю MHRD';
+
+  @override
+  String get authNeedPin =>
+      'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.';
+
+  @override
   String get checkingRoute => 'Перевіряю з\'єднання…';
 
   @override
