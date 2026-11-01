@@ -1892,6 +1892,12 @@ abstract class AppLocalizations {
   /// **'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.'**
   String get authNeedPin;
 
+  /// No description provided for @sessionStartFailed.
+  ///
+  /// In uk, this message translates to:
+  /// **'Не вдалося запустити сеанс: {detail}'**
+  String sessionStartFailed(String detail);
+
   /// No description provided for @checkingRoute.
   ///
   /// In uk, this message translates to:

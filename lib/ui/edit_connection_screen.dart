@@ -99,6 +99,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       text = l.healthError(e.error);
     } on RouteException catch (e) {
       text = l.routeError(e.error);
+    } catch (e) {
+      text = '$e'; // щоб кнопка не лишилась назавжди «перевіряю»
     }
     if (!mounted) return;
     setState(() {

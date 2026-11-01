@@ -143,6 +143,10 @@ class RouteHealth extends ChangeNotifier {
       result = RouteStatus(HealthState.failed, error: e.error, detail: e.detail, checkedAt: DateTime.now());
     } on RouteException catch (e) {
       result = RouteStatus(HealthState.failed, error: e.error, checkedAt: DateTime.now());
+    } catch (e) {
+      // Будь-що інше (не запустився mhrd-tunnel, збій сокета…) — теж «не працює», а не вічне
+      // «Перевіряю…» з вимкненою кнопкою оновлення.
+      result = RouteStatus(HealthState.failed, error: TunnelError.failed, detail: '$e', checkedAt: DateTime.now());
     }
     // Профіль могли видалити, поки йшла перевірка.
     if (repo.tunnels.containsKey(id) || repo.proxies.containsKey(id)) _set(id, result);
@@ -285,6 +289,8 @@ Future<void> _socks5(Socket s, _Reader r, String user, String password, String? 
   if (hello[1] != method) throw ProxyException(ProxyError.protocol, 'method ${hello[1]}');
   if (method == 0x02) {
     final u = utf8.encode(user), pw = utf8.encode(password);
+    // RFC 1929: довжина — один байт; довше — такий логін SOCKS5 передати не може.
+    if (u.length > 255 || pw.length > 255) throw const ProxyException(ProxyError.auth, 'login or password > 255 bytes');
     s.add([1, u.length, ...u, pw.length, ...pw]); // RFC 1929
     final auth = await r.take(2);
     if (auth[1] != 0) throw const ProxyException(ProxyError.auth);

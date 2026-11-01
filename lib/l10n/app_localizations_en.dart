@@ -1022,6 +1022,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.';
 
   @override
+  String sessionStartFailed(String detail) {
+    return 'Couldn\'t start the session: $detail';
+  }
+
+  @override
   String get checkingRoute => 'Checking the connection…';
 
   @override

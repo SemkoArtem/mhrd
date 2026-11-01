@@ -38,6 +38,8 @@ class ProcessChannel implements SessionChannel {
   ProcessChannel._(this._p) {
     // stderr треба читати, інакше процес зупиниться, коли буфер заповниться.
     _p.stderr.listen((d) => stderrTail.add(d), onError: (_) {});
+    // Запис у вже завершений процес дає помилку асинхронно — без цього вона б вилетіла необробленою.
+    _p.stdin.done.catchError((Object _) {});
   }
 
   final Process _p;

@@ -90,7 +90,10 @@ func main() {
 				continue
 			}
 			if m.WatchPid > 0 {
-				watch <- m.WatchPid
+				select {
+				case watch <- m.WatchPid:
+				default: // PID уже є — повторний не має заблокувати читання stdin (і заміри затримки)
+				}
 			}
 			if m.Ping {
 				select {

@@ -63,7 +63,19 @@ typedef struct
 	char* winStrings[19];      /* копії рядків для win (живуть до кінця процесу) */
 	volatile LONG reconnecting;   /* зв'язок відновлюється — ввід із вікна не надсилаємо */
 	CRITICAL_SECTION bufLock;     /* буфер кадру: FreeRDP замінює, вікно читає */
+	/* Ввід із вікна (свій потік) іде у FreeRDP лише під цим замком і лише коли [online]: потік FreeRDP
+	 * знімає [online] під ним же перед перепідключенням і відключенням — тож ввід ніколи не потрапить
+	 * у транспорт чи канал, які саме перестворюються або звільняються. */
+	CRITICAL_SECTION inputLock;
+	BOOL online;
 } MhrdContext;
+
+static void set_online(MhrdContext* m, BOOL on)
+{
+	EnterCriticalSection(&m->inputLock);
+	m->online = on;
+	LeaveCriticalSection(&m->inputLock);
+}
 
 static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height);
 static SSIZE_T mhrd_retry_dialog(freerdp* instance, const char* what, size_t current, void* userarg);
@@ -260,10 +272,13 @@ static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height)
 		height = DISPLAY_CONTROL_MAX_MONITOR_HEIGHT;
 	width &= ~1u;
 
-	if (!m->disp || !m->dispReady || !m->painted)
+	/* Кличуть і потік FreeRDP, і вікно — канал і запит під inputLock (замок повторно входимий). */
+	EnterCriticalSection(&m->inputLock);
+	if (!m->online || !m->disp || !m->dispReady || !m->painted)
 	{
 		m->wantWidth = width; /* надішлемо, щойно канал буде готовий і сеанс намалює перший кадр */
 		m->wantHeight = height;
+		LeaveCriticalSection(&m->inputLock);
 		return;
 	}
 	m->wantWidth = m->wantHeight = 0;
@@ -278,6 +293,7 @@ static void send_monitor_layout(MhrdContext* m, UINT32 width, UINT32 height)
 	layout.DeviceScaleFactor = m->deviceScale;
 	UINT rc = m->disp->SendMonitorLayout(m->disp, 1, &layout);
 	(void)rc;
+	LeaveCriticalSection(&m->inputLock);
 }
 
 static UINT mhrd_disp_caps(DispClientContext* disp, UINT32 maxMonitors, UINT32 factorA, UINT32 factorB)
@@ -305,9 +321,11 @@ static void mhrd_channel_connected(void* context, const ChannelConnectedEventArg
 	}
 	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
 	{
+		EnterCriticalSection(&m->inputLock); /* вікно може саме просити нову роздільність */
 		m->disp = (DispClientContext*)e->pInterface;
 		m->disp->custom = m;
 		m->disp->DisplayControlCaps = mhrd_disp_caps;
+		LeaveCriticalSection(&m->inputLock);
 	}
 	else
 		freerdp_client_OnChannelConnectedEventHandler(context, e);
@@ -323,8 +341,10 @@ static void mhrd_channel_disconnected(void* context, const ChannelDisconnectedEv
 	}
 	else if (strcmp(e->name, DISP_DVC_CHANNEL_NAME) == 0)
 	{
+		EnterCriticalSection(&m->inputLock);
 		m->disp = NULL;
 		m->dispReady = FALSE;
+		LeaveCriticalSection(&m->inputLock);
 	}
 	else
 		freerdp_client_OnChannelDisconnectedEventHandler(context, e);
@@ -825,28 +845,44 @@ static const uint8_t* host_buffer(void* ctx, uint32_t* width, uint32_t* height, 
 	return (const uint8_t*)m->shm.data;
 }
 
-/* Поки FreeRDP відновлює зв'язок, транспорт перестворюється — ввід туди не пишемо. */
-static BOOL input_allowed(void* ctx)
+/* Ввід із вікна — під inputLock і лише поки сеанс на зв'язку (див. MhrdContext.inputLock). */
+static BOOL input_begin(void* ctx)
 {
-	return InterlockedCompareExchange(&((MhrdContext*)ctx)->reconnecting, 0, 0) == 0;
+	MhrdContext* m = (MhrdContext*)ctx;
+	EnterCriticalSection(&m->inputLock);
+	if (m->online)
+		return TRUE;
+	LeaveCriticalSection(&m->inputLock);
+	return FALSE;
+}
+
+static void input_end(void* ctx)
+{
+	LeaveCriticalSection(&((MhrdContext*)ctx)->inputLock);
 }
 
 static void host_key(void* ctx, uint16_t code, BOOL down, BOOL repeat)
 {
-	if (input_allowed(ctx))
-		freerdp_input_send_keyboard_event_ex(((MhrdContext*)ctx)->common.context.input, down, repeat, code);
+	if (!input_begin(ctx))
+		return;
+	freerdp_input_send_keyboard_event_ex(((MhrdContext*)ctx)->common.context.input, down, repeat, code);
+	input_end(ctx);
 }
 
 static void host_mouse(void* ctx, uint16_t flags, uint16_t x, uint16_t y)
 {
-	if (input_allowed(ctx))
-		freerdp_input_send_mouse_event(((MhrdContext*)ctx)->common.context.input, flags, x, y);
+	if (!input_begin(ctx))
+		return;
+	freerdp_input_send_mouse_event(((MhrdContext*)ctx)->common.context.input, flags, x, y);
+	input_end(ctx);
 }
 
 static void host_wheel(void* ctx, int delta, BOOL horizontal, uint16_t x, uint16_t y)
 {
-	if (input_allowed(ctx))
-		send_wheel(((MhrdContext*)ctx)->common.context.input, delta, horizontal, x, y);
+	if (!input_begin(ctx))
+		return;
+	send_wheel(((MhrdContext*)ctx)->common.context.input, delta, horizontal, x, y);
+	input_end(ctx);
 }
 
 static void host_resize(void* ctx, uint32_t width, uint32_t height)
@@ -866,9 +902,11 @@ static void host_close(void* ctx)
 static BOOL host_touch(void* ctx, uint32_t flags, int finger, int x, int y)
 {
 	MhrdContext* m = (MhrdContext*)ctx;
-	if (!m->common.rdpei)
-		return FALSE;
-	return freerdp_client_handle_touch(&m->common, flags, finger, 0, x, y);
+	if (!input_begin(ctx))
+		return (flags & FREERDP_TOUCH_DOWN) == 0; /* немає зв'язку: новий дотик — мишею, решту — ковтаємо */
+	const BOOL ok = m->common.rdpei && freerdp_client_handle_touch(&m->common, flags, finger, 0, x, y);
+	input_end(ctx);
+	return ok;
 }
 
 /* Плашку перетягнули чи змінили її довжину — застосунок запам'ятає для наступних сеансів. */
@@ -981,12 +1019,19 @@ static SSIZE_T mhrd_retry_dialog(freerdp* instance, const char* what, size_t cur
 static BOOL reconnect(MhrdContext* m)
 {
 	freerdp* instance = m->common.context.instance;
+	set_online(m, FALSE); /* транспорт і канали перестворюються — ввід із вікна чекає */
 	InterlockedExchange(&m->reconnecting, 1);
 	send_state(3);
 	if (m->nativeWindow)
 		window_post_reconnecting(1);
 	const BOOL ok = client_auto_reconnect_ex(instance, NULL);
 	InterlockedExchange(&m->reconnecting, 0);
+	if (ok)
+	{
+		set_online(m, TRUE);
+		if (m->wantWidth && m->wantHeight) /* вікно змінило розмір, поки зв'язку не було */
+			send_monitor_layout(m, m->wantWidth, m->wantHeight);
+	}
 	if (m->nativeWindow)
 		window_post_reconnecting(0);
 	WLog_INFO("mhrd", "reconnect %s", ok ? "succeeded" : "gave up");
@@ -1033,7 +1078,9 @@ static void rdp_run(MhrdContext* m)
 	send_state(1);
 	if (freerdp_connect(instance))
 	{
+		set_online(m, TRUE);
 		run_session(m);
+		set_online(m, FALSE); /* до відключення: вікно більше нічого не надсилає */
 		freerdp_disconnect(instance);
 	}
 	send_disconnected(m);
@@ -1085,6 +1132,7 @@ int main(void)
 	MhrdContext* m = (MhrdContext*)ctx;
 
 	InitializeCriticalSection(&m->bufLock);
+	InitializeCriticalSection(&m->inputLock);
 	const BOOL configured = apply_config(m, connect->data, connect->len);
 	memset(connect->data, 0, connect->len); /* у JSON був пароль */
 	free(connect);

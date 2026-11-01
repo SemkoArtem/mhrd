@@ -40,4 +40,21 @@ void main() {
     });
     expect(e.error, TunnelError.endpointDns);
   }, skip: _skip);
+
+  test('перевірка: сервер WireGuard мовчить → handshake (за ~15 с), процес завершився', () async {
+    const key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+    final ch = await TunnelProcess.start(File(_exe).absolute.path);
+    try {
+      await checkTunnel(ch, {
+        'type': 'wireguard',
+        'check': true,
+        'wireguard': {'privateKey': key, 'addresses': ['10.8.0.2/24'], 'peerPublicKey': key, 'endpoint': '127.0.0.1:9'},
+      }).timeout(const Duration(seconds: 40));
+      fail('handshake with nobody should fail');
+    } on TunnelException catch (e) {
+      expect(e.error, TunnelError.handshake);
+    } finally {
+      ch.kill();
+    }
+  }, skip: _skip, timeout: const Timeout(Duration(seconds: 60)));
 }

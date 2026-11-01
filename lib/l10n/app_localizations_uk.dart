@@ -1022,6 +1022,11 @@ class AppLocalizationsUk extends AppLocalizations {
       'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.';
 
   @override
+  String sessionStartFailed(String detail) {
+    return 'Не вдалося запустити сеанс: $detail';
+  }
+
+  @override
   String get checkingRoute => 'Перевіряю з\'єднання…';
 
   @override

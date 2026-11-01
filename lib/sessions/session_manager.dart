@@ -206,7 +206,9 @@ class SessionManager extends ChangeNotifier {
       if (texe == null) throw const RouteException(RouteError.tunnelEngineMissing);
       tunnel = await _tunnelFactory(texe);
       try {
-        port = await openTunnel(tunnel, tunnelReq);
+        // mhrd-tunnel сам обмежує DNS (10 с) і перевірку ПК (20 с); це — запобіжник від зависання.
+        port = await openTunnel(tunnel, tunnelReq).timeout(const Duration(seconds: 60),
+            onTimeout: () => throw const TunnelException(TunnelError.unreachable, 'timeout'));
       } catch (_) {
         tunnel.kill();
         rethrow;

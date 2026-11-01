@@ -14,7 +14,8 @@ typedef TunnelFactory = Future<TunnelChannel> Function(String executable);
 
 class TunnelProcess implements TunnelChannel {
   TunnelProcess._(this._p) {
-    _p.stderr.drain<void>(); // журнал Go не потрібен, але буфер має спорожнятись
+    _p.stderr.drain<void>().catchError((Object _) {}); // журнал Go не потрібен, але буфер має спорожнятись
+    _p.stdin.done.catchError((Object _) {}); // запис у вже завершений процес — не необроблена помилка
   }
 
   final Process _p;

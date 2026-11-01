@@ -306,6 +306,7 @@
   "showKeys": "Show keys",
   "authEditReason": "Editing MHRD tunnel keys",
   "authNeedPin": "To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.",
+  "sessionStartFailed": "Couldn't start the session: {detail}",
   "checkingRoute":"Checking the connection…",
   "saveAnyway": "Save anyway",
   "wgCheckOk": "The tunnel works: the server replied in {ms} ms. Your address in the tunnel is {address}.",

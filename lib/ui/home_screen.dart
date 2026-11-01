@@ -135,6 +135,10 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) toast(context, l.routeError(e.error));
     } on TunnelException catch (e) {
       if (mounted) _showTunnelError(c, e);
+    } catch (e) {
+      // Не запустився процес сеансу чи тунелю (заблокував антивірус, файл пошкоджено…) — кажемо,
+      // а не мовчки нічого не робимо.
+      if (mounted) toast(context, l.sessionStartFailed('$e'));
     }
   }
 

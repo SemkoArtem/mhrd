@@ -337,6 +337,8 @@
   "showKeys": "Показати ключі",
   "authEditReason": "Редагування ключів тунелю MHRD",
   "authNeedPin": "Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.",
+  "sessionStartFailed": "Не вдалося запустити сеанс: {detail}",
+  "@sessionStartFailed": {"placeholders": {"detail": {"type": "String"}}},
   "checkingRoute":"Перевіряю з'єднання…",
   "saveAnyway": "Зберегти все одно",
   "wgCheckOk": "Тунель працює: сервер відповів за {ms} мс. Ваша адреса в тунелі — {address}.",

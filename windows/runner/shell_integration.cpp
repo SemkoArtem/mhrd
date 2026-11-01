@@ -41,8 +41,10 @@ bool ForwardToRunningInstance(const std::string& connect_id) {
   ::AllowSetForegroundWindow(pid);
   COPYDATASTRUCT data{kCopyDataTag, static_cast<DWORD>(connect_id.size()),
                       const_cast<char*>(connect_id.data())};
-  ::SendMessageW(main, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data));
-  return true;
+  // З обмеженням часу: якщо перша копія зависла, ця не має висіти разом із нею.
+  DWORD_PTR reply = 0;
+  return ::SendMessageTimeoutW(main, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data),
+                               SMTO_ABORTIFHUNG, 5000, &reply) != 0;
 }
 
 static ComPtr<IShellLinkW> MakeLink(const std::wstring& exe, const RecentItem& item) {

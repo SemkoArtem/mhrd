@@ -208,6 +208,17 @@ void main() {
       expect(noEngine.statusOf('wg').error, RouteError.tunnelEngineMissing);
     });
 
+    test('mhrd-tunnel не запустився (антивірус тощо) — «не працює», а не вічне «Перевіряю…»', () async {
+      final h = RouteHealth(repo,
+          tunnelPath: 'mhrd-tunnel.exe', tunnelFactory: (_) async => throw const ProcessException('x', [], 'blocked'));
+      addTearDown(h.dispose);
+      await h.check('wg');
+      expect(h.statusOf('wg').state, HealthState.failed);
+      expect(h.statusOf('wg').detail, contains('blocked'));
+      await h.check('wg'); // і можна перевірити знову
+      expect(h.statusOf('wg').state, HealthState.failed);
+    });
+
     test('ще не збережений WireGuard перевіряється з ключами з .conf (перед збереженням)', () async {
       final tun = FakeTunnel([
         {'event': 'ok', 'handshakeMs': 41}

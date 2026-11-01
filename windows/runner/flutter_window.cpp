@@ -84,6 +84,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  shell_channel_ = nullptr;  // канал — до рушія, на якому він висить
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -115,7 +116,9 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
       if (!data || data->dwData != shell::kCopyDataTag) break;
       if (::IsIconic(hwnd)) ::ShowWindow(hwnd, SW_RESTORE);
       ::SetForegroundWindow(hwnd);
-      const std::string id(static_cast<const char*>(data->lpData), data->cbData);
+      const std::string id = data->cbData && data->lpData
+                                 ? std::string(static_cast<const char*>(data->lpData), data->cbData)
+                                 : std::string();
       if (!id.empty() && shell_channel_) {
         shell_channel_->InvokeMethod("connect", std::make_unique<EncodableValue>(id));
       }

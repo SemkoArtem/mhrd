@@ -24,7 +24,8 @@ class _LockGateState extends State<LockGate> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_locked != null) return;
-    AppLock(AppScope.of(context).repo).isRequired().then((r) {
+    // Сховище секретів не відповіло — краще відкрити, ніж назавжди лишити порожній екран.
+    AppLock(AppScope.of(context).repo).isRequired().catchError((Object _) => false).then((r) {
       if (mounted) setState(() => _locked = r);
     });
   }
@@ -68,7 +69,8 @@ class _LockScreenState extends State<LockScreen> {
   Future<void> _submit() async {
     if (_checking || _pin.text.isEmpty) return;
     setState(() => _checking = true);
-    final ok = await _lock.checkPin(_pin.text);
+    // Збій сховища — як неправильний PIN, а не вічно вимкнена кнопка.
+    final ok = await _lock.checkPin(_pin.text).catchError((Object _) => false);
     if (!mounted) return;
     if (ok) {
       widget.onUnlocked();

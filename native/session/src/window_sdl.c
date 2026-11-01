@@ -145,6 +145,7 @@ static struct
 	Uint64 hoverSince; /* коли мишу навели на поточну кнопку */
 	BOOL tooltipShown;
 
+	SDL_AtomicInt quit;         /* сеанс завершився — вікну пора закриватись */
 	SDL_AtomicInt reconnecting; /* номер спроби перепідключення, 0 — зв'язок є (пише потік FreeRDP) */
 	SDL_Texture* reconnectLabel; /* «Перепідключення… спроба 2 з 5» — перебудовується зі спробою */
 	SDL_Texture* cancelLabel;
@@ -250,12 +251,13 @@ static void init_scancodes(void)
 
 /* ── Події від потоку FreeRDP ─────────────────────────────────── */
 
-static void push(int ev)
+/* false — подію не прийнято (черга SDL переповнена). */
+static bool push(int ev)
 {
 	SDL_Event e;
 	SDL_zero(e);
 	e.type = W.evBase + (Uint32)ev;
-	SDL_PushEvent(&e);
+	return SDL_PushEvent(&e);
 }
 
 void window_post_surface(void)
@@ -281,9 +283,10 @@ void window_post_frame(int x, int y, int w, int h)
 		W.dy1 = SDL_max(W.dy1, y + h);
 	}
 	SDL_UnlockMutex(W.dirtyLock);
-	/* Одна подія на кадр вікна: решта ділянок просто доєднується до прямокутника. */
-	if (SDL_CompareAndSwapAtomicInt(&W.framePending, 0, 1))
-		push(EV_FRAME);
+	/* Одна подія на кадр вікна: решта ділянок просто доєднується до прямокутника. Подію не прийняли —
+	 * знімаємо позначку, інакше «кадр уже чекає» лишилось би назавжди і картинка застигла б. */
+	if (SDL_CompareAndSwapAtomicInt(&W.framePending, 0, 1) && !push(EV_FRAME))
+		SDL_SetAtomicInt(&W.framePending, 0);
 }
 
 void window_post_focus(void)
@@ -293,6 +296,8 @@ void window_post_focus(void)
 
 void window_post_quit(void)
 {
+	/* Прапорець — на випадок, якщо подія загубиться: цикл вікна перевіряє його щонайменше раз на 100 мс. */
+	SDL_SetAtomicInt(&W.quit, 1);
 	push(EV_QUIT);
 }
 
@@ -954,6 +959,8 @@ static void save_thumbnail(void)
 {
 	if (!W.cfg.thumbnailPath || SDL_GetAtomicInt(&W.reconnecting))
 		return;
+	/* Під замком буфера — лише зменшення (кілька мс), запис на диск — уже без нього: FreeRDP не чекає. */
+	SDL_Surface* rgb = NULL;
 	W.host.lock(W.host.ctx);
 	uint32_t bw = 0, bh = 0, stride = 0;
 	const uint8_t* buf = W.host.buffer(W.host.ctx, &bw, &bh, &stride);
@@ -963,18 +970,28 @@ static void save_thumbnail(void)
 		const int tw = SDL_min(THUMB_W, (int)bw), th = SDL_max(1, (int)((float)bh * (float)tw / (float)bw));
 		SDL_Surface* scaled = SDL_CreateSurface(tw, th, SDL_PIXELFORMAT_XRGB8888);
 		if (src && scaled && SDL_BlitSurfaceScaled(src, NULL, scaled, NULL, SDL_SCALEMODE_LINEAR))
-		{
-			SDL_Surface* rgb = SDL_ConvertSurface(scaled, SDL_PIXELFORMAT_BGR24);
-			if (rgb)
-			{
-				SDL_SaveBMP(rgb, W.cfg.thumbnailPath);
-				SDL_DestroySurface(rgb);
-			}
-		}
+			rgb = SDL_ConvertSurface(scaled, SDL_PIXELFORMAT_BGR24);
 		SDL_DestroySurface(scaled);
 		SDL_DestroySurface(src);
 	}
 	W.host.unlock(W.host.ctx);
+	if (!rgb)
+		return;
+	/* Спершу в тимчасовий файл, потім заміною — застосунок ніколи не прочитає недописаний. */
+	char tmp[1024];
+	SDL_snprintf(tmp, sizeof(tmp), "%s.tmp", W.cfg.thumbnailPath);
+	if (SDL_SaveBMP(rgb, tmp))
+	{
+#ifdef _WIN32
+		wchar_t wtmp[1024], wdst[1024];
+		if (MultiByteToWideChar(CP_UTF8, 0, tmp, -1, wtmp, 1024) > 0 &&
+		    MultiByteToWideChar(CP_UTF8, 0, W.cfg.thumbnailPath, -1, wdst, 1024) > 0)
+			MoveFileExW(wtmp, wdst, MOVEFILE_REPLACE_EXISTING);
+#else
+		rename(tmp, W.cfg.thumbnailPath);
+#endif
+	}
+	SDL_DestroySurface(rgb);
 }
 
 static void apply_keyboard_grab(void)
@@ -1554,6 +1571,8 @@ static void on_finger(const SDL_TouchFingerEvent* e)
 			if (W.host.touch && native_touch(e, px, py))
 				return;
 		}
+		if (W.gesture == G_BAR)
+			return; /* плашку тягне один палець — інші не беремо, щоб вона не стрибала */
 		if (W.nfingers >= 2)
 			return; /* без rdpei третій і далі пальці не беремо */
 		W.fingers[W.nfingers++] = (TouchFinger){ e->fingerID, px, py, px, py, 0 };
@@ -1702,6 +1721,32 @@ static void on_finger(const SDL_TouchFingerEvent* e)
 		W.gesture = G_NONE;
 }
 
+/* Вікно втратило фокус посеред жесту чи перетягування плашки: усе відпускаємо, інакше на ПК лишилась би
+ * затиснута кнопка миші чи «вічний» дотик, а плашка їздила б за мишею без натиснутої кнопки. */
+static void cancel_pointer(void)
+{
+	if (W.drag != DRAG_NONE)
+		drag_end();
+	switch (W.gesture)
+	{
+		case G_DRAG:
+			remote_mouse(W.fingers[0].x, W.fingers[0].y, PTR_FLAGS_BUTTON1);
+			break;
+		case G_NATIVE:
+			for (int i = 0; i < W.nfingers; i++)
+			{
+				uint16_t x = 0, y = 0;
+				px_to_remote(W.fingers[i].x, W.fingers[i].y, &x, &y);
+				W.host.touch(W.host.ctx, FREERDP_TOUCH_UP, W.fingers[i].slot, x, y);
+			}
+			break;
+		default:
+			break;
+	}
+	W.gesture = G_NONE;
+	W.nfingers = 0;
+}
+
 /* Палець тримають на місці — правий клік (як довге натискання на телефоні). */
 static void long_press_if_due(void)
 {
@@ -1768,7 +1813,11 @@ void window_run(void)
 				{
 					case EV_SURFACE:
 						if (!W.window)
+						{
 							create_window();
+							if (!W.window)
+								W.host.close(W.host.ctx); /* вікно не створилось — невидимий сеанс нікому не потрібен */
+						}
 						if (W.window)
 						{
 							upload(TRUE);
@@ -1841,6 +1890,7 @@ void window_run(void)
 						break;
 					case SDL_EVENT_WINDOW_FOCUS_LOST:
 						release_keys(); /* щоб на ПК не «залип» Ctrl чи Alt */
+						cancel_pointer();
 						break;
 					case SDL_EVENT_WINDOW_MOUSE_LEAVE:
 						/* Миша вийшла з вікна — підказку прибираємо одразу, плашку ховаємо із затримкою. */
@@ -1893,6 +1943,8 @@ void window_run(void)
 			save_thumbnail();
 			W.thumbAt = SDL_GetTicks() + THUMB_EVERY_MS;
 		}
+		if (SDL_GetAtomicInt(&W.quit))
+			quit = TRUE; /* EV_QUIT міг загубитись у переповненій черзі */
 		hide_bar_if_due();
 		long_press_if_due();
 		if (W.window && W.hoverButton != BTN_NONE && !W.tooltipShown &&
