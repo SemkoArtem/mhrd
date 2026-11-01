@@ -136,6 +136,9 @@ class TunnelProfile {
 
   String secretKey(String field) => 'mhrd.tunnel.$id.$field';
 
+  /// Назва для людей: своя або «WireGuard · сервер», якщо назви немає.
+  String get label => name.trim().isNotEmpty ? name.trim() : 'WireGuard · ${config['endpoint'] ?? ''}';
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -173,6 +176,10 @@ class ProxyProfile {
   final String username;
 
   String get secretKey => 'mhrd.proxy.$id';
+
+  /// Назва для людей: своя або «SOCKS5 · host:port», якщо назви немає.
+  String get label =>
+      name.trim().isNotEmpty ? name.trim() : '${type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · $host:$port';
 
   Map<String, dynamic> toJson() => {
         'id': id,

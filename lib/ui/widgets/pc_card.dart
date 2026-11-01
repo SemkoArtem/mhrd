@@ -51,8 +51,8 @@ void _tap(PcActions a, PcCardState s, Connection c) {
 String routeLabel(AppLocalizations l, Repository repo, Connection c) {
   final base = switch (c.route) {
     RouteKind.direct => l.routeDirect,
-    RouteKind.tunnel => repo.tunnels[c.routeRefId]?.name ?? l.routeTunnelMissing,
-    RouteKind.proxy => repo.proxies[c.routeRefId]?.name ?? l.routeProxyMissing,
+    RouteKind.tunnel => repo.tunnels[c.routeRefId]?.label ?? l.routeTunnelMissing,
+    RouteKind.proxy => repo.proxies[c.routeRefId]?.label ?? l.routeProxyMissing,
   };
   final gw = repo.gateways[c.gatewayId];
   return gw == null ? base : (c.route == RouteKind.direct ? l.routeGateway(gw.label) : l.routeWithGateway(base));

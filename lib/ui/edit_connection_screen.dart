@@ -190,8 +190,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final gateways = repo.gateways.values.toList();
     final creds = _c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
     final routeOptions = <RouteKind, List<(String, String)>>{
-      RouteKind.tunnel: repo.tunnels.values.map((x) => (x.id, x.name)).toList(),
-      RouteKind.proxy: repo.proxies.values.map((x) => (x.id, x.name)).toList(),
+      RouteKind.tunnel: repo.tunnels.values.map((x) => (x.id, x.label)).toList(),
+      RouteKind.proxy: repo.proxies.values.map((x) => (x.id, x.label)).toList(),
     };
 
     return [

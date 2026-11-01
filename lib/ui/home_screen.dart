@@ -887,12 +887,12 @@ class _HomeScreenState extends State<HomeScreen> {
       listenable: health,
       builder: (context, _) => Column(children: [
         for (final x in tunnels)
-          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.config['endpoint'] ?? 'WireGuard'}',
+          _routeItem(context, health, x.id, x.label,
               Icons.shield_outlined,
               // Адреса цього ПК у тунелі — видно, що WireGuard піднявся і з якою IP ви в мережі.
               address: tunnelAddress(x.config)),
         for (final x in proxies)
-          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.host}:${x.port}', Icons.alt_route,
+          _routeItem(context, health, x.id, x.label, Icons.alt_route,
               address: '${x.host}:${x.port}'),
       ]),
     );

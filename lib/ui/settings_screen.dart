@@ -410,7 +410,7 @@ class _RoutesTab extends StatelessWidget {
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.swap_horiz, color: s.state == HealthState.ok ? t.ok : null),
-          title: Text(p.name.trim().isEmpty ? '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}' : p.name),
+          title: Text(p.label),
           subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(
                 '${p.type == ProxyType.http ? 'HTTP' : 'SOCKS5'} · ${p.host}:${p.port}'

@@ -31,6 +31,13 @@ void main() {
     expect(back.defaultScreen, 'builtin:fhd');
   });
 
+  test('проксі й тунель без назви мають підпис (у виборі маршруту ПК не порожньо)', () {
+    expect(const ProxyProfile(id: 'p', name: '', host: 'proxy.lan', port: 1080).label, 'SOCKS5 · proxy.lan:1080');
+    expect(const ProxyProfile(id: 'p', name: ' Офіс ', host: 'x', port: 1).label, 'Офіс');
+    expect(const TunnelProfile(id: 't', name: '', type: TunnelType.wireguard, config: {'endpoint': 'vpn:51820'}).label,
+        'WireGuard · vpn:51820');
+  });
+
   group('parseAddress', () {
     test('ім\'я без порту → 3389', () {
       expect(parseAddress('MyDesktop'), const ParsedAddress('MyDesktop', 3389));
