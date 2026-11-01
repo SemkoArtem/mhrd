@@ -8,14 +8,16 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'backup/auto_backup.dart';
+import 'platform/shell_bridge.dart';
 import 'sessions/session_manager.dart';
 import 'storage/database.dart';
 import 'storage/repository.dart';
 import 'storage/secret_store.dart';
 import 'util/app_files.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  ShellBridge.instance.handleArgs(args); // запуск зі списку «Недавні» на значку: --connect <id>
   // Керування вікном (повний екран сеансу) — лише на десктопах.
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) await windowManager.ensureInitialized();
   LicenseRegistry.addLicense(_fontLicenses);

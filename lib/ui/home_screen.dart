@@ -10,6 +10,7 @@ import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../platform/shell_bridge.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
 import '../storage/repository.dart';
@@ -43,7 +44,36 @@ class _HomeScreenState extends State<HomeScreen> {
   final _searchFocus = FocusNode();
 
   @override
+  void initState() {
+    super.initState();
+    ShellBridge.instance.pendingConnect.addListener(_onShellConnect);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _recentSource = repo..addListener(_syncRecent);
+      _syncRecent();
+      _onShellConnect(); // запустили зі списку «Недавні» — підключаємось одразу
+    });
+  }
+
+  /// ПК вибрали в «Недавніх» на значку MHRD у панелі завдань.
+  void _onShellConnect() {
+    final id = ShellBridge.instance.pendingConnect.value;
+    final c = id == null ? null : repo.connections[id];
+    if (c == null || !mounted) return;
+    ShellBridge.instance.pendingConnect.value = null;
+    _connect(c);
+  }
+
+  Repository? _recentSource; // за ним стежимо для «Недавніх» (у dispose контексту вже не можна)
+
+  void _syncRecent() {
+    if (mounted) ShellBridge.instance.setRecent(context.l10n.recent, ShellBridge.recent(repo.connections.values));
+  }
+
+  @override
   void dispose() {
+    ShellBridge.instance.pendingConnect.removeListener(_onShellConnect);
+    _recentSource?.removeListener(_syncRecent);
     _quick.dispose();
     _quickFocus.dispose();
     _searchFocus.dispose();

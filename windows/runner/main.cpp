@@ -1,8 +1,10 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shobjidl.h>
 #include <windows.h>
 
 #include "flutter_window.h"
+#include "shell_integration.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -21,6 +23,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
+
+  // Один екземпляр MHRD: друга копія (зокрема з «Недавніх» на значку) передає першій, який ПК
+  // відкрити, і завершується.
+  std::string connect_id;
+  for (size_t i = 0; i + 1 < command_line_arguments.size(); i++) {
+    if (command_line_arguments[i] == "--connect") connect_id = command_line_arguments[i + 1];
+  }
+  if (shell::ForwardToRunningInstance(connect_id)) {
+    ::CoUninitialize();
+    return EXIT_SUCCESS;
+  }
+  ::SetCurrentProcessExplicitAppUserModelID(shell::kAppId);
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
