@@ -148,10 +148,18 @@ class RouteHealth extends ChangeNotifier {
     if (repo.tunnels.containsKey(id) || repo.proxies.containsKey(id)) _set(id, result);
   }
 
-  Future<int> _checkTunnel(TunnelProfile t) async {
+  Future<int> _checkTunnel(TunnelProfile t) async => checkWireGuard(await repo.wireGuardConfig(t));
+
+  /// Рукостискання з сервером WireGuard за налаштуваннями [wireguard] (з ключами) — і для ще не
+  /// збереженого профілю, щоб перевірити його перед збереженням. Повертає мс.
+  Future<int> checkWireGuard(Map<String, Object?> wireguard) async {
     final exe = tunnelPath;
     if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-    final request = {'type': 'wireguard', 'check': true, 'wireguard': await repo.wireGuardConfig(t)};
+    final request = {
+      'type': 'wireguard',
+      'check': true,
+      'wireguard': {...wireguard}..remove('extraPeersIgnored'),
+    };
     final ch = await _tunnelFactory(exe);
     try {
       return await checkTunnel(ch, request).timeout(const Duration(seconds: 30),

@@ -1002,6 +1002,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unlockBiometric => 'Fingerprint / Windows Hello';
 
   @override
+  String get checkingRoute => 'Checking the connection…';
+
+  @override
+  String get saveAnyway => 'Save anyway';
+
+  @override
+  String wgCheckOk(int ms, String address) {
+    return 'The tunnel works: the server replied in $ms ms. Your address in the tunnel is $address.';
+  }
+
+  @override
+  String proxyCheckOk(int ms) {
+    return 'The proxy works, replied in $ms ms.';
+  }
+
+  @override
+  String proxyCheckOkPc(int ms, String pc) {
+    return 'The proxy works and lets you through to \"$pc\" — $ms ms.';
+  }
+
+  @override
   String get checkConnection => 'Check connection';
 
   @override

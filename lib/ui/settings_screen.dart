@@ -10,8 +10,10 @@ import '../app.dart';
 import '../backup/auto_backup.dart';
 import '../backup/backup_service.dart';
 import '../l10n/l10n.dart';
+import '../models/connection.dart';
 import '../models/entities.dart';
 import '../security/app_lock.dart';
+import '../sessions/route_health.dart' show probeProxy;
 import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
@@ -360,10 +362,22 @@ class _RoutesTab extends StatelessWidget {
     if (ok != true) return;
     final a = parseAddress(addr.text, defaultPort: defaultPort())!;
     final username = user.text.trim();
-    await repo.saveProxy(
-      ProxyProfile(id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username),
-      password: username.isEmpty ? '' : (pass.text.isEmpty ? null : pass.text),
+    final profile =
+        ProxyProfile(id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username);
+    // Спершу перевіряємо проксі (і ПК за ним, якщо через нього вже ходить ПК), потім зберігаємо.
+    final password = username.isEmpty
+        ? ''
+        : (pass.text.isNotEmpty ? pass.text : (p == null ? '' : await repo.secrets.read(p.secretKey) ?? ''));
+    final target = repo.connections.values.where((c) => c.route == RouteKind.proxy && c.routeRefId == p?.id).firstOrNull;
+    if (!context.mounted) return;
+    final save = await checkBeforeSave(
+      context,
+      title: profile.name.isEmpty ? '${a.host}:${a.port}' : profile.name,
+      check: () => probeProxy(profile, password: password, targetHost: target?.host, targetPort: target?.port ?? 3389),
+      okText: (ms) => target == null ? l.proxyCheckOk(ms) : l.proxyCheckOkPc(ms, target.displayName),
     );
+    if (!save) return;
+    await repo.saveProxy(profile, password: username.isEmpty ? '' : (pass.text.isEmpty ? null : pass.text));
   }
 
   Future<void> _importWireGuard(BuildContext context) async {
@@ -373,6 +387,16 @@ class _RoutesTab extends StatelessWidget {
     try {
       final conf = parseWireGuardConf(utf8.decode(f.$2, allowMalformed: true));
       final name = f.$1.replaceAll(RegExp(r'\.conf$', caseSensitive: false), '');
+      // Спершу — чи відповідає сервер з цими ключами, і лише потім зберігаємо.
+      if (!context.mounted) return;
+      final health = AppScope.of(context).sessions.health;
+      final save = await checkBeforeSave(
+        context,
+        title: 'WireGuard · $name',
+        check: () => health.checkWireGuard({...conf.config, ...conf.secrets}),
+        okText: (ms) => l.wgCheckOk(ms, tunnelAddress(conf.config) ?? '—'),
+      );
+      if (!save) return;
       await repo.saveTunnel(
         TunnelProfile(
           id: newId(),
@@ -421,7 +445,9 @@ class _RoutesTab extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.shield_outlined),
           title: Text(tu.name),
-          subtitle: Text('${tu.config['endpoint'] ?? ''} · ${l.pcCount(repo.usersOfTunnel(tu.id))}', style: t.mono),
+          subtitle: Text(
+              '${tunnelAddress(tu.config) ?? ''} → ${tu.config['endpoint'] ?? ''} · ${l.pcCount(repo.usersOfTunnel(tu.id))}',
+              style: t.mono),
           trailing: IconButton(
             tooltip: l.delete,
             icon: const Icon(Icons.delete_outline),

@@ -17,6 +17,7 @@ import '../storage/repository.dart';
 import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
 import '../util/rdp_file.dart';
+import '../util/wireguard_conf.dart' show tunnelAddress;
 import '../util/wake_on_lan.dart';
 import 'credential_dialog.dart';
 import 'dialogs.dart';
@@ -887,14 +888,18 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, _) => Column(children: [
         for (final x in tunnels)
           _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.config['endpoint'] ?? 'WireGuard'}',
-              Icons.shield_outlined),
+              Icons.shield_outlined,
+              // Адреса цього ПК у тунелі — видно, що WireGuard піднявся і з якою IP ви в мережі.
+              address: tunnelAddress(x.config)),
         for (final x in proxies)
-          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.host}:${x.port}', Icons.alt_route),
+          _routeItem(context, health, x.id, x.name.isNotEmpty ? x.name : '${x.host}:${x.port}', Icons.alt_route,
+              address: '${x.host}:${x.port}'),
       ]),
     );
   }
 
-  Widget _routeItem(BuildContext context, RouteHealth health, String id, String name, IconData icon) {
+  Widget _routeItem(BuildContext context, RouteHealth health, String id, String name, IconData icon,
+      {String? address}) {
     final t = context.mhrd;
     final l = context.l10n;
     final s = health.statusOf(id);
@@ -923,10 +928,20 @@ class _HomeScreenState extends State<HomeScreen> {
             Icon(icon, size: 15, color: t.textMuted),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: s.state == HealthState.failed ? t.error : t.text, fontSize: 13.5)),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: s.state == HealthState.failed ? t.error : t.text, fontSize: 13.5)),
+                // «10.8.0.2 · 34 мс» — адреса й затримка, коли працює.
+                if (address != null)
+                  Text(
+                    s.state == HealthState.ok && s.latencyMs != null ? '$address · ${l.latencyMs('${s.latencyMs}')}' : address,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontFamily: t.fontMono, color: t.textMuted, fontSize: 11.5),
+                  ),
+              ]),
             ),
             IconButton(
               tooltip: l.checkNow,

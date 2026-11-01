@@ -11,6 +11,7 @@ import 'package:mhrd/sessions/tunnel.dart';
 import 'package:mhrd/storage/database.dart';
 import 'package:mhrd/storage/repository.dart';
 import 'package:mhrd/storage/secret_store.dart';
+import 'package:mhrd/util/wireguard_conf.dart' show tunnelAddress;
 
 /// Фальшивий mhrd-tunnel: на перший запит відповідає подіями зі [script].
 class FakeTunnel implements TunnelChannel {
@@ -205,6 +206,22 @@ void main() {
       addTearDown(noEngine.dispose);
       await noEngine.check('wg');
       expect(noEngine.statusOf('wg').error, RouteError.tunnelEngineMissing);
+    });
+
+    test('ще не збережений WireGuard перевіряється з ключами з .conf (перед збереженням)', () async {
+      final tun = FakeTunnel([
+        {'event': 'ok', 'handshakeMs': 41}
+      ]);
+      final h = RouteHealth(repo, tunnelPath: 'mhrd-tunnel.exe', tunnelFactory: (_) async => tun);
+      addTearDown(h.dispose);
+      final ms = await h.checkWireGuard({'endpoint': 'vpn:51820', 'privateKey': 'K', 'extraPeersIgnored': true});
+      expect(ms, 41);
+      final wg = tun.sent.single['wireguard'] as Map;
+      expect(wg['privateKey'], 'K');
+      expect(wg.containsKey('extraPeersIgnored'), isFalse);
+      expect(tun.sent.single.containsKey('target'), isFalse); // лише рукостискання, без ПК
+      expect(tunnelAddress({'addresses': ['10.8.0.2/32', 'fd00::2/128']}), '10.8.0.2');
+      expect(tunnelAddress(const {}), isNull);
     });
 
     test('затримка до ПК: напряму — з\'єднання з портом RDP, через тунель — ПК крізь тунель', () async {

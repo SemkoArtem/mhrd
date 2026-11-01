@@ -18,6 +18,13 @@ class WireGuardConf {
   final Map<String, String> secrets;
 }
 
+/// Адреса цього пристрою всередині тунелю (перша з Address, без /маски): «10.8.0.2».
+String? tunnelAddress(Map<String, dynamic> config) {
+  final a = config['addresses'];
+  if (a is! List || a.isEmpty) return null;
+  return '${a.first}'.split('/').first;
+}
+
 WireGuardConf parseWireGuardConf(String text) {
   String? section;
   final iface = <String, String>{};

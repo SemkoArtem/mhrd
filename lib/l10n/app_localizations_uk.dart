@@ -1002,6 +1002,27 @@ class AppLocalizationsUk extends AppLocalizations {
   String get unlockBiometric => 'Відбиток / Windows Hello';
 
   @override
+  String get checkingRoute => 'Перевіряю з\'єднання…';
+
+  @override
+  String get saveAnyway => 'Зберегти все одно';
+
+  @override
+  String wgCheckOk(int ms, String address) {
+    return 'Тунель працює: сервер відповів за $ms мс. Ваша адреса в тунелі — $address.';
+  }
+
+  @override
+  String proxyCheckOk(int ms) {
+    return 'Проксі працює, відповів за $ms мс.';
+  }
+
+  @override
+  String proxyCheckOkPc(int ms, String pc) {
+    return 'Проксі працює і пускає до «$pc» — $ms мс.';
+  }
+
+  @override
   String get checkConnection => 'Перевірити з\'єднання';
 
   @override

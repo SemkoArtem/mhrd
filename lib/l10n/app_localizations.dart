@@ -1856,6 +1856,36 @@ abstract class AppLocalizations {
   /// **'Відбиток / Windows Hello'**
   String get unlockBiometric;
 
+  /// No description provided for @checkingRoute.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перевіряю з\'єднання…'**
+  String get checkingRoute;
+
+  /// No description provided for @saveAnyway.
+  ///
+  /// In uk, this message translates to:
+  /// **'Зберегти все одно'**
+  String get saveAnyway;
+
+  /// No description provided for @wgCheckOk.
+  ///
+  /// In uk, this message translates to:
+  /// **'Тунель працює: сервер відповів за {ms} мс. Ваша адреса в тунелі — {address}.'**
+  String wgCheckOk(int ms, String address);
+
+  /// No description provided for @proxyCheckOk.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі працює, відповів за {ms} мс.'**
+  String proxyCheckOk(int ms);
+
+  /// No description provided for @proxyCheckOkPc.
+  ///
+  /// In uk, this message translates to:
+  /// **'Проксі працює і пускає до «{pc}» — {ms} мс.'**
+  String proxyCheckOkPc(int ms, String pc);
+
   /// No description provided for @checkConnection.
   ///
   /// In uk, this message translates to:

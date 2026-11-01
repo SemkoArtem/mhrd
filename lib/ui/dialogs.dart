@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
+import '../sessions/session_manager.dart'
+    show ProbeException, ProxyException, RouteException, TunnelException;
 import '../theme/mhrd_theme.dart';
 
 /// Дата й час для людей: 30.10.2026 20:45 (місцевий час).
@@ -18,6 +20,67 @@ Widget centeredList(List<Widget> children, {required double maxWidth}) => Layout
         return ListView(padding: EdgeInsets.fromLTRB(side, 20, side, 20), children: children);
       },
     );
+
+/// Код помилки з винятку перевірки маршруту (TunnelException, ProxyException, ProbeException,
+/// RouteException) — для [L10nMessages.healthError]; null — невідомий виняток.
+Object? routeErrorOf(Object e) => switch (e) {
+      TunnelException(:final error) => error,
+      ProxyException(:final error) => error,
+      ProbeException(:final error) => error,
+      RouteException(:final error) => error,
+      _ => null,
+    };
+
+/// Перевіряє маршрут перед збереженням: показує, що вийшло, і питає, чи зберегти.
+/// true — зберегти (і коли перевірка не вдалась, якщо людина все одно так вирішила).
+Future<bool> checkBeforeSave(
+  BuildContext context, {
+  required String title,
+  required Future<int> Function() check,
+  required String Function(int ms) okText,
+}) async {
+  final l = context.l10n;
+  final result = check().then<(bool, String)>((ms) => (true, okText(ms)), onError: (Object e) {
+    final code = routeErrorOf(e);
+    return (false, code == null ? '$e' : l.healthError(code));
+  });
+  final r = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dc) => FutureBuilder<(bool, String)>(
+      future: result,
+      builder: (dc, snap) {
+        final t = dc.mhrd;
+        final done = snap.data;
+        return AlertDialog(
+          title: Text(title),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: done == null
+                ? Row(children: [
+                    const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 14),
+                    Expanded(child: Text(l.checkingRoute)),
+                  ])
+                : Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(done.$1 ? Icons.check_circle_outline : Icons.error_outline, color: done.$1 ? t.ok : t.error),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(done.$2)),
+                  ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.cancel)),
+            FilledButton(
+              onPressed: done == null ? null : () => Navigator.pop(dc, true),
+              child: Text(done == null || done.$1 ? l.save : l.saveAnyway),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+  return r == true;
+}
 
 void toast(BuildContext context, String text, {SnackBarAction? action}) {
   ScaffoldMessenger.of(context)
