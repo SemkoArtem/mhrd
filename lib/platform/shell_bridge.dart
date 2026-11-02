@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/connection.dart';
+import '../models/entities.dart';
 import 'portable.dart';
 
 /// Зв'язок з оболонкою Windows (windows/runner/shell_integration.cpp): список «Недавні» на
@@ -17,7 +18,18 @@ class ShellBridge {
   static const _channel = MethodChannel('mhrd/shell');
 
   /// id ПК, до якого просять підключитись (з аргументів запуску чи від другої копії MHRD).
+  /// Ярлик окремого акаунта додає його id: `<ПК>/<акаунт>` — див. [parseConnectTarget].
   final pendingConnect = ValueNotifier<String?>(null);
+
+  static const accountSeparator = '/';
+
+  /// `<ПК>` або `<ПК>/<акаунт>` → (id ПК, id акаунта або null).
+  static (String, String?) parseConnectTarget(String target) {
+    final i = target.indexOf(accountSeparator);
+    if (i < 0) return (target, null);
+    final account = target.substring(i + 1);
+    return (target.substring(0, i), account.isEmpty ? null : account);
+  }
 
   String? _lastRecent;
 
@@ -52,11 +64,14 @@ class ShellBridge {
     }
   }
 
-  /// Ярлик на робочому столі, що одразу підключає до ПК. false — не вдалося.
-  Future<bool> createShortcut(Connection c) async {
+  /// Ярлик на робочому столі, що одразу підключає до ПК — акаунтом ПК за замовчуванням або [as]
+  /// (тоді `--connect <ПК>/<акаунт>`). false — не вдалося.
+  Future<bool> createShortcut(Connection c, {Credential? as}) async {
     if (!Platform.isWindows) return false;
+    final id = as == null ? c.id : '${c.id}$accountSeparator${as.id}';
+    final name = as == null ? c.displayName : '${c.displayName} — ${as.label}';
     try {
-      await _channel.invokeMethod('createShortcut', {'id': c.id, 'name': c.displayName});
+      await _channel.invokeMethod('createShortcut', {'id': id, 'name': name});
       return true;
     } on MissingPluginException {
       return false;

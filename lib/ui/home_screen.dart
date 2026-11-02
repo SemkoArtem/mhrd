@@ -58,11 +58,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// ПК вибрали в «Недавніх» на значку MHRD у панелі завдань.
   void _onShellConnect() {
-    final id = ShellBridge.instance.pendingConnect.value;
-    final c = id == null ? null : repo.connections[id];
-    if (c == null || !mounted) return;
+    final target = ShellBridge.instance.pendingConnect.value;
+    if (target == null || !mounted) return;
+    final (id, account) = ShellBridge.parseConnectTarget(target);
+    final c = repo.connections[id];
+    if (c == null) return;
     ShellBridge.instance.pendingConnect.value = null;
-    _connect(c);
+    // Акаунт ярлика відв'язали від ПК — підключаємось акаунтом за замовчуванням.
+    _connect(c, credentialId: c.credentialIds.contains(account) ? account : null);
   }
 
   Repository? _recentSource; // за ним стежимо для «Недавніх» (у dispose контексту вже не можна)

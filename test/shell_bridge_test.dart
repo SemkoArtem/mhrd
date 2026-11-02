@@ -24,4 +24,10 @@ void main() {
     ShellBridge.instance.handleArgs(['--other']);
     expect(ShellBridge.instance.pendingConnect.value, isNull);
   });
+
+  test('ярлик окремого акаунта: --connect <ПК>/<акаунт>', () {
+    expect(ShellBridge.parseConnectTarget('pc-1'), ('pc-1', null));
+    expect(ShellBridge.parseConnectTarget('pc-1/acc-2'), ('pc-1', 'acc-2'));
+    expect(ShellBridge.parseConnectTarget('pc-1/'), ('pc-1', null));
+  });
 }

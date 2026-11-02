@@ -2732,6 +2732,12 @@ abstract class AppLocalizations {
   /// **'Ярлик на робочому столі'**
   String get createShortcut;
 
+  /// No description provided for @createShortcutAs.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ярлик: {name}'**
+  String createShortcutAs(String name);
+
   /// No description provided for @shortcutCreated.
   ///
   /// In uk, this message translates to:

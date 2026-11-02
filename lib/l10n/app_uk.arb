@@ -510,6 +510,8 @@
   "masterPasswordChange": "Змінити майстер-пароль",
   "masterPasswordChanged": "Майстер-пароль змінено.",
   "createShortcut": "Ярлик на робочому столі",
+  "createShortcutAs": "Ярлик: {name}",
+  "@createShortcutAs": {"placeholders": {"name": {"type": "String"}}},
   "shortcutCreated": "Ярлик «{name}» — на робочому столі.",
   "@shortcutCreated": {"placeholders": {"name": {"type": "String"}}},
   "shortcutFailed": "Не вдалося створити ярлик.",

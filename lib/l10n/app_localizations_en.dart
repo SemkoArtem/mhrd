@@ -1512,6 +1512,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createShortcut => 'Desktop shortcut';
 
   @override
+  String createShortcutAs(String name) {
+    return 'Shortcut: $name';
+  }
+
+  @override
   String shortcutCreated(String name) {
     return 'Shortcut “$name” is on the desktop.';
   }

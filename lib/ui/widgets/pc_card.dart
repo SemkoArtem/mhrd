@@ -247,6 +247,12 @@ class PcMenu extends StatelessWidget {
       onSelected: (v) {
         if (v.startsWith('as:')) {
           actions.connect(c, credentialId: v.substring(3));
+        } else if (v.startsWith('lnk:')) {
+          final cr = repo.credentials[v.substring(4)];
+          final name = cr == null ? c.displayName : '${c.displayName} — ${cr.label}';
+          ShellBridge.instance.createShortcut(c, as: cr).then((ok) {
+            if (context.mounted) toast(context, ok ? l.shortcutCreated(name) : l.shortcutFailed);
+          });
         } else {
           switch (v) {
             case 'connect':
@@ -280,9 +286,13 @@ class PcMenu extends StatelessWidget {
         PopupMenuItem(value: 'rdp', child: Text(l.exportRdp)),
         PopupMenuItem(value: 'move', child: Text(l.moveToGroup)),
         if (c.wakeOnLan != null) PopupMenuItem(value: 'wake', child: Text(l.wakeOnLan)),
-        // Лише збережений ПК: ярлик запускає `mhrd.exe --connect <id>`.
-        if (Platform.isWindows && repo.connections.containsKey(c.id))
+        // Лише збережений ПК: ярлик запускає `mhrd.exe --connect <id>`; кілька акаунтів — ярлик
+        // і для кожного з них (`--connect <id>/<акаунт>`).
+        if (Platform.isWindows && repo.connections.containsKey(c.id)) ...[
           PopupMenuItem(value: 'shortcut', child: Text(l.createShortcut)),
+          for (final cr in creds.length > 1 ? creds : const <Credential>[])
+            PopupMenuItem(value: 'lnk:${cr.id}', child: Text(l.createShortcutAs(cr.label))),
+        ],
         const PopupMenuDivider(),
         PopupMenuItem(value: 'delete', child: Text(l.delete)),
       ],

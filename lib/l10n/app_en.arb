@@ -453,6 +453,7 @@
   "masterPasswordChange": "Change master password",
   "masterPasswordChanged": "Master password changed.",
   "createShortcut": "Desktop shortcut",
+  "createShortcutAs": "Shortcut: {name}",
   "shortcutCreated": "Shortcut “{name}” is on the desktop.",
   "@shortcutCreated": {"placeholders": {"name": {"type": "String"}}},
   "shortcutFailed": "Couldn't create the shortcut.",

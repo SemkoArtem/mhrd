@@ -1512,6 +1512,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get createShortcut => 'Ярлик на робочому столі';
 
   @override
+  String createShortcutAs(String name) {
+    return 'Ярлик: $name';
+  }
+
+  @override
   String shortcutCreated(String name) {
     return 'Ярлик «$name» — на робочому столі.';
   }
