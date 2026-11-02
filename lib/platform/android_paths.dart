@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../sessions/frame_buffer.dart';
+
 /// Android: теки застосунку з MainActivity (канал «mhrd/android»). Модуль сеансу лежить у теці
 /// бібліотек застосунку як libmhrd_session.so — лише звідти Android дозволяє його запускати.
 class AndroidPaths {
@@ -31,6 +33,11 @@ class AndroidPaths {
     return File(path).existsSync() ? path : null;
   }
 
-  /// Оточення процесу сеансу: у застосунку Android немає HOME, а FreeRDP тримає там свою теку.
-  Map<String, String> get environment => {'HOME': filesDir, 'TMPDIR': cacheDir};
+  /// Оточення процесу сеансу: у застосунку Android немає HOME, а FreeRDP тримає там свою теку;
+  /// MHRD_FRAME_SOCKET — куди надсилати дескриптор пам'яті кадру (frame_buffer.dart).
+  Map<String, String> get environment => {
+        'HOME': filesDir,
+        'TMPDIR': cacheDir,
+        if (FrameSocket.instance case final s?) 'MHRD_FRAME_SOCKET': s.name,
+      };
 }

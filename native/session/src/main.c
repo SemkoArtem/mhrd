@@ -1262,18 +1262,13 @@ static DWORD WINAPI rdp_thread(LPVOID arg)
  * Політики, що ламають драйвери відеокарти й методи вводу (динамічний код, точки розширення,
  * підписи бібліотек), свідомо не вмикаємо. Кожен крок — найкраще, що вийде: невдача не заважає сеансу.
  * Linux: без нових привілеїв (setuid), пам'ять процесу не читають інші процеси користувача й не
- * пишеться в дамп (у ній пароль), а seccomp забороняє запускати програми (execve). Android — те саме,
- * крім dumpable (див. нижче). */
+ * пишеться в дамп (у ній пароль), а seccomp забороняє запускати програми (execve). Android — те саме. */
 #ifndef _WIN32
 static void harden_process(void)
 {
 	struct rlimit core = { 0, 0 };
 	setrlimit(RLIMIT_CORE, &core);
-#ifndef __ANDROID__
-	/* На Android застосунок відкриває буфер кадру через /proc/<pid>/fd (shm.c) — це можливо лише
-	 * з dumpable-процесом; чужі застосунки там і так не мають доступу (інший користувач). */
 	prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
-#endif
 	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
 	{
 		WLog_WARN("mhrd", "no_new_privs not applied (%d)", errno);
