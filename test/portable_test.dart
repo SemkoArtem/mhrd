@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -44,7 +45,8 @@ void main() {
       final a = store();
       await a.create('correct horse');
       await a.write('mhrd.tunnel.key', 'PRIVATE-KEY-123');
-      final raw = File(p.join(tmp.path, 'secrets.mhrd')).readAsStringSync(encoding: const SystemEncoding());
+      // latin1 приймає будь-які байти (системне кодування Linux — UTF-8, на шифротексті падає).
+      final raw = latin1.decode(File(p.join(tmp.path, 'secrets.mhrd')).readAsBytesSync());
       expect(raw.contains('PRIVATE-KEY-123'), isFalse);
       expect(raw.contains('mhrd.tunnel.key'), isFalse);
     });
