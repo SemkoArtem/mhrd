@@ -29,12 +29,22 @@ Future<void> main(List<String> args) async {
   final dir = portable ?? await getApplicationSupportDirectory();
   if (portable != null) await portable.create(recursive: true);
   final db = MhrdDatabase.open(dir);
-  final repo = Repository(
-      db, portable != null ? FileSecretStore(File(p.join(dir.path, Portable.secretsFileName))) : SystemSecretStore());
+  final repo = Repository(db, await _secretStore(dir, portable: portable != null));
   final sessions = SessionManager(repo,
       log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')), files: AppFiles(dir));
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
+}
+
+/// Де лежать паролі: портативна версія — файл під майстер-паролем; Linux без Secret Service — теж
+/// (SPEC → «Сховище секретів»), і раз створений файл лишається основним, навіть якщо сховище потім
+/// з'явилось (інакше паролі «зникли» б). Решта — системне сховище.
+Future<SecretStore> _secretStore(Directory dir, {required bool portable}) async {
+  final file = File(p.join(dir.path, Portable.secretsFileName));
+  if (portable || (Platform.isLinux && file.existsSync())) return FileSecretStore(file);
+  final system = SystemSecretStore();
+  if (Platform.isLinux && !await system.available()) return FileSecretStore(file);
+  return system;
 }
 
 /// Ліцензії OFL вбудованих шрифтів — щоб вони були разом зі шрифтами, як вимагає OFL.

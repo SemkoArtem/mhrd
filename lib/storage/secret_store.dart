@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Сховище паролів і ключів. Реалізація за замовчуванням — системне сховище ОС
@@ -18,6 +21,20 @@ class SystemSecretStore implements SecretStore {
         );
 
   final FlutterSecureStorage _s;
+
+  /// Linux: чи є Secret Service (GNOME Keyring, KWallet). false — лише коли сховище явно відповіло
+  /// помилкою (сервісу немає); довга відповідь (система просить розблокувати сховище) — не причина
+  /// відмовлятися від нього.
+  Future<bool> available({Duration timeout = const Duration(seconds: 20)}) async {
+    try {
+      await _s.read(key: 'mhrd.probe').timeout(timeout);
+      return true;
+    } on TimeoutException {
+      return true;
+    } on PlatformException {
+      return false;
+    }
+  }
 
   @override
   Future<String?> read(String key) => _s.read(key: key);

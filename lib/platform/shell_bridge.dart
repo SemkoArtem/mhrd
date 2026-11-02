@@ -5,13 +5,15 @@ import 'package:flutter/services.dart';
 
 import '../models/connection.dart';
 import '../models/entities.dart';
+import 'linux_desktop.dart';
 import 'portable.dart';
 
-/// Зв'язок з оболонкою Windows (windows/runner/shell_integration.cpp): список «Недавні» на
-/// значку MHRD у панелі завдань і «підключитись до ПК», коли його вибрали в цьому списку.
+/// Зв'язок з оболонкою Windows (windows/runner/shell_integration.cpp) і Linux (linux/runner): список
+/// «Недавні» на значку MHRD у панелі завдань (Windows), ярлики ПК і «підключитись до ПК» від ярлика
+/// чи списку.
 class ShellBridge {
   ShellBridge._() {
-    if (Platform.isWindows) _channel.setMethodCallHandler(_onCall);
+    if (Platform.isWindows || Platform.isLinux) _channel.setMethodCallHandler(_onCall);
   }
 
   static final instance = ShellBridge._();
@@ -67,9 +69,10 @@ class ShellBridge {
   /// Ярлик на робочому столі, що одразу підключає до ПК — акаунтом ПК за замовчуванням або [as]
   /// (тоді `--connect <ПК>/<акаунт>`). false — не вдалося.
   Future<bool> createShortcut(Connection c, {Credential? as}) async {
-    if (!Platform.isWindows) return false;
     final id = as == null ? c.id : '${c.id}$accountSeparator${as.id}';
     final name = as == null ? c.displayName : '${c.displayName} — ${as.label}';
+    if (Platform.isLinux) return LinuxDesktop.createShortcut(target: id, name: name);
+    if (!Platform.isWindows) return false;
     try {
       await _channel.invokeMethod('createShortcut', {'id': id, 'name': name});
       return true;

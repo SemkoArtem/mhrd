@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mhrd/models/connection.dart';
+import 'package:mhrd/platform/linux_desktop.dart';
 import 'package:mhrd/platform/shell_bridge.dart';
 
 void main() {
@@ -29,5 +30,15 @@ void main() {
     expect(ShellBridge.parseConnectTarget('pc-1'), ('pc-1', null));
     expect(ShellBridge.parseConnectTarget('pc-1/acc-2'), ('pc-1', 'acc-2'));
     expect(ShellBridge.parseConnectTarget('pc-1/'), ('pc-1', null));
+  });
+
+  test('ярлик Linux (.desktop): лапки, екранування, %, назва в один рядок', () {
+    expect(LinuxDesktop.quoteExec(r'/opt/My Apps/mhrd'), r'"/opt/My Apps/mhrd"');
+    expect(LinuxDesktop.quoteExec(r'a"b$c`d\e%f'), r'"a\"b\$c\`d\\e%%f"');
+    final e = LinuxDesktop.entry(exe: '/home/u/MHRD.AppImage', target: 'pc-1/acc-2', name: 'Офіс\nсервер', icon: 'ua.mhrd.mhrd');
+    expect(e, contains('Exec="/home/u/MHRD.AppImage" --connect "pc-1/acc-2"'));
+    expect(e, contains('Name=Офіс сервер (MHRD)'));
+    expect(e, contains('Icon=ua.mhrd.mhrd'));
+    expect(e, startsWith('[Desktop Entry]\n'));
   });
 }

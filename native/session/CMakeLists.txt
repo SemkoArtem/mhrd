@@ -8,6 +8,15 @@ set(CMAKE_C_STANDARD 11)
 # Статичний CRT, як у триплеті vcpkg x64-windows-static.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
+if(UNIX AND NOT APPLE)
+  # Звук і мікрофон FreeRDP на Linux (rdpsnd/audin pulse, див. оверлей) посилаються на ціль
+  # PulseAudio::PulseAudio — дає її системна libpulse через pkg-config.
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(PULSE REQUIRED IMPORTED_TARGET libpulse)
+  add_library(PulseAudio::PulseAudio INTERFACE IMPORTED)
+  target_link_libraries(PulseAudio::PulseAudio INTERFACE PkgConfig::PULSE)
+endif()
+
 find_package(FreeRDP-Client CONFIG REQUIRED)
 find_package(FreeRDP CONFIG REQUIRED)
 find_package(WinPR CONFIG REQUIRED)
@@ -19,7 +28,8 @@ find_package(SDL3_ttf CONFIG REQUIRED)
 if(WIN32)
   set(MHRD_CLIPBOARD src/clipboard_win.c)
 else()
-  set(MHRD_CLIPBOARD src/clipboard_stub.c)
+  # Linux (X11 і Wayland) — буфер обміну через SDL3
+  set(MHRD_CLIPBOARD src/clipboard_sdl.c)
 endif()
 
 add_executable(mhrd-session src/main.c src/proto.c src/shm.c src/window_sdl.c ${MHRD_CLIPBOARD})

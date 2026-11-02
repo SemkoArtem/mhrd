@@ -13,6 +13,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef _WIN32
+#include <errno.h>
+#include <linux/audit.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+#include <signal.h>
+#include <stddef.h>
+#include <sys/prctl.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
+#if defined(__x86_64__)
+#define MHRD_AUDIT_ARCH AUDIT_ARCH_X86_64
+#elif defined(__aarch64__)
+#define MHRD_AUDIT_ARCH AUDIT_ARCH_AARCH64
+#else
+#error "mhrd-session: unknown seccomp architecture"
+#endif
+#endif
+
 #include <freerdp/addin.h>
 #include <freerdp/channels/cliprdr.h>
 #include <freerdp/client.h>
@@ -26,6 +45,7 @@
 #include <freerdp/gdi/gdi.h>
 #include <freerdp/input.h>
 #include <freerdp/settings.h>
+#include <winpr/interlocked.h>
 #include <winpr/path.h>
 #include <winpr/string.h>
 #include <winpr/synch.h>
@@ -658,9 +678,24 @@ static BOOL CALLBACK collect_monitor(HMONITOR hm, HDC dc, LPRECT rc, LPARAM lp)
 static BOOL apply_all_monitors(MhrdContext* m, rdpSettings* s)
 {
 	m->win.allMonitors = FALSE;
-#ifdef _WIN32
 	MonitorList list = { 0 };
+#ifdef _WIN32
 	EnumDisplayMonitors(NULL, NULL, collect_monitor, (LPARAM)&list);
+#else
+	WindowMonitor found[MAX_MONITORS];
+	const uint32_t n = window_monitors(found, MAX_MONITORS);
+	for (uint32_t i = 0; i < n; i++)
+	{
+		rdpMonitor* mon = &list.mons[list.count++];
+		memset(mon, 0, sizeof(*mon));
+		mon->x = found[i].x;
+		mon->y = found[i].y;
+		mon->width = found[i].w;
+		mon->height = found[i].h;
+		mon->is_primary = found[i].primary;
+		mon->orig_screen = i;
+	}
+#endif
 	if (list.count < 2)
 		return TRUE;
 	INT32 minX = INT32_MAX, minY = INT32_MAX, maxX = INT32_MIN, maxY = INT32_MIN;
@@ -697,9 +732,6 @@ static BOOL apply_all_monitors(MhrdContext* m, rdpSettings* s)
 	m->win.primW = primary->width;
 	m->win.primH = primary->height;
 	WLog_INFO("mhrd", "all monitors: %" PRIu32 " (%" PRId32 "x%" PRId32 ")", list.count, maxX - minX, maxY - minY);
-#else
-	(void)s;
-#endif
 	return TRUE;
 }
 
@@ -725,12 +757,23 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	 * з випадковим портом, і він «бачив би» підміну там, де інший сервер, або сам приймав старий запис,
 	 * оминаючи certPin. Окрема порожня тека — і рішення завжди за mhrd_verify_certificate. */
 	char cfgDir[MAX_PATH + 32] = { 0 };
+#ifdef _WIN32
 	const DWORD tmpLen = GetTempPathA(MAX_PATH, cfgDir);
 	if (tmpLen > 0 && tmpLen < MAX_PATH)
-	{
 		strcat_s(cfgDir, sizeof(cfgDir), "mhrd-freerdp");
+	else
+		cfgDir[0] = 0;
+#else
+	/* Не /tmp: він спільний для всіх користувачів, і чужий міг би підкласти туди «довіру». */
+	const char* runtime = getenv("XDG_RUNTIME_DIR");
+	const char* home = getenv("HOME");
+	if (runtime && *runtime)
+		snprintf(cfgDir, sizeof(cfgDir), "%s/mhrd-freerdp", runtime);
+	else if (home && *home)
+		snprintf(cfgDir, sizeof(cfgDir), "%s/.cache/mhrd-freerdp", home);
+#endif
+	if (cfgDir[0])
 		freerdp_settings_set_string(s, FreeRDP_ConfigPath, cfgDir);
-	}
 
 	ok = freerdp_settings_set_string(s, FreeRDP_ServerHostname, host) &&
 	     freerdp_settings_set_uint32(s, FreeRDP_ServerPort, (UINT32)jint(j, "port", 3389)) &&
@@ -1217,7 +1260,41 @@ static DWORD WINAPI rdp_thread(LPVOID arg)
  * лімітом в один процес + заборона в самому процесі), бібліотеки — лише локальні й не з «низьким»
  * рівнем довіри. Обмеження інтерфейсу Job Object (вихід з Windows, робочі столи) ламають буфер обміну.
  * Політики, що ламають драйвери відеокарти й методи вводу (динамічний код, точки розширення,
- * підписи бібліотек), свідомо не вмикаємо. Кожен крок — найкраще, що вийде: невдача не заважає сеансу. */
+ * підписи бібліотек), свідомо не вмикаємо. Кожен крок — найкраще, що вийде: невдача не заважає сеансу.
+ * Linux: без нових привілеїв (setuid), пам'ять процесу не читають інші процеси користувача й не
+ * пишеться в дамп (у ній пароль), а seccomp забороняє запускати програми (execve). */
+#ifndef _WIN32
+static void harden_process(void)
+{
+	struct rlimit core = { 0, 0 };
+	setrlimit(RLIMIT_CORE, &core);
+	prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
+	{
+		WLog_WARN("mhrd", "no_new_privs not applied (%d)", errno);
+		return;
+	}
+	/* Чужа архітектура викликів (32-біт, x32) — теж відмова: інакше execve пройшов би під іншим номером. */
+	struct sock_filter filter[] = {
+		BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, MHRD_AUDIT_ARCH, 1, 0),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+		BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
+#ifdef __x86_64__
+		BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000u, 2, 0), /* x32 ABI */
+#else
+		BPF_JUMP(BPF_JMP | BPF_JA, 0, 0, 0),
+#endif
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_execve, 1, 0),
+		BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_execveat, 0, 1),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+		BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_fprog prog = { (unsigned short)ARRAYSIZE(filter), filter };
+	if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog, 0, 0) != 0)
+		WLog_WARN("mhrd", "seccomp not applied (%d)", errno);
+}
+#else
 static void harden_process(void)
 {
 	HANDLE job = CreateJobObjectW(NULL, NULL);
@@ -1263,11 +1340,13 @@ static void harden_process(void)
 	fonts.DisableNonSystemFonts = 1;
 	SetProcessMitigationPolicy(ProcessFontDisablePolicy, &fonts, sizeof(fonts));
 }
+#endif
 
 int main(void)
 {
 	configure_logging();
 	harden_process();
+#ifdef _WIN32
 	/* Координати моніторів і вікна — у справжніх пікселях кожного монітора («Усі монітори»). */
 	SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 	/* Без WSAStartup на Windows не працює жоден мережевий виклик — навіть розбір IP-адреси
@@ -1275,6 +1354,10 @@ int main(void)
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
 		return 1;
+#else
+	/* Застосунок закрився, а сеанс ще пише в stdout — без цього SIGPIPE вбив би процес. */
+	signal(SIGPIPE, SIG_IGN);
+#endif
 	if (!proto_init())
 		return 1;
 	/* Канали FreeRDP вбудовані в цей .exe (статична збірка). */

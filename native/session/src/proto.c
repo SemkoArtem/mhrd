@@ -10,6 +10,9 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#else
+#include <errno.h>
+#include <unistd.h>
 #endif
 
 /* Найбільше повідомлення від застосунку: JSON підключення — кілька КБ. */
@@ -22,10 +25,31 @@ static ProtoMsg* g_head;
 static ProtoMsg* g_tail;
 static volatile BOOL g_closed;
 
+#ifdef _WIN32
 static BOOL read_exact(void* buf, size_t len)
 {
 	return len == 0 || fread(buf, 1, len, stdin) == len;
 }
+#else
+/* Напряму read(), не fread: потік stdio, заблокований у fread, тримає замок stdin, і exit()
+ * у glibc (скидання всіх потоків stdio) чекав би на нього вічно — процес не завершувався б,
+ * поки застосунок не закриє канал. */
+static BOOL read_exact(void* buf, size_t len)
+{
+	uint8_t* p = buf;
+	while (len > 0)
+	{
+		const ssize_t n = read(STDIN_FILENO, p, len);
+		if (n < 0 && errno == EINTR)
+			continue;
+		if (n <= 0)
+			return FALSE;
+		p += n;
+		len -= (size_t)n;
+	}
+	return TRUE;
+}
+#endif
 
 static DWORD WINAPI reader_thread(LPVOID arg)
 {

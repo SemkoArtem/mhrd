@@ -1851,6 +1851,34 @@ static void long_press_if_due(void)
 
 /* ── Публічне ─────────────────────────────────────────────────── */
 
+uint32_t window_monitors(WindowMonitor* out, uint32_t max)
+{
+	if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+		return 0;
+	int n = 0;
+	SDL_DisplayID* ids = SDL_GetDisplays(&n);
+	const SDL_DisplayID primary = SDL_GetPrimaryDisplay();
+	uint32_t count = 0;
+	for (int i = 0; ids && i < n && count < max; i++)
+	{
+		SDL_Rect r;
+		if (!SDL_GetDisplayBounds(ids[i], &r))
+			continue;
+		/* Межі — у точках (Wayland з масштабом); FreeRDP потрібні пікселі. */
+		const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(ids[i]);
+		const float d = mode && mode->pixel_density > 0 ? mode->pixel_density : 1.0f;
+		out[count].x = (int)SDL_lroundf(r.x * d);
+		out[count].y = (int)SDL_lroundf(r.y * d);
+		out[count].w = (int)SDL_lroundf(r.w * d);
+		out[count].h = (int)SDL_lroundf(r.h * d);
+		out[count].primary = ids[i] == primary;
+		count++;
+	}
+	SDL_free(ids);
+	SDL_QuitSubSystem(SDL_INIT_VIDEO);
+	return count;
+}
+
 BOOL window_init(const WindowConfig* cfg, const WindowHost* host)
 {
 	W.cfg = *cfg;

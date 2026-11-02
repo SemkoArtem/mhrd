@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mhrd/sessions/rdp_session.dart';
 import 'package:mhrd/sessions/session_protocol.dart';
 
-/// Справжній mhrd-session.exe без сервера RDP: перевіряє канал, журнали (не в stdout!)
-/// і поведінку при помилках. Пропускається, якщо модуль не зібрано (native/session/build.ps1).
-const _exe = 'native/session/out/mhrd-session.exe';
-final Object _skip = Platform.isWindows && File(_exe).existsSync() ? false : 'mhrd-session.exe не зібрано';
+/// Справжній mhrd-session без сервера RDP: перевіряє канал, журнали (не в stdout!)
+/// і поведінку при помилках. Пропускається, якщо модуль не зібрано (native/session/build.ps1 чи build.sh).
+final _exe = Platform.isWindows ? 'native/session/out/mhrd-session.exe' : 'native/session/out/mhrd-session';
+final Object _skip = File(_exe).existsSync() ? false : 'mhrd-session не зібрано';
 
 Future<(List<SessionEvent>, int)> _run(Map<String, Object?>? config, {bool closeInput = false}) async {
   final ch = await ProcessChannel.start(File(_exe).absolute.path);

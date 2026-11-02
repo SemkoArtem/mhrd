@@ -79,6 +79,13 @@ if(VCPKG_TARGET_IS_WINDOWS)
     list(APPEND FEATURE_OPTIONS -DWITH_MEDIA_FOUNDATION=ON)
 endif()
 
+# MHRD: звук і мікрофон на Linux — PulseAudio (і PipeWire через pipewire-pulse); libpulse —
+# із системи (libpulse-dev для збирання), є майже в кожному дистрибутиві зі стільницею.
+set(MHRD_PULSE OFF)
+if(VCPKG_TARGET_IS_LINUX)
+    set(MHRD_PULSE ON)
+endif()
+
 vcpkg_find_acquire_program(PKGCONFIG)
 
 vcpkg_cmake_configure(
@@ -118,7 +125,7 @@ vcpkg_cmake_configure(
         -DWITH_PCSC=OFF
         -DWITH_PKCS11=OFF
         -DWITH_PROXY_MODULES=OFF
-        -DWITH_PULSE=OFF
+        -DWITH_PULSE=${MHRD_PULSE}
         -DWITH_URIPARSER=OFF
     OPTIONS_RELEASE
         -DWITH_VERBOSE_WINPR_ASSERT=OFF

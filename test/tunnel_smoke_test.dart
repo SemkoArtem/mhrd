@@ -6,8 +6,8 @@ import 'package:mhrd/sessions/tunnel.dart';
 /// Справжній mhrd-tunnel.exe без серверів: протокол рядків JSON і коди помилок доходять до
 /// застосунку. Повний WireGuard перевіряє native/tunnels/tunnel_test.go (go test).
 /// Пропускається, якщо модуль не зібрано (native/tunnels/build.ps1).
-const _exe = 'native/tunnels/out/mhrd-tunnel.exe';
-final Object _skip = Platform.isWindows && File(_exe).existsSync() ? false : 'mhrd-tunnel.exe не зібрано';
+final _exe = Platform.isWindows ? 'native/tunnels/out/mhrd-tunnel.exe' : 'native/tunnels/out/mhrd-tunnel';
+final Object _skip = File(_exe).existsSync() ? false : 'mhrd-tunnel не зібрано';
 
 Future<TunnelException> _fail(Map<String, Object?> request) async {
   final ch = await TunnelProcess.start(File(_exe).absolute.path);

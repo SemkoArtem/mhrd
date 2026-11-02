@@ -288,7 +288,7 @@ class PcMenu extends StatelessWidget {
         if (c.wakeOnLan != null) PopupMenuItem(value: 'wake', child: Text(l.wakeOnLan)),
         // Лише збережений ПК: ярлик запускає `mhrd.exe --connect <id>`; кілька акаунтів — ярлик
         // і для кожного з них (`--connect <id>/<акаунт>`).
-        if (Platform.isWindows && repo.connections.containsKey(c.id)) ...[
+        if ((Platform.isWindows || Platform.isLinux) && repo.connections.containsKey(c.id)) ...[
           PopupMenuItem(value: 'shortcut', child: Text(l.createShortcut)),
           for (final cr in creds.length > 1 ? creds : const <Credential>[])
             PopupMenuItem(value: 'lnk:${cr.id}', child: Text(l.createShortcutAs(cr.label))),

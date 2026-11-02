@@ -63,7 +63,7 @@ class SessionManager extends ChangeNotifier {
     this.latencyInterval = const Duration(seconds: 10),
     this.files,
   })  : enginePath = enginePath ?? _defaultEnginePath(),
-        tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel.exe'),
+        tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel'),
         _channelFactory = channelFactory ?? ProcessChannel.start,
         _tunnelFactory = tunnelFactory ?? TunnelProcess.start;
 
@@ -96,11 +96,13 @@ class SessionManager extends ChangeNotifier {
   /// на мобільних — екран сеансу всередині застосунку.
   bool get nativeWindows => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  /// `mhrd-session.exe` лежить поруч із головною програмою (його кладе туди збірка Windows).
-  static String? _defaultEnginePath() => _besideApp('mhrd-session.exe');
+  /// `mhrd-session` лежить поруч із головною програмою (його кладе туди збірка Windows чи Linux).
+  static String? _defaultEnginePath() => _besideApp('mhrd-session');
 
-  static String? _besideApp(String file) {
-    if (!Platform.isWindows) return null;
+  /// Модуль [name] поруч із програмою (на Windows — `name.exe`); null — його немає.
+  static String? _besideApp(String name) {
+    if (!Platform.isWindows && !Platform.isLinux) return null;
+    final file = Platform.isWindows ? '$name.exe' : name;
     final path = p.join(p.dirname(Platform.resolvedExecutable), file);
     return File(path).existsSync() ? path : null;
   }

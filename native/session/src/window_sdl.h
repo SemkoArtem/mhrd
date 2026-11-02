@@ -78,6 +78,15 @@ typedef struct
 
 BOOL window_init(const WindowConfig* cfg, const WindowHost* host);
 
+/* Монітори цього ПК у пікселях (для «Усі монітори» не на Windows — там їх перелічує main.c).
+ * Можна викликати до window_init. Повертає кількість (не більше max). */
+typedef struct
+{
+	int x, y, w, h;
+	BOOL primary;
+} WindowMonitor;
+uint32_t window_monitors(WindowMonitor* out, uint32_t max);
+
 /* Головний потік: цикл подій до window_post_quit. */
 void window_run(void);
 

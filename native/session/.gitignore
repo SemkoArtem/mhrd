@@ -1,3 +1,5 @@
 build/
 out/
 vcpkg_installed/
+build-linux/
+vcpkg_installed_linux/
