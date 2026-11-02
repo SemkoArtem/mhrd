@@ -10,3 +10,6 @@ coverage/
 *.jks
 *.keystore
 key.properties
+
+# Зібраний модуль сеансу для Android (native/session/build-android.sh)
+android/app/src/main/jniLibs/

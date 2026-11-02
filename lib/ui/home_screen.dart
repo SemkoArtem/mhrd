@@ -30,6 +30,9 @@ import 'widgets/pc_card.dart';
 /// Фільтр списку: усі, нещодавні, без групи («Збережені ПК») або конкретна група.
 const _all = '__all', _recent = '__recent', _saved = '__saved';
 
+/// Вужче — телефон: швидке підключення окремим віконцем, пошук на всю ширину.
+const _narrowWidth = 600.0;
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -419,6 +422,30 @@ class _HomeScreenState extends State<HomeScreen> {
     ));
   }
 
+  /// Телефон: швидке підключення окремим віконцем (у верхній панелі для поля немає місця).
+  Future<void> _quickConnectDialog() async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => AlertDialog(
+        content: TextField(
+          controller: _quick,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          style: TextStyle(fontFamily: t.fontMono, fontSize: 14, color: t.text),
+          decoration: InputDecoration(prefixIcon: const Icon(Icons.bolt, size: 18), hintText: l.quickConnectHint),
+          onSubmitted: (_) => Navigator.pop(dc, true),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dc), child: Text(l.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(dc, true), child: Text(l.connect)),
+        ],
+      ),
+    );
+    if (ok == true && mounted) _quickConnect();
+  }
+
   void _quickConnect() {
     final l = context.l10n;
     final addr = parseAddress(_quick.text);
@@ -745,8 +772,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _header(BuildContext context, bool wide) {
     final t = context.mhrd;
     final l = context.l10n;
+    final narrow = MediaQuery.sizeOf(context).width < _narrowWidth;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 8 : 16, vertical: 12),
       decoration: BoxDecoration(color: t.surface, border: Border(bottom: BorderSide(color: t.border))),
       child: Row(children: [
         // Бічна панель: на широкому екрані закріпити / сховати, на вузькому — відкрити поверх.
@@ -771,25 +799,30 @@ class _HomeScreenState extends State<HomeScreen> {
           Text('remote desktop', style: TextStyle(color: t.textMuted, fontSize: 12)),
         ],
         const SizedBox(width: 16),
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: TextField(
-              controller: _quick,
-              focusNode: _quickFocus,
-              style: TextStyle(fontFamily: t.fontMono, fontSize: 13.5, color: t.text),
-              decoration: InputDecoration(
-                isDense: true,
-                prefixIcon: Icon(Icons.bolt, color: t.textMuted, size: 18),
-                hintText: l.quickConnectHint,
-                suffixText: wide ? 'Ctrl K' : null,
-                suffixStyle: TextStyle(fontFamily: t.fontMono, fontSize: 11, color: t.textMuted),
+        // Телефон: поле швидкого підключення не влазить — кнопка відкриває його окремо.
+        if (narrow) ...[
+          const Spacer(),
+          IconButton(tooltip: l.quickConnectHint, icon: const Icon(Icons.bolt), onPressed: _quickConnectDialog),
+        ] else
+          Expanded(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: TextField(
+                controller: _quick,
+                focusNode: _quickFocus,
+                style: TextStyle(fontFamily: t.fontMono, fontSize: 13.5, color: t.text),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: Icon(Icons.bolt, color: t.textMuted, size: 18),
+                  hintText: l.quickConnectHint,
+                  suffixText: wide ? 'Ctrl K' : null,
+                  suffixStyle: TextStyle(fontFamily: t.fontMono, fontSize: 11, color: t.textMuted),
+                ),
+                onSubmitted: (_) => _quickConnect(),
               ),
-              onSubmitted: (_) => _quickConnect(),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
+        SizedBox(width: narrow ? 4 : 12),
         PopupMenuButton<String>(
           tooltip: l.add,
           onSelected: (v) => v == 'pc' ? _edit(null) : _importRdp(),
@@ -798,11 +831,9 @@ class _HomeScreenState extends State<HomeScreen> {
             PopupMenuItem(value: 'rdp', child: Text(l.importRdpFiles)),
           ],
           child: IgnorePointer(
-            child: FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(wide ? l.add : ''),
-            ),
+            child: wide
+                ? FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: Text(l.add))
+                : IconButton.filled(onPressed: () {}, icon: const Icon(Icons.add)),
           ),
         ),
         const SizedBox(width: 8),
@@ -1016,8 +1047,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final l = context.l10n;
     final items = _visible();
     final tiles = repo.settings.listView == PcListView.tiles;
+    final width = MediaQuery.sizeOf(context).width;
+    final narrow = width < _narrowWidth;
+    final side = narrow ? 16.0 : 24.0;
+    final search = TextField(
+      focusNode: _searchFocus,
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: l.searchHint,
+        prefixIcon: Icon(Icons.search, size: 18, color: t.textMuted),
+      ),
+      onChanged: (v) => setState(() => _query = v),
+    );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      padding: EdgeInsets.fromLTRB(side, 20, side, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Wrap(
           spacing: 12,
@@ -1026,32 +1069,25 @@ class _HomeScreenState extends State<HomeScreen> {
           alignment: WrapAlignment.spaceBetween,
           children: [
             Text(_title(l), style: TextStyle(color: t.text, fontSize: 22, fontWeight: FontWeight.w600)),
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox(
-                width: 260,
-                child: TextField(
-                  focusNode: _searchFocus,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintText: l.searchHint,
-                    prefixIcon: Icon(Icons.search, size: 18, color: t.textMuted),
-                  ),
-                  onChanged: (v) => setState(() => _query = v),
+            // Телефон: пошук на всю ширину, перемикач вигляду поруч (не виходить за край).
+            SizedBox(
+              width: narrow ? width - 2 * side : null,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (narrow) Expanded(child: search) else SizedBox(width: 260, child: search),
+                const SizedBox(width: 10),
+                SegmentedButton<PcListView>(
+                  showSelectedIcon: false,
+                  segments: [
+                    ButtonSegment(
+                        value: PcListView.tiles, icon: const Icon(Icons.grid_view, size: 18), tooltip: l.viewTiles),
+                    ButtonSegment(
+                        value: PcListView.list, icon: const Icon(Icons.view_list, size: 18), tooltip: l.viewList),
+                  ],
+                  selected: {repo.settings.listView},
+                  onSelectionChanged: (s) => repo.updateSettings(repo.settings.copyWith(listView: s.first)),
                 ),
-              ),
-              const SizedBox(width: 10),
-              SegmentedButton<PcListView>(
-                showSelectedIcon: false,
-                segments: [
-                  ButtonSegment(
-                      value: PcListView.tiles, icon: const Icon(Icons.grid_view, size: 18), tooltip: l.viewTiles),
-                  ButtonSegment(
-                      value: PcListView.list, icon: const Icon(Icons.view_list, size: 18), tooltip: l.viewList),
-                ],
-                selected: {repo.settings.listView},
-                onSelectionChanged: (s) => repo.updateSettings(repo.settings.copyWith(listView: s.first)),
-              ),
-            ]),
+              ]),
+            ),
           ],
         ),
         const SizedBox(height: 18),

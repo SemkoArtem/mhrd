@@ -10,7 +10,7 @@ typedef struct
 	void* data;
 	size_t size;
 	char name[64];
-	void* handle; /* Windows: HANDLE відображення; POSIX: не використовується */
+	void* handle; /* Windows: HANDLE відображення; Android: дескриптор memfd; інші POSIX: не використовується */
 } ShmBuffer;
 
 /* Створює новий буфер з унікальним іменем. */

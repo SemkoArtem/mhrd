@@ -47,8 +47,8 @@ class ProcessChannel implements SessionChannel {
   /// Останні рядки журналу — для «Деталей» при збої процесу і для журналу сеансів.
   final stderrTail = _Tail(16384);
 
-  static Future<ProcessChannel> start(String executable) async =>
-      ProcessChannel._(await Process.start(executable, const [], runInShell: false));
+  static Future<ProcessChannel> start(String executable, {Map<String, String>? environment}) async =>
+      ProcessChannel._(await Process.start(executable, const [], runInShell: false, environment: environment));
 
   @override
   Stream<List<int>> get output => _p.stdout;

@@ -8,8 +8,14 @@
       "default-features": false,
       "features": ["client"]
     },
-    "sdl3",
-    "sdl3-ttf"
+    {
+      "name": "sdl3",
+      "platform": "!android"
+    },
+    {
+      "name": "sdl3-ttf",
+      "platform": "!android"
+    }
   ],
   "builtin-baseline": "d186940b2f0c4e8e5b4ff804af57d2a26fbfa091",
   "vcpkg-configuration": {

@@ -19,7 +19,8 @@ android {
         applicationId = "ua.mhrd.mhrd"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // Android 9+: під цю версію зібрано модуль сеансу (native/session/build-android.sh).
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -27,6 +28,14 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    // Модуль сеансу libmhrd_session.so — виконуваний файл: Android запускає його лише з розпакованої
+    // теки бібліотек застосунку, тож бібліотеки не лишаємо стиснутими в APK.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {

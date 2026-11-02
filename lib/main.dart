@@ -9,8 +9,10 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'backup/auto_backup.dart';
+import 'platform/android_paths.dart';
 import 'platform/portable.dart';
 import 'platform/shell_bridge.dart';
+import 'sessions/rdp_session.dart' show ProcessChannel;
 import 'sessions/session_manager.dart';
 import 'storage/database.dart';
 import 'storage/file_secret_store.dart';
@@ -30,8 +32,14 @@ Future<void> main(List<String> args) async {
   if (portable != null) await portable.create(recursive: true);
   final db = MhrdDatabase.open(dir);
   final repo = Repository(db, await _secretStore(dir, portable: portable != null));
+  // Android: модуль сеансу — з теки бібліотек застосунку, зі своїм HOME (android_paths.dart).
+  final android = await AndroidPaths.load();
   final sessions = SessionManager(repo,
-      log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')), files: AppFiles(dir));
+      enginePath: android?.engine,
+      channelFactory:
+          android == null ? null : (exe) => ProcessChannel.start(exe, environment: android.environment),
+      log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')),
+      files: AppFiles(dir));
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }

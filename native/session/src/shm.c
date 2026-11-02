@@ -7,7 +7,9 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <stdint.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #endif
 
@@ -31,6 +33,27 @@ BOOL shm_create(ShmBuffer* b, size_t size)
 		return FALSE;
 	}
 	b->handle = h;
+#elif defined(__ANDROID__)
+	/* POSIX shm на Android немає: анонімна пам'ять (memfd), а застосунок того самого користувача
+	 * відкриває її через /proc/<pid>/fd/<n> — цей шлях і є «ім'ям». Тому процес лишається dumpable. */
+	(void)g_counter;
+	const int fd = (int)syscall(__NR_memfd_create, "mhrd-frame", 0);
+	if (fd < 0)
+		return FALSE;
+	if (ftruncate(fd, (off_t)size) != 0)
+	{
+		close(fd);
+		return FALSE;
+	}
+	b->data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (b->data == MAP_FAILED)
+	{
+		b->data = NULL;
+		close(fd);
+		return FALSE;
+	}
+	b->handle = (void*)(intptr_t)fd;
+	snprintf(b->name, sizeof(b->name), "/proc/%ld/fd/%d", (long)getpid(), fd);
 #else
 	snprintf(b->name, sizeof(b->name), "/mhrd-%ld-%u", (long)getpid(), ++g_counter);
 	int fd = shm_open(b->name, O_CREAT | O_EXCL | O_RDWR, 0600);
@@ -61,6 +84,9 @@ void shm_free(ShmBuffer* b)
 #ifdef _WIN32
 	UnmapViewOfFile(b->data);
 	CloseHandle((HANDLE)b->handle);
+#elif defined(__ANDROID__)
+	munmap(b->data, b->size);
+	close((int)(intptr_t)b->handle);
 #else
 	munmap(b->data, b->size);
 	shm_unlink(b->name);
