@@ -1021,6 +1021,33 @@ class AppLocalizationsUk extends AppLocalizations {
   String get showKeys => 'Показати ключі';
 
   @override
+  String get wgCreateManual => 'Створити вручну';
+
+  @override
+  String get wgNewTitle => 'Новий тунель WireGuard';
+
+  @override
+  String get wgGenerateKeys => 'Згенерувати ключі';
+
+  @override
+  String get wgYourPublicKey =>
+      'Ваш публічний ключ — додайте його на сервері WireGuard як [Peer] цього пристрою';
+
+  @override
+  String get wgKeyInvalid =>
+      'Ключ має бути 32 байти в Base64: 44 символи з «=» у кінці.';
+
+  @override
+  String get wgAddressRequired =>
+      'Вкажіть Address — адресу цього пристрою в тунелі, наприклад 10.8.0.2/32.';
+
+  @override
+  String get copy => 'Копіювати';
+
+  @override
+  String get copied => 'Скопійовано.';
+
+  @override
   String get authEditReason => 'Редагування ключів тунелю MHRD';
 
   @override
@@ -1469,11 +1496,26 @@ class AppLocalizationsUk extends AppLocalizations {
       'Щоб перенести ПК з іншої MHRD, зробіть там повний бекап, а тут відновіть його: Налаштування → Бекап.';
 
   @override
-  String get portableFileBroken =>
-      'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте mhrd-data\\secrets.mhrd (паролі доведеться ввести знову).';
+  String get portableCreate => 'Створити';
 
   @override
-  String get portableCreate => 'Створити';
+  String secretsFileBroken(String path) {
+    return 'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте $path (паролі доведеться ввести знову).';
+  }
+
+  @override
+  String get keyringFallbackTitle => 'Паролі MHRD';
+
+  @override
+  String get keyringFallbackCreateHint =>
+      'Системного сховища паролів (GNOME Keyring, KWallet) немає, тож MHRD шифрує паролі й ключі сам — у файлі поруч зі своїми даними. Придумайте майстер-пароль: без нього їх не відкрити й не відновити.';
+
+  @override
+  String get keyringFallbackSection => 'Паролі';
+
+  @override
+  String get keyringFallbackSectionHint =>
+      'Системного сховища паролів немає: паролі й ключі зашифровані майстер-паролем, він же замінює PIN-код.';
 
   @override
   String get portableSection => 'Портативна версія';

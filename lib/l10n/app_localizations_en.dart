@@ -1021,6 +1021,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showKeys => 'Show keys';
 
   @override
+  String get wgCreateManual => 'Create manually';
+
+  @override
+  String get wgNewTitle => 'New WireGuard tunnel';
+
+  @override
+  String get wgGenerateKeys => 'Generate keys';
+
+  @override
+  String get wgYourPublicKey =>
+      'Your public key: add it on the WireGuard server as this device\'s [Peer]';
+
+  @override
+  String get wgKeyInvalid =>
+      'A key must be 32 bytes in Base64: 44 characters ending with “=”.';
+
+  @override
+  String get wgAddressRequired =>
+      'Enter Address — this device\'s address inside the tunnel, e.g. 10.8.0.2/32.';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String get copied => 'Copied.';
+
+  @override
   String get authEditReason => 'Editing MHRD tunnel keys';
 
   @override
@@ -1469,11 +1496,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'To bring PCs over from another MHRD, make a full backup there and restore it here: Settings → Backup.';
 
   @override
-  String get portableFileBroken =>
-      'The password file is damaged or not from MHRD. To start over, rename mhrd-data\\secrets.mhrd (you\'ll have to enter the passwords again).';
+  String get portableCreate => 'Create';
 
   @override
-  String get portableCreate => 'Create';
+  String secretsFileBroken(String path) {
+    return 'The password file is damaged or not from MHRD. To start over, rename $path (you\'ll have to enter the passwords again).';
+  }
+
+  @override
+  String get keyringFallbackTitle => 'MHRD passwords';
+
+  @override
+  String get keyringFallbackCreateHint =>
+      'There is no system password store (GNOME Keyring, KWallet), so MHRD encrypts passwords and keys itself, in a file next to its data. Choose a master password: without it they can\'t be opened or recovered.';
+
+  @override
+  String get keyringFallbackSection => 'Passwords';
+
+  @override
+  String get keyringFallbackSectionHint =>
+      'There is no system password store: passwords and keys are encrypted with a master password, which also replaces the PIN.';
 
   @override
   String get portableSection => 'Portable version';

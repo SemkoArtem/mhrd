@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/l10n.dart';
+import '../platform/portable.dart';
 import '../storage/file_secret_store.dart';
 import '../theme/mhrd_theme.dart';
 
-/// Портативна версія: перед програмою — майстер-пароль файлу секретів. Перший запуск — створити
-/// пароль, далі — розблокувати. Поки файл закритий, MHRD не бачить жодного пароля чи ключа.
+/// Портативна версія (і Linux без системного сховища паролів): перед програмою — майстер-пароль
+/// файлу секретів. Перший запуск — створити пароль, далі — розблокувати. Поки файл закритий, MHRD
+/// не бачить жодного пароля чи ключа.
 class PortableGate extends StatefulWidget {
   const PortableGate({super.key, required this.store, required this.child});
   final FileSecretStore store;
@@ -55,7 +57,7 @@ class _PortableGateState extends State<PortableGate> {
       }
     } on FormatException {
       _broken = true;
-      error = l.portableFileBroken;
+      error = l.secretsFileBroken(widget.store.file.path);
     }
     if (!mounted) return;
     setState(() {
@@ -80,12 +82,15 @@ class _PortableGateState extends State<PortableGate> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.usb_outlined, size: 44, color: t.accent),
+              Icon(Portable.enabled ? Icons.usb_outlined : Icons.key_outlined, size: 44, color: t.accent),
               const SizedBox(height: 14),
-              Text(l.portableTitle,
+              Text(Portable.enabled ? l.portableTitle : l.keyringFallbackTitle,
                   style: TextStyle(fontFamily: t.fontMono, fontSize: 22, letterSpacing: 0.8, color: t.accent)),
               const SizedBox(height: 8),
-              Text(_creating ? l.portableCreateHint : l.portableUnlockHint,
+              Text(
+                  _creating
+                      ? (Portable.enabled ? l.portableCreateHint : l.keyringFallbackCreateHint)
+                      : l.portableUnlockHint,
                   textAlign: TextAlign.center, style: TextStyle(color: t.textMuted)),
               const SizedBox(height: 22),
               TextField(

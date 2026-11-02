@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:cryptography/cryptography.dart';
+
 enum WireGuardConfError { noPrivateKey, noPeer }
 
 /// Помилка розбору .conf; текст для людей складає UI за [error].
@@ -16,6 +21,31 @@ class WireGuardConf {
 
   /// privateKey, presharedKey (якщо є)
   final Map<String, String> secrets;
+}
+
+/// Ключ WireGuard: 32 байти в Base64 (44 символи з «=» у кінці).
+bool isWireGuardKey(String key) {
+  try {
+    return base64.decode(key.trim()).length == 32;
+  } on FormatException {
+    return false;
+  }
+}
+
+/// Новий приватний ключ — як `wg genkey`: 32 випадкові байти, «затиснуті» для X25519.
+String generateWireGuardPrivateKey() {
+  final rnd = Random.secure();
+  final k = List<int>.generate(32, (_) => rnd.nextInt(256));
+  k[0] &= 248;
+  k[31] = (k[31] & 127) | 64;
+  return base64.encode(k);
+}
+
+/// Публічний ключ для приватного — як `wg pubkey`. null — це не ключ WireGuard.
+Future<String?> wireGuardPublicKey(String privateKey) async {
+  if (!isWireGuardKey(privateKey)) return null;
+  final pair = await X25519().newKeyPairFromSeed(base64.decode(privateKey.trim()));
+  return base64.encode((await pair.extractPublicKey()).bytes);
 }
 
 /// Адреса цього пристрою всередині тунелю (перша з Address, без /маски): «10.8.0.2».

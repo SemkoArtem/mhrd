@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -152,11 +152,12 @@ class _GeneralTab extends StatelessWidget {
         ),
       ),
       if (repo.secrets case final FileSecretStore store) ...[
-        // Портативна версія: замок — майстер-пароль файлу секретів, PIN і Windows Hello не потрібні.
-        _caption(context, l.portableSection),
+        // Портативна версія чи Linux без сховища паролів: замок — майстер-пароль файлу секретів,
+        // PIN і Windows Hello не потрібні.
+        _caption(context, Portable.enabled ? l.portableSection : l.keyringFallbackSection),
         ListTile(
-          leading: const Icon(Icons.usb_outlined),
-          title: Text(l.portableSectionHint),
+          leading: Icon(Portable.enabled ? Icons.usb_outlined : Icons.key_outlined),
+          title: Text(Portable.enabled ? l.portableSectionHint : l.keyringFallbackSectionHint),
         ),
         ListTile(
           leading: const Icon(Icons.key_outlined),
@@ -534,15 +535,18 @@ class _RoutesTab extends StatelessWidget {
     return true;
   }
 
-  /// Редагування тунелю — лише після PIN-коду MHRD або відбитка / Windows Hello: тут видно ключі.
-  Future<void> _editTunnel(BuildContext context, TunnelProfile tu) async {
+  /// Тунель вручну: новий ([tu] == null) або редагування наявного — лише після PIN-коду MHRD чи
+  /// відбитка / Windows Hello, бо тут видно ключі. Для нового можна згенерувати пару ключів: публічний
+  /// показується, щоб додати його на сервері.
+  Future<void> _editTunnel(BuildContext context, [TunnelProfile? tu]) async {
     final l = context.l10n;
-    if (!await authorizeSensitive(context, repo)) return;
-    final cfg = await repo.wireGuardConfig(tu);
+    if (tu != null && !await authorizeSensitive(context, repo)) return;
+    final Map<String, dynamic> cfg =
+        tu == null ? const {'mtu': 1420, 'keepalive': 25} : await repo.wireGuardConfig(tu);
     if (!context.mounted) return;
     String list(Object? v) => v is List ? v.join(', ') : '${v ?? ''}';
     final c = {
-      'name': TextEditingController(text: tu.name),
+      'name': TextEditingController(text: tu?.name ?? ''),
       'addresses': TextEditingController(text: list(cfg['addresses'])),
       'dns': TextEditingController(text: list(cfg['dns'])),
       'mtu': TextEditingController(text: cfg['mtu'] == null ? '' : '${cfg['mtu']}'),
@@ -553,6 +557,11 @@ class _RoutesTab extends StatelessWidget {
       'allowedIps': TextEditingController(text: list(cfg['allowedIps'])),
       'keepalive': TextEditingController(text: cfg['keepalive'] == null ? '' : '${cfg['keepalive']}'),
     };
+    // Публічний ключ цього пристрою — з приватного, щойно той схожий на ключ WireGuard.
+    final ownPublic = ValueNotifier<String?>(null);
+    void derive() => wireGuardPublicKey(c['privateKey']!.text).then((k) => ownPublic.value = k);
+    c['privateKey']!.addListener(derive);
+    derive();
     var showKeys = false;
     String? error;
     final ok = await showDialog<bool>(
@@ -570,7 +579,7 @@ class _RoutesTab extends StatelessWidget {
                 ),
               );
           return AlertDialog(
-            title: Text(l.wgEditTitle),
+            title: Text(tu == null ? l.wgNewTitle : l.wgEditTitle),
             content: SizedBox(
               width: 480,
               child: SingleChildScrollView(
@@ -578,6 +587,41 @@ class _RoutesTab extends StatelessWidget {
                   field('name', l.name, mono: false),
                   _caption(dc, '[Interface]'),
                   field('privateKey', 'PrivateKey', secret: true),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.vpn_key_outlined),
+                      label: Text(l.wgGenerateKeys),
+                      onPressed: () => set(() {
+                        c['privateKey']!.text = generateWireGuardPrivateKey();
+                        error = null;
+                      }),
+                    ),
+                  ),
+                  ValueListenableBuilder<String?>(
+                    valueListenable: ownPublic,
+                    builder: (_, pub, child) => pub == null
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: InputDecorator(
+                              decoration: InputDecoration(labelText: l.wgYourPublicKey, isDense: true),
+                              child: Row(children: [
+                                Expanded(
+                                    child: SelectableText(pub,
+                                        style: TextStyle(fontFamily: t.fontMono, fontSize: 13))),
+                                IconButton(
+                                  tooltip: l.copy,
+                                  icon: const Icon(Icons.copy, size: 18),
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: pub));
+                                    if (dc.mounted) toast(dc, l.copied);
+                                  },
+                                ),
+                              ]),
+                            ),
+                          ),
+                  ),
                   field('addresses', 'Address', hint: '10.8.0.2/32'),
                   field('dns', 'DNS', hint: '1.1.1.1'),
                   field('mtu', 'MTU', hint: '1420'),
@@ -601,8 +645,15 @@ class _RoutesTab extends StatelessWidget {
               TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.cancel)),
               FilledButton(
                 onPressed: () {
+                  final psk = c['presharedKey']!.text.trim();
                   if (c['privateKey']!.text.trim().isEmpty || c['peerPublicKey']!.text.trim().isEmpty) {
                     set(() => error = l.wgKeysRequired);
+                  } else if (!isWireGuardKey(c['privateKey']!.text) ||
+                      !isWireGuardKey(c['peerPublicKey']!.text) ||
+                      (psk.isNotEmpty && !isWireGuardKey(psk))) {
+                    set(() => error = l.wgKeyInvalid);
+                  } else if (c['addresses']!.text.trim().isEmpty) {
+                    set(() => error = l.wgAddressRequired);
                   } else if (parseAddress(c['endpoint']!.text, defaultPort: 51820) == null) {
                     set(() => error = l.invalidAddress);
                   } else {
@@ -617,13 +668,15 @@ class _RoutesTab extends StatelessWidget {
       ),
     );
     final values = {for (final e in c.entries) e.key: e.value.text.trim()};
+    c['privateKey']!.removeListener(derive);
     for (final x in c.values) {
       x.dispose();
     }
+    ownPublic.dispose();
     if (ok != true || !context.mounted) return;
     List<String> split(String s) => s.split(',').map((x) => x.trim()).where((x) => x.isNotEmpty).toList();
     final config = <String, dynamic>{
-      ...tu.config,
+      ...?tu?.config,
       'addresses': split(values['addresses']!),
       'dns': split(values['dns']!),
       'mtu': int.tryParse(values['mtu']!),
@@ -636,8 +689,9 @@ class _RoutesTab extends StatelessWidget {
       'privateKey': values['privateKey']!,
       if (values['presharedKey']!.isNotEmpty) 'presharedKey': values['presharedKey']!,
     };
-    final name = values['name']!.isEmpty ? tu.name : values['name']!;
-    await _saveTunnelChecked(context, id: tu.id, name: name, config: config, secrets: secrets);
+    final host = parseAddress(values['endpoint']!, defaultPort: 51820)?.host ?? values['endpoint']!;
+    final name = values['name']!.isNotEmpty ? values['name']! : (tu?.name ?? 'WireGuard · $host');
+    await _saveTunnelChecked(context, id: tu?.id, name: name, config: config, secrets: secrets);
   }
 
   /// Рядок тунелю: адреса → сервер, стан і затримка; перевірити, оновити з .conf, редагувати, видалити.
@@ -712,6 +766,11 @@ class _RoutesTab extends StatelessWidget {
           icon: const Icon(Icons.file_open_outlined),
           label: Text(l.importWireGuard),
           onPressed: () => _importWireGuard(context),
+        ),
+        TextButton.icon(
+          icon: const Icon(Icons.add),
+          label: Text(l.wgCreateManual),
+          onPressed: () => _editTunnel(context),
         ),
       ]),
       _caption(context, l.proxies),

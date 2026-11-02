@@ -1886,6 +1886,54 @@ abstract class AppLocalizations {
   /// **'Показати ключі'**
   String get showKeys;
 
+  /// No description provided for @wgCreateManual.
+  ///
+  /// In uk, this message translates to:
+  /// **'Створити вручну'**
+  String get wgCreateManual;
+
+  /// No description provided for @wgNewTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Новий тунель WireGuard'**
+  String get wgNewTitle;
+
+  /// No description provided for @wgGenerateKeys.
+  ///
+  /// In uk, this message translates to:
+  /// **'Згенерувати ключі'**
+  String get wgGenerateKeys;
+
+  /// No description provided for @wgYourPublicKey.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ваш публічний ключ — додайте його на сервері WireGuard як [Peer] цього пристрою'**
+  String get wgYourPublicKey;
+
+  /// No description provided for @wgKeyInvalid.
+  ///
+  /// In uk, this message translates to:
+  /// **'Ключ має бути 32 байти в Base64: 44 символи з «=» у кінці.'**
+  String get wgKeyInvalid;
+
+  /// No description provided for @wgAddressRequired.
+  ///
+  /// In uk, this message translates to:
+  /// **'Вкажіть Address — адресу цього пристрою в тунелі, наприклад 10.8.0.2/32.'**
+  String get wgAddressRequired;
+
+  /// No description provided for @copy.
+  ///
+  /// In uk, this message translates to:
+  /// **'Копіювати'**
+  String get copy;
+
+  /// No description provided for @copied.
+  ///
+  /// In uk, this message translates to:
+  /// **'Скопійовано.'**
+  String get copied;
+
   /// No description provided for @authEditReason.
   ///
   /// In uk, this message translates to:
@@ -2654,17 +2702,41 @@ abstract class AppLocalizations {
   /// **'Щоб перенести ПК з іншої MHRD, зробіть там повний бекап, а тут відновіть його: Налаштування → Бекап.'**
   String get portableImportHint;
 
-  /// No description provided for @portableFileBroken.
-  ///
-  /// In uk, this message translates to:
-  /// **'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте mhrd-data\\secrets.mhrd (паролі доведеться ввести знову).'**
-  String get portableFileBroken;
-
   /// No description provided for @portableCreate.
   ///
   /// In uk, this message translates to:
   /// **'Створити'**
   String get portableCreate;
+
+  /// No description provided for @secretsFileBroken.
+  ///
+  /// In uk, this message translates to:
+  /// **'Файл паролів пошкоджений або не від MHRD. Щоб почати з нуля, перейменуйте {path} (паролі доведеться ввести знову).'**
+  String secretsFileBroken(String path);
+
+  /// No description provided for @keyringFallbackTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Паролі MHRD'**
+  String get keyringFallbackTitle;
+
+  /// No description provided for @keyringFallbackCreateHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Системного сховища паролів (GNOME Keyring, KWallet) немає, тож MHRD шифрує паролі й ключі сам — у файлі поруч зі своїми даними. Придумайте майстер-пароль: без нього їх не відкрити й не відновити.'**
+  String get keyringFallbackCreateHint;
+
+  /// No description provided for @keyringFallbackSection.
+  ///
+  /// In uk, this message translates to:
+  /// **'Паролі'**
+  String get keyringFallbackSection;
+
+  /// No description provided for @keyringFallbackSectionHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Системного сховища паролів немає: паролі й ключі зашифровані майстер-паролем, він же замінює PIN-код.'**
+  String get keyringFallbackSectionHint;
 
   /// No description provided for @portableSection.
   ///

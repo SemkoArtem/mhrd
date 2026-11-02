@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mhrd/models/connection.dart';
 import 'package:mhrd/models/entities.dart';
@@ -167,6 +169,35 @@ PersistentKeepalive = 25
       // Підпис плашки: без назви — лише адреса, з назвою — «назва · адреса» (порт, якщо не 3389).
       expect(back.nameWithAddress, '[fd00::5]');
       expect(back.copyWith(name: ' Офіс ', port: 3390).nameWithAddress, 'Офіс · [fd00::5]:3390');
+    });
+  });
+
+  group('ключі WireGuard (ручне створення тунелю)', () {
+    List<int> hex(String s) => [for (var i = 0; i < s.length; i += 2) int.parse(s.substring(i, i + 2), radix: 16)];
+
+    test('публічний ключ — як wg pubkey (вектор RFC 7748)', () async {
+      final priv = base64.encode(hex('77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a'));
+      final pub = base64.encode(hex('8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a'));
+      expect(await wireGuardPublicKey(priv), pub);
+      expect(await wireGuardPublicKey(' $priv\n'), pub);
+      expect(await wireGuardPublicKey('not a key'), isNull);
+    });
+
+    test('згенерований ключ — 32 байти, «затиснутий» для X25519', () async {
+      final k = generateWireGuardPrivateKey();
+      expect(isWireGuardKey(k), isTrue);
+      final b = base64.decode(k);
+      expect(b[0] & 7, 0);
+      expect(b[31] & 0xC0, 0x40);
+      expect(generateWireGuardPrivateKey(), isNot(k));
+      expect(await wireGuardPublicKey(k), isNotNull);
+    });
+
+    test('перевірка формату ключа', () {
+      expect(isWireGuardKey(base64.encode(List.filled(32, 1))), isTrue);
+      expect(isWireGuardKey(base64.encode(List.filled(31, 1))), isFalse);
+      expect(isWireGuardKey('???'), isFalse);
+      expect(isWireGuardKey(''), isFalse);
     });
   });
 }
