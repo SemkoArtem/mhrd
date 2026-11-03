@@ -1949,8 +1949,20 @@ abstract class AppLocalizations {
   /// No description provided for @touchModeMouse.
   ///
   /// In uk, this message translates to:
-  /// **'Перейти на мишу: курсор, клік торканням'**
+  /// **'Перейти на мишу: курсор, як тачпад'**
   String get touchModeMouse;
+
+  /// No description provided for @barCollapse.
+  ///
+  /// In uk, this message translates to:
+  /// **'Згорнути плашку'**
+  String get barCollapse;
+
+  /// No description provided for @keyboardShiftsScreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)'**
+  String get keyboardShiftsScreen;
 
   /// No description provided for @authEditReason.
   ///

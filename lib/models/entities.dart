@@ -278,6 +278,8 @@ class AppSettings {
     this.keyboardCapture = KeyboardCapture.fullscreenOnly,
     this.bar = const BarPlacement(),
     this.sidebarShown = true,
+    this.keyboardShiftsScreen = false,
+    this.touchAsMouse = false,
     this.collapsedGroups = const [noGroupSection],
     this.screenTemplates = const [],
     this.defaultScreen = ScreenTemplate.auto,
@@ -303,6 +305,12 @@ class AppSettings {
 
   /// Ліва панель на широкому екрані: закріплена (true) чи схована — тоді відкривається кнопкою.
   final bool sidebarShown;
+
+  /// Телефон: екранна клавіатура зсуває картинку сеансу вгору (інакше відкривається поверх неї).
+  final bool keyboardShiftsScreen;
+
+  /// Телефон: пальці керують курсором, як тачпад («Миша»), а не дотиками у Windows («Дотик»).
+  final bool touchAsMouse;
 
   /// Згорнуті розділи списку «Усі ПК»: id груп і [noGroupSection].
   final List<String> collapsedGroups;
@@ -343,6 +351,8 @@ class AppSettings {
     KeyboardCapture? keyboardCapture,
     BarPlacement? bar,
     bool? sidebarShown,
+    bool? keyboardShiftsScreen,
+    bool? touchAsMouse,
     List<String>? collapsedGroups,
     List<ScreenTemplate>? screenTemplates,
     String? defaultScreen,
@@ -360,6 +370,8 @@ class AppSettings {
         keyboardCapture: keyboardCapture ?? this.keyboardCapture,
         bar: bar ?? this.bar,
         sidebarShown: sidebarShown ?? this.sidebarShown,
+        keyboardShiftsScreen: keyboardShiftsScreen ?? this.keyboardShiftsScreen,
+        touchAsMouse: touchAsMouse ?? this.touchAsMouse,
         collapsedGroups: collapsedGroups ?? this.collapsedGroups,
         screenTemplates: screenTemplates ?? this.screenTemplates,
         defaultScreen: defaultScreen ?? this.defaultScreen,
@@ -378,6 +390,8 @@ class AppSettings {
         'keyboardCapture': keyboardCapture.name,
         'bar': bar.toJson(),
         'sidebarShown': sidebarShown,
+        'keyboardShiftsScreen': keyboardShiftsScreen,
+        'touchAsMouse': touchAsMouse,
         'collapsedGroups': collapsedGroups,
         'screenTemplates': [for (final t in screenTemplates) t.toJson()],
         'defaultScreen': defaultScreen,
@@ -397,6 +411,8 @@ class AppSettings {
             enumByName(KeyboardCapture.values, j['keyboardCapture'], KeyboardCapture.fullscreenOnly),
         bar: BarPlacement.fromJson(mapOr(j['bar'])),
         sidebarShown: boolOr(j['sidebarShown'], true),
+        keyboardShiftsScreen: boolOr(j['keyboardShiftsScreen'], false),
+        touchAsMouse: boolOr(j['touchAsMouse'], false),
         collapsedGroups: j.containsKey('collapsedGroups') ? stringList(j['collapsedGroups']) : const [noGroupSection],
         screenTemplates: [
           if (j['screenTemplates'] is List)

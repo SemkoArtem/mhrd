@@ -1057,7 +1057,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Switch to touch: fingers act as the PC\'s touchscreen';
 
   @override
-  String get touchModeMouse => 'Switch to mouse: pointer, tap to click';
+  String get touchModeMouse => 'Switch to mouse: pointer like a touchpad';
+
+  @override
+  String get barCollapse => 'Collapse the bar';
+
+  @override
+  String get keyboardShiftsScreen =>
+      'On-screen keyboard pushes the session picture up (otherwise it covers it)';
 
   @override
   String get authEditReason => 'Editing MHRD tunnel keys';

@@ -13,23 +13,28 @@ import '../theme/mhrd_theme.dart';
 /// Сенсорний екран (телефон, планшет), два режими, як у клієнта Microsoft:
 /// - «Дотик» ([direct]): пальці — справжніми дотиками у Windows (прокрутку, щипок, утримання для
 ///   правого кліку роблять самі програми ПК);
-/// - «Миша»: торкання = клік, довге натискання чи дотик двома пальцями = правий клік, перетягування =
-///   рух із натиснутою кнопкою, двома пальцями — прокрутка, щипок — збільшити й пересунути картинку.
+/// - «Миша»: екран — як тачпад ноутбука, курсор видно. Палець рухає курсор, торкання = клік
+///   (двічі — подвійний), утримати й повести = перетягування, двома пальцями: торкання = правий клік,
+///   рух = прокрутка, щипок = збільшити картинку.
 /// Миша (Bluetooth, USB) в обох режимах — звичайна миша.
 class TouchSurface extends StatefulWidget {
-  const TouchSurface({super.key, required this.session, required this.image, this.direct = true});
+  const TouchSurface({super.key, required this.session, required this.image, this.direct = true, this.onTouch});
 
   final RdpSession session;
   final ui.Image image;
   final bool direct;
+
+  /// Торкнулись картинки (наприклад, щоб згорнути плашку).
+  final VoidCallback? onTouch;
 
   @override
   State<TouchSurface> createState() => _TouchSurfaceState();
 }
 
 class _TouchSurfaceState extends State<TouchSurface> {
-  static const _slop = 10.0; // логічних точок — далі це вже рух, а не торкання
-  static const _longPress = Duration(milliseconds: 550);
+  static const _slop = 8.0; // логічних точок — далі це вже рух, а не торкання
+  static const _hold = Duration(milliseconds: 450); // утримати — почати перетягування
+  static const _tapMax = Duration(milliseconds: 300);
   static const _maxZoom = 5.0;
 
   double _zoom = 1;
@@ -37,10 +42,13 @@ class _TouchSurfaceState extends State<TouchSurface> {
   Size _view = Size.zero;
 
   final _touches = <int, Offset>{};
-  Offset? _start; // один палець: де торкнулись
+
+  // Тачпад: курсор у пікселях віддаленого ПК.
+  Offset? _cursor;
+  Offset _last = Offset.zero;
   DateTime _downAt = DateTime.now();
-  Timer? _longTimer;
-  bool _dragging = false, _consumed = false;
+  Timer? _holdTimer;
+  bool _moved = false, _dragging = false, _consumed = false;
 
   // Два пальці: початкова відстань і центр, режим — масштаб чи прокрутка.
   double _pinchDist = 0, _pinchZoom = 1;
@@ -66,23 +74,9 @@ class _TouchSurfaceState extends State<TouchSurface> {
     }
   }
 
-  /// Режим «Дотик»: подія пальця → дотик у Windows.
-  void _touch(PointerEvent e, int flags) {
-    var finger = _fingers[e.pointer];
-    if (flags == TouchFlags.down) {
-      finger = List.generate(10, (i) => i).firstWhere((i) => !_fingers.containsValue(i), orElse: () => -1);
-      if (finger < 0) return; // більше 10 пальців
-      _fingers[e.pointer] = finger;
-    }
-    if (finger == null) return;
-    final (x, y) = _remote(e.localPosition);
-    s.sendTouch(flags, finger, x, y);
-    if (flags == TouchFlags.up) _fingers.remove(e.pointer);
-  }
-
   @override
   void dispose() {
-    _longTimer?.cancel();
+    _holdTimer?.cancel();
     super.dispose();
   }
 
@@ -107,42 +101,99 @@ class _TouchSurfaceState extends State<TouchSurface> {
     return (x, y);
   }
 
+  /// Піксель віддаленого ПК → точка на екрані.
+  Offset _screen(Offset remote) {
+    final r = _imageRect;
+    return Offset(r.left + remote.dx / s.width * r.width, r.top + remote.dy / s.height * r.height);
+  }
+
   /// Зсув не дає картинці виїхати за край більше, ніж на її збільшену частину.
   Offset _clampPan(Offset pan, double zoom) {
     final mx = _view.width * (zoom - 1) / 2, my = _view.height * (zoom - 1) / 2;
     return Offset(pan.dx.clamp(-mx, mx), pan.dy.clamp(-my, my));
   }
 
-  void _click(RemoteButton b, Offset at) {
-    final (x, y) = _remote(at);
+  // ── Режим «Дотик» ─────────────────────────────────────────────
+
+  void _touch(PointerEvent e, int flags) {
+    var finger = _fingers[e.pointer];
+    if (flags == TouchFlags.down) {
+      finger = List.generate(10, (i) => i).firstWhere((i) => !_fingers.containsValue(i), orElse: () => -1);
+      if (finger < 0) return; // більше 10 пальців
+      _fingers[e.pointer] = finger;
+    }
+    if (finger == null) return;
+    final (x, y) = _remote(e.localPosition);
+    s.sendTouch(flags, finger, x, y);
+    if (flags == TouchFlags.up) _fingers.remove(e.pointer);
+  }
+
+  // ── Режим «Миша»: тачпад ──────────────────────────────────────
+
+  Offset get _cursorOrCenter => _cursor ??= Offset(s.width / 2, s.height / 2);
+
+  (int, int) get _cursorPx {
+    final c = _cursorOrCenter;
+    return (c.dx.round().clamp(0, math.max(0, s.width - 1)), c.dy.round().clamp(0, math.max(0, s.height - 1)));
+  }
+
+  void _button(RemoteButton b, bool down) {
+    final (x, y) = _cursorPx;
+    s.sendMouseButton(b, down, x, y);
+  }
+
+  void _click(RemoteButton b) {
+    _button(b, true);
+    _button(b, false);
+  }
+
+  /// Палець зсунувся на [delta] логічних точок — курсор слідом (пришвидшено на швидкому русі).
+  void _moveCursor(Offset delta) {
+    final r = _imageRect;
+    if (r.isEmpty) return;
+    final speed = delta.distance > 12 ? 2.2 : 1.4;
+    final k = s.width / r.width * speed;
+    final c = _cursorOrCenter + delta * k;
+    _cursor = Offset(c.dx.clamp(0, s.width - 1.0), c.dy.clamp(0, s.height - 1.0));
+    final (x, y) = _cursorPx;
     s.sendMouseMove(x, y);
-    s.sendMouseButton(b, true, x, y);
-    s.sendMouseButton(b, false, x, y);
+    // Збільшено — картинка їде за курсором, щоб він не зник за краєм.
+    if (_zoom > 1) {
+      final p = _screen(_cursor!);
+      const m = 40.0;
+      var shift = Offset.zero;
+      if (p.dx < m) shift += Offset(m - p.dx, 0);
+      if (p.dx > _view.width - m) shift += Offset(_view.width - m - p.dx, 0);
+      if (p.dy < m) shift += Offset(0, m - p.dy);
+      if (p.dy > _view.height - m) shift += Offset(0, _view.height - m - p.dy);
+      if (shift != Offset.zero) _pan = _clampPan(_pan + shift, _zoom);
+    }
+    setState(() {});
   }
 
   void _down(PointerDownEvent e) {
+    widget.onTouch?.call();
     if (e.kind == PointerDeviceKind.mouse) return _mouse(e);
     if (widget.direct) return _touch(e, TouchFlags.down);
     _touches[e.pointer] = e.localPosition;
     if (_touches.length == 1) {
-      _start = e.localPosition;
+      _last = e.localPosition;
       _downAt = DateTime.now();
-      _dragging = _consumed = false;
-      _longTimer?.cancel();
-      _longTimer = Timer(_longPress, () {
-        if (_start == null || _dragging || _touches.length != 1) return;
-        _consumed = true;
+      _moved = _dragging = _consumed = false;
+      _holdTimer?.cancel();
+      _holdTimer = Timer(_hold, () {
+        if (_moved || _touches.length != 1) return;
+        // Утримали — перетягування: кнопка натиснута, поки палець на екрані.
+        _dragging = true;
         HapticFeedback.mediumImpact();
-        _click(RemoteButton.right, _start!);
+        _button(RemoteButton.left, true);
       });
     } else if (_touches.length == 2) {
-      // Другий палець: одиночна дія скасовується (відпускаємо кнопку, якщо тягли).
-      _longTimer?.cancel();
+      _holdTimer?.cancel();
       if (_dragging) {
-        final (x, y) = _remote(_touches.values.first);
-        s.sendMouseButton(RemoteButton.left, false, x, y);
+        _button(RemoteButton.left, false);
+        _dragging = false;
       }
-      _start = null;
       _consumed = true;
       final pts = _touches.values.toList();
       _pinchDist = (pts[0] - pts[1]).distance;
@@ -159,19 +210,15 @@ class _TouchSurfaceState extends State<TouchSurface> {
     if (widget.direct) return _touch(e, TouchFlags.motion);
     if (!_touches.containsKey(e.pointer)) return;
     _touches[e.pointer] = e.localPosition;
-    if (_touches.length == 1 && _start != null && !_consumed) {
-      if (!_dragging && (e.localPosition - _start!).distance > _slop) {
-        // Перетягування: кнопка натискається там, де торкнулись.
-        _dragging = true;
-        _longTimer?.cancel();
-        final (x, y) = _remote(_start!);
-        s.sendMouseMove(x, y);
-        s.sendMouseButton(RemoteButton.left, true, x, y);
+    if (_touches.length == 1 && !_consumed) {
+      final delta = e.localPosition - _last;
+      if (!_moved && (e.localPosition - _last).distance < _slop && !_dragging) return;
+      if (!_moved) {
+        _moved = true;
+        if (!_dragging) _holdTimer?.cancel();
       }
-      if (_dragging) {
-        final (x, y) = _remote(e.localPosition);
-        s.sendMouseMove(x, y);
-      }
+      _last = e.localPosition;
+      _moveCursor(delta);
     } else if (_touches.length == 2) {
       final pts = _touches.values.toList();
       final dist = (pts[0] - pts[1]).distance;
@@ -188,9 +235,9 @@ class _TouchSurfaceState extends State<TouchSurface> {
           _pan = _clampPan(focus - center - anchor * zoom, zoom);
         });
       } else {
-        // Прокрутка: ~25 точок руху — один крок коліщатка (120).
+        // Прокрутка під курсором: ~25 точок руху — один крок коліщатка (120).
         final dy = focus.dy - _lastFocus.dy, dx = focus.dx - _lastFocus.dx;
-        final (x, y) = _remote(focus);
+        final (x, y) = _cursorPx;
         _wheelRest += dy * 4.8;
         final step = _wheelRest.truncate().clamp(-255, 255);
         if (step != 0) {
@@ -209,26 +256,19 @@ class _TouchSurfaceState extends State<TouchSurface> {
     if (e.kind == PointerDeviceKind.mouse) return _mouse(e);
     if (widget.direct) return _touch(e, TouchFlags.up);
     final was = _touches.length;
-    final at = _touches.remove(e.pointer);
-    if (at == null) return;
-    if (was == 2 &&
-        !_twoMoved &&
-        !_pinching &&
-        DateTime.now().difference(_downAt) < const Duration(milliseconds: 300)) {
-      // Дотик двома пальцями — правий клік між ними.
-      _click(RemoteButton.right, (at + _touches.values.first) / 2);
+    if (_touches.remove(e.pointer) == null) return;
+    final quick = DateTime.now().difference(_downAt) < _tapMax;
+    if (was == 2 && !_twoMoved && !_pinching && quick && e is PointerUpEvent) {
+      _click(RemoteButton.right); // дотик двома пальцями
       _twoMoved = true; // другий палець, що відпуститься, нічого не робить
       return;
     }
     if (was != 1) return;
-    _longTimer?.cancel();
-    final start = _start;
-    _start = null;
+    _holdTimer?.cancel();
     if (_dragging) {
-      final (x, y) = _remote(at);
-      s.sendMouseButton(RemoteButton.left, false, x, y);
-    } else if (!_consumed && start != null && e is PointerUpEvent) {
-      _click(RemoteButton.left, start);
+      _button(RemoteButton.left, false);
+    } else if (!_moved && !_consumed && quick && e is PointerUpEvent) {
+      _click(RemoteButton.left);
     }
     _dragging = false;
   }
@@ -236,9 +276,11 @@ class _TouchSurfaceState extends State<TouchSurface> {
   /// Миша (Bluetooth / USB) на телефоні: як на ПК — рух, кнопки, коліщатко.
   void _mouse(PointerEvent e) {
     final (x, y) = _remote(e.localPosition);
+    _cursor = Offset(x.toDouble(), y.toDouble());
     final changed = e.buttons ^ _mouseButtons;
     if (changed == 0) {
       if (e is PointerHoverEvent || e is PointerMoveEvent) s.sendMouseMove(x, y);
+      if (!widget.direct) setState(() {});
       return;
     }
     for (final (bit, b) in const [
@@ -275,10 +317,46 @@ class _TouchSurfaceState extends State<TouchSurface> {
             rect: r,
             child: RawImage(image: widget.image, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
           ),
+          // Тачпад: курсор ПК малюємо самі (сервер його в картинку не кладе).
+          if (!widget.direct && !r.isEmpty)
+            Positioned(
+              left: _screen(_cursorOrCenter).dx,
+              top: _screen(_cursorOrCenter).dy,
+              child: const IgnorePointer(child: CustomPaint(size: Size(18, 26), painter: _ArrowCursor())),
+            ),
         ]),
       );
     });
   }
+}
+
+/// Стрілка курсора: біла з чорним обідком, вістря — у точці (0, 0).
+class _ArrowCursor extends CustomPainter {
+  const _ArrowCursor();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(0, 22)
+      ..lineTo(5.5, 16.5)
+      ..lineTo(9.5, 25)
+      ..lineTo(13, 23.5)
+      ..lineTo(9, 15.5)
+      ..lineTo(16.5, 15.5)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.white);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.black
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..strokeJoin = StrokeJoin.round);
+  }
+
+  @override
+  bool shouldRepaint(_ArrowCursor oldDelegate) => false;
 }
 
 /// Клавіатура телефона для сеансу: невидиме поле приймає текст з екранної клавіатури ОС і шле

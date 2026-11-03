@@ -13,6 +13,7 @@ import '../sessions/scancodes.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
 import '../theme/mhrd_theme.dart';
+import 'session_bar.dart';
 import 'touch_session.dart';
 
 /// Екран одного сеансу: картинка віддаленого ПК (піксель у піксель з урахуванням масштабу ОС),
@@ -57,7 +58,10 @@ class _SessionScreenState extends State<SessionScreen> {
   final _keyboardFocus = FocusNode(debugLabel: 'rdp-keyboard');
 
   /// Телефон: «Дотик» — пальці справжніми дотиками у Windows (як у клієнта Microsoft), інакше «Миша».
-  bool _directTouch = true;
+  late bool _directTouch = !_manager.repo.settings.touchAsMouse;
+
+  /// Телефон: плашка відкрита (типово згорнута в ручку біля краю).
+  final _barOpen = ValueNotifier(false);
 
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
@@ -149,6 +153,7 @@ class _SessionScreenState extends State<SessionScreen> {
     _manager.close(s);
     _focus.dispose();
     _keyboardFocus.dispose();
+    _barOpen.dispose();
     if (_touch) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
@@ -257,16 +262,35 @@ class _SessionScreenState extends State<SessionScreen> {
     _dpr = MediaQuery.devicePixelRatioOf(context);
     if (_touch) {
       final live = s.image != null && s.state == SessionState.connected;
+      final settings = _manager.repo.settings;
       return Scaffold(
         backgroundColor: Colors.black,
-        body: Column(children: [
-          Expanded(
-            child: Stack(children: [
-              Positioned.fill(child: _body(context)),
-              Positioned(top: MediaQuery.paddingOf(context).top + 8, right: 8, child: _touchBar(context)),
-            ]),
+        // Клавіатура телефона — поверх картинки (типово) або зсуває її (налаштування).
+        resizeToAvoidBottomInset: settings.keyboardShiftsScreen,
+        body: Stack(children: [
+          Positioned.fill(child: _body(context)),
+          // Рядок спецклавіш — над екранною клавіатурою.
+          if (live)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+              child: RemoteKeyboard(session: s, focusNode: _keyboardFocus),
+            ),
+          Positioned.fill(
+            child: FloatingSessionBar(
+              expanded: _barOpen,
+              placement: settings.bar,
+              onPlacement: (p) => _manager.repo.updateSettings(_manager.repo.settings.copyWith(bar: p)),
+              actions: _touchActions(context),
+              statusColor: switch (s.state) {
+                SessionState.connected => t.ok,
+                SessionState.failed => t.error,
+                _ => t.warn,
+              },
+              collapseTooltip: context.l10n.barCollapse,
+            ),
           ),
-          if (live) RemoteKeyboard(session: s, focusNode: _keyboardFocus),
         ]),
       );
     }
@@ -295,65 +319,47 @@ class _SessionScreenState extends State<SessionScreen> {
     );
   }
 
-  /// Телефон: невелика панель поверх картинки — стан, клавіатура, відключитись, назад.
-  Widget _touchBar(BuildContext context) {
-    final t = context.mhrd;
+  /// Телефон: дії плашки — дотик/миша, клавіатура, відключитись, закрити. Після дії плашка ховається.
+  List<BarAction> _touchActions(BuildContext context) {
     final l = context.l10n;
+    final live = s.isActive && s.image != null;
     final kbOpen = _keyboardFocus.hasFocus;
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surface.withValues(alpha: 0.85),
-        border: Border.all(color: t.border),
-        borderRadius: BorderRadius.circular(t.radius * 2),
+    void then(VoidCallback f) {
+      f();
+      _barOpen.value = false;
+    }
+
+    return [
+      if (live)
+        (
+          icon: _directTouch ? Icons.touch_app_outlined : Icons.mouse_outlined,
+          tooltip: _directTouch ? l.touchModeMouse : l.touchModeDirect,
+          onTap: () => then(() {
+            setState(() => _directTouch = !_directTouch);
+            _manager.repo.updateSettings(_manager.repo.settings.copyWith(touchAsMouse: !_directTouch));
+          }),
+        ),
+      if (live)
+        (
+          icon: kbOpen ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined,
+          tooltip: l.onScreenKeyboard,
+          onTap: () => then(() {
+            if (kbOpen) {
+              _keyboardFocus.unfocus();
+            } else {
+              _keyboardFocus.requestFocus();
+              SystemChannels.textInput.invokeMethod('TextInput.show');
+            }
+            setState(() {});
+          }),
+        ),
+      if (s.isActive) (icon: Icons.power_settings_new, tooltip: l.disconnectAction, onTap: () => then(s.disconnect)),
+      (
+        icon: Icons.close,
+        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        onTap: () => Navigator.maybePop(context),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8),
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: switch (s.state) {
-              SessionState.connected => t.ok,
-              SessionState.failed => t.error,
-              _ => t.warn,
-            },
-          ),
-        ),
-        if (s.isActive && s.image != null)
-          IconButton(
-            tooltip: _directTouch ? l.touchModeMouse : l.touchModeDirect,
-            icon: Icon(_directTouch ? Icons.touch_app_outlined : Icons.mouse_outlined, size: 20),
-            onPressed: () => setState(() => _directTouch = !_directTouch),
-          ),
-        if (s.isActive && s.image != null)
-          IconButton(
-            tooltip: l.onScreenKeyboard,
-            icon: Icon(kbOpen ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined, size: 20),
-            onPressed: () {
-              if (kbOpen) {
-                _keyboardFocus.unfocus();
-              } else {
-                _keyboardFocus.requestFocus();
-                SystemChannels.textInput.invokeMethod('TextInput.show');
-              }
-              setState(() {});
-            },
-          ),
-        if (s.isActive)
-          IconButton(
-            tooltip: l.disconnectAction,
-            icon: const Icon(Icons.power_settings_new, size: 20),
-            onPressed: s.disconnect,
-          ),
-        IconButton(
-          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-          icon: const Icon(Icons.close, size: 20),
-          onPressed: () => Navigator.maybePop(context),
-        ),
-      ]),
-    );
+    ];
   }
 
   /// Вміст панелі сеансу (і звичайної, і повноекранної).
@@ -495,7 +501,10 @@ class _SessionScreenState extends State<SessionScreen> {
       },
       child: LayoutBuilder(builder: (context, box) {
         _onViewSize(box.biggest);
-        if (_touch) return TouchSurface(session: s, image: img, direct: _directTouch);
+        if (_touch) {
+          return TouchSurface(
+              session: s, image: img, direct: _directTouch, onTouch: () => _barOpen.value = false);
+        }
         // Розмір картинки в логічних точках: 1 піксель ПК = 1 фізичний піксель екрана.
         final w = s.width / _dpr, h = s.height / _dpr;
         final exact = (box.maxWidth - w).abs() < 1 && (box.maxHeight - h).abs() < 1;
