@@ -88,10 +88,9 @@ docs/SPEC.md                   специфікація (джерело прав
   `mhrd_retry_dialog`); EVT_STATE 3 = reconnecting; ввід із вікна на час відновлення не йде;
   вікно показує «Перепідключення…». FreeRDP сам не перепідключається після навмисного виходу.
 - **Проксі (SOCKS5/HTTP) і RD Gateway** — налаштування FreeRDP із `proxy`/`gateway` у MSG_CONNECT.
-  Латка `vcpkg-overlay/freerdp/mhrd-hostname-checks.patch`: FreeRDP 3.32 на Windows перевіряв
-  адреси через PathIsURLA (лише URL зі схемою) — проксі тихо не працював (і адреса проксі, і ціль
-  SOCKS5/HTTP), а перенаправлення брокером RDS-ферми падало. При оновленні FreeRDP — перевірити,
-  чи ще потрібна.
+  FreeRDP 3.32 на Windows перевіряв адреси через PathIsURLA (лише URL зі схемою) — проксі тихо не
+  працював, а перенаправлення брокером RDS-ферми падало; власна латка для цього прибрана з
+  FreeRDP 3.33.0 — там адресу перевіряє `winpr_str_is_valid_hostname` (IP чи ім'я вузла).
 - **Тунель WireGuard** — окремий процес `native/tunnels` (Go: wireguard-go netstack),
   `native/tunnels/build.ps1` → `out/mhrd-tunnel.exe`. Протокол — рядки JSON у stdin/stdout
   (секрети лише там); відкриває `127.0.0.1:порт`, mhrd-session іде туди; живе, поки живий процес
