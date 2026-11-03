@@ -222,8 +222,11 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
       // Відкрита плашка — з відступом від краю й системних смуг; ручка — впритул до краю.
       final inset = expanded ? _gap : 0.0;
       final w = extent.width, h = extent.height;
-      double clampX(double x) => x.clamp(pad.left, size.width - pad.right - w).toDouble();
-      double clampY(double y) => y.clamp(pad.top, size.height - pad.bottom - h).toDouble();
+      // Місця менше, ніж довжина плашки (горизонтально з відкритою клавіатурою), — clamp кинув би
+      // помилку (нижня межа більша за верхню) і замість плашки став би сірий екран: тоді — від краю.
+      double fit(double v, double lo, double hi) => hi < lo ? lo : v.clamp(lo, hi).toDouble();
+      double clampX(double x) => fit(x, pad.left, size.width - pad.right - w);
+      double clampY(double y) => fit(y, pad.top, size.height - pad.bottom - h);
       final (left, top) = switch (edge) {
         BarEdge.top => (clampX(pos * size.width - w / 2), pad.top + inset),
         BarEdge.bottom => (clampX(pos * size.width - w / 2), size.height - pad.bottom - inset - h),
