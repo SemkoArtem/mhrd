@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO FreeRDP/FreeRDP
     REF "${VERSION}"
-    SHA512 2f036908fc96650fcec0810c05cf7fbad08f7c47a27aa7951b25e4bc1f390eb47223eaeaf622715bf2df6bd056e7f245502a3af57e606fd53d214c121a862a7e
+    SHA512 f976355350dcd905d48ac71a9842d5c4250eaabc125672d0883250c3a84500ac40ae361e5a83c2a6f25848bfede3cf038fa4a772c420de6d88b09b191b7e5a06
     HEAD_REF master
     PATCHES
         dependencies.patch
@@ -13,15 +13,12 @@ vcpkg_from_github(
         fix-windows-pkgconfig.patch
         install-layout.patch
         windows-linkage.patch
-        # MHRD: на Windows FreeRDP 3.32 перевіряв адреси через PathIsURLA (лише URL зі схемою):
-        # проксі тихо не працював, а перенаправлення RDS-ферми падало. Перевіряємо як ім'я вузла.
-        mhrd-hostname-checks.patch
 )
 file(WRITE "${SOURCE_PATH}/.source_version" "${VERSION}-vcpkg")
 file(WRITE "${SOURCE_PATH}/CMakeCPack.cmake" "")
 
 # MHRD: канал дисків із режимами доступу «додавання без видалення» і «лише читання»
-# (mhrd/drive_main.c — оригінал FreeRDP 3.32.2 + блоки «MHRD:»). При оновленні FreeRDP
+# (mhrd/drive_main.c — оригінал FreeRDP 3.32.2 = 3.33.0 + блоки «MHRD:»). При оновленні FreeRDP
 # перенести ці блоки в новий drive_main.c.
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/mhrd/drive_main.c" DESTINATION "${SOURCE_PATH}/channels/drive/client")
 
@@ -79,6 +76,13 @@ if(VCPKG_TARGET_IS_WINDOWS)
     list(APPEND FEATURE_OPTIONS -DWITH_MEDIA_FOUNDATION=ON)
 endif()
 
+# MHRD: звук і мікрофон на Linux — PulseAudio (і PipeWire через pipewire-pulse); libpulse —
+# із системи (libpulse-dev для збирання), є майже в кожному дистрибутиві зі стільницею.
+set(MHRD_PULSE OFF)
+if(VCPKG_TARGET_IS_LINUX)
+    set(MHRD_PULSE ON)
+endif()
+
 vcpkg_find_acquire_program(PKGCONFIG)
 
 vcpkg_cmake_configure(
@@ -118,7 +122,7 @@ vcpkg_cmake_configure(
         -DWITH_PCSC=OFF
         -DWITH_PKCS11=OFF
         -DWITH_PROXY_MODULES=OFF
-        -DWITH_PULSE=OFF
+        -DWITH_PULSE=${MHRD_PULSE}
         -DWITH_URIPARSER=OFF
     OPTIONS_RELEASE
         -DWITH_VERBOSE_WINPR_ASSERT=OFF

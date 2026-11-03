@@ -9,7 +9,7 @@
 ; програми лишаються — повторне встановлення бачить усе як було.
 
 #ifndef AppVersion
-  #define AppVersion "0.2.1"
+  #define AppVersion "0.2.2"
 #endif
 #define AppName "MHRD"
 #define Release "..\..\build\windows\x64\runner\Release"
