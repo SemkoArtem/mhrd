@@ -20,6 +20,7 @@ class FloatingSessionBar extends StatefulWidget {
     required this.actions,
     required this.statusColor,
     required this.collapseTooltip,
+    this.bottomInset = 0,
   });
 
   final ValueNotifier<bool> expanded;
@@ -28,6 +29,9 @@ class FloatingSessionBar extends StatefulWidget {
   final List<BarAction> actions;
   final Color statusColor;
   final String collapseTooltip;
+
+  /// Знизу зайнято (екранна клавіатура з рядком спецклавіш) — плашка лишається над цим.
+  final double bottomInset;
 
   @override
   State<FloatingSessionBar> createState() => _FloatingSessionBarState();
@@ -114,7 +118,7 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
     final t = context.mhrd;
     final pad = MediaQuery.paddingOf(context);
     return LayoutBuilder(builder: (context, box) {
-      final size = box.biggest;
+      final size = Size(box.maxWidth, (box.maxHeight - widget.bottomInset).clamp(0.0, box.maxHeight));
       // Поки тягнуть — край і місце за пальцем (орієнтація змінюється на льоту).
       final (edge, pos) =
           _drag != null ? _nearest(_drag!, size) : (widget.placement.edge, widget.placement.pos / 10000);
@@ -124,9 +128,25 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
       final Widget body;
       final Size extent;
       if (expanded) {
+        // Кожен елемент — рівно _button (кнопки Material самі розростаються до 48 — тут ні),
+        // точка стану — _dot уздовж плашки; + рамка з двох боків.
+        const dot = 18.0, border = 2.0;
         final n = widget.actions.length + 2; // хват + дії + згорнути
-        final long = n * _button + 18; // + точка стану
-        extent = horizontal ? Size(long, _button) : Size(_button, long);
+        final long = n * _button + dot + border;
+        extent = horizontal ? Size(long, _button + border) : Size(_button + border, long);
+        Widget button(IconData icon, String tooltip, VoidCallback onTap, {double size = 20}) => SizedBox.square(
+              dimension: _button,
+              child: IconButton(
+                tooltip: tooltip,
+                padding: EdgeInsets.zero,
+                style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: const Size.square(_button),
+                    fixedSize: const Size.square(_button)),
+                icon: Icon(icon, size: size),
+                onPressed: onTap,
+              ),
+            );
         final children = <Widget>[
           GestureDetector(
             onPanStart: _start,
@@ -135,26 +155,28 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
             child: SizedBox.square(
                 dimension: _button, child: Icon(Icons.drag_indicator, size: 20, color: t.textMuted)),
           ),
-          Container(
-            width: 8,
-            height: 8,
-            margin: const EdgeInsets.all(5),
-            decoration: BoxDecoration(shape: BoxShape.circle, color: widget.statusColor),
+          SizedBox(
+            width: horizontal ? dot : _button,
+            height: horizontal ? _button : dot,
+            child: Center(
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: widget.statusColor),
+              ),
+            ),
           ),
-          for (final a in widget.actions)
-            IconButton(tooltip: a.tooltip, icon: Icon(a.icon, size: 20), onPressed: a.onTap),
-          IconButton(
-            tooltip: widget.collapseTooltip,
-            icon: Icon(
-                switch (edge) {
-                  BarEdge.top => Icons.keyboard_arrow_up,
-                  BarEdge.bottom => Icons.keyboard_arrow_down,
-                  BarEdge.left => Icons.keyboard_arrow_left,
-                  BarEdge.right => Icons.keyboard_arrow_right,
-                },
-                size: 22),
-            onPressed: () => widget.expanded.value = false,
-          ),
+          for (final a in widget.actions) button(a.icon, a.tooltip, a.onTap),
+          button(
+              switch (edge) {
+                BarEdge.top => Icons.keyboard_arrow_up,
+                BarEdge.bottom => Icons.keyboard_arrow_down,
+                BarEdge.left => Icons.keyboard_arrow_left,
+                BarEdge.right => Icons.keyboard_arrow_right,
+              },
+              widget.collapseTooltip,
+              () => widget.expanded.value = false,
+              size: 24),
         ];
         body = Container(
           decoration: BoxDecoration(

@@ -14,7 +14,8 @@ import '../theme/mhrd_theme.dart';
 /// - «Дотик» ([direct]): пальці — справжніми дотиками у Windows (прокрутку, щипок, утримання для
 ///   правого кліку роблять самі програми ПК);
 /// - «Миша»: екран — як тачпад ноутбука, курсор видно. Палець рухає курсор, торкання = клік
-///   (двічі — подвійний), утримати й повести = перетягування, двома пальцями: торкання = правий клік,
+///   (двічі — подвійний), утримати = правий клік, торкнутись і одразу затиснути й повести =
+///   перетягування, двома пальцями: торкання = правий клік,
 ///   рух = прокрутка, щипок = збільшити картинку.
 /// Миша (Bluetooth, USB) в обох режимах — звичайна миша.
 class TouchSurface extends StatefulWidget {
@@ -33,7 +34,7 @@ class TouchSurface extends StatefulWidget {
 
 class _TouchSurfaceState extends State<TouchSurface> {
   static const _slop = 8.0; // логічних точок — далі це вже рух, а не торкання
-  static const _hold = Duration(milliseconds: 450); // утримати — почати перетягування
+  static const _hold = Duration(milliseconds: 450); // утримати — правий клік
   static const _tapMax = Duration(milliseconds: 300);
   static const _maxZoom = 5.0;
 
@@ -49,6 +50,8 @@ class _TouchSurfaceState extends State<TouchSurface> {
   DateTime _downAt = DateTime.now();
   Timer? _holdTimer;
   bool _moved = false, _dragging = false, _consumed = false;
+  bool _armed = false; // торкнулись і одразу знову притиснули — рух тягне
+  DateTime? _lastTap; // коли було останнє торкання-клік
 
   // Два пальці: початкова відстань і центр, режим — масштаб чи прокрутка.
   double _pinchDist = 0, _pinchZoom = 1;
@@ -177,16 +180,19 @@ class _TouchSurfaceState extends State<TouchSurface> {
     if (widget.direct) return _touch(e, TouchFlags.down);
     _touches[e.pointer] = e.localPosition;
     if (_touches.length == 1) {
+      final now = DateTime.now();
+      // Торкнулись і одразу знову притиснули — як на тачпаді: рух тепер тягне (ліва кнопка натиснута).
+      _armed = _lastTap != null && now.difference(_lastTap!) < _tapMax;
       _last = e.localPosition;
-      _downAt = DateTime.now();
+      _downAt = now;
       _moved = _dragging = _consumed = false;
       _holdTimer?.cancel();
       _holdTimer = Timer(_hold, () {
-        if (_moved || _touches.length != 1) return;
-        // Утримали — перетягування: кнопка натиснута, поки палець на екрані.
-        _dragging = true;
+        if (_moved || _armed || _touches.length != 1) return;
+        // Утримали — правий клік (контекстне меню).
+        _consumed = true;
         HapticFeedback.mediumImpact();
-        _button(RemoteButton.left, true);
+        _click(RemoteButton.right);
       });
     } else if (_touches.length == 2) {
       _holdTimer?.cancel();
@@ -215,7 +221,12 @@ class _TouchSurfaceState extends State<TouchSurface> {
       if (!_moved && (e.localPosition - _last).distance < _slop && !_dragging) return;
       if (!_moved) {
         _moved = true;
-        if (!_dragging) _holdTimer?.cancel();
+        _holdTimer?.cancel();
+        if (_armed) {
+          // Торкання + затиснули й повели — перетягування.
+          _dragging = true;
+          _button(RemoteButton.left, true);
+        }
       }
       _last = e.localPosition;
       _moveCursor(delta);
@@ -265,12 +276,15 @@ class _TouchSurfaceState extends State<TouchSurface> {
     }
     if (was != 1) return;
     _holdTimer?.cancel();
+    _lastTap = null;
     if (_dragging) {
       _button(RemoteButton.left, false);
     } else if (!_moved && !_consumed && quick && e is PointerUpEvent) {
+      // Торкання — клік (два поспіль — подвійний клік); запам'ятати — для «торкнись і тягни».
       _click(RemoteButton.left);
+      _lastTap = DateTime.now();
     }
-    _dragging = false;
+    _dragging = _armed = false;
   }
 
   /// Миша (Bluetooth / USB) на телефоні: як на ПК — рух, кнопки, коліщатко.
@@ -537,6 +551,22 @@ class _RemoteKeyboardState extends State<RemoteKeyboard> {
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(children: [
+              // Сховати екранну клавіатуру (буває, що вона закриває плашку).
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Material(
+                  color: t.surfaceRaised,
+                  borderRadius: BorderRadius.circular(t.radius),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(t.radius),
+                    onTap: widget.focusNode.unfocus,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Icon(Icons.keyboard_hide_outlined, size: 22, color: t.text),
+                    ),
+                  ),
+                ),
+              ),
               key('Esc', () => _key(_esc)),
               key('Tab', () => _key(_tab)),
               key('Ctrl', () => _toggle(_ctrl), on: _held.contains(_ctrl)),

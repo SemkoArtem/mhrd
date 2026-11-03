@@ -63,6 +63,9 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Телефон: плашка відкрита (типово згорнута в ручку біля краю).
   final _barOpen = ValueNotifier(false);
 
+  /// Телефон: екранна клавіатура щойно була на екрані (щоб помітити, що її сховали «Назад»).
+  bool _keyboardWasShown = false;
+
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
   /// На весь екран — завжди заповнюємо екран, незалежно від режиму ПК.
@@ -74,8 +77,7 @@ class _SessionScreenState extends State<SessionScreen> {
     _scheduleResize(size);
   }
 
-  bool get _followsWindow =>
-      _touch || _fullscreen || s.connection.display.resizeMode == ResizeMode.changeResolution;
+  bool get _followsWindow => _touch || _fullscreen || s.connection.display.resizeMode == ResizeMode.changeResolution;
 
   /// Сервер надіслав картинку іншого розміру, ніж вікно (наприклад, проігнорував ранній запит) —
   /// просимо ще раз. RdpSession не повторює той самий запит, тож циклу немає.
@@ -263,35 +265,59 @@ class _SessionScreenState extends State<SessionScreen> {
     if (_touch) {
       final live = s.image != null && s.state == SessionState.connected;
       final settings = _manager.repo.settings;
-      return Scaffold(
-        backgroundColor: Colors.black,
-        // Клавіатура телефона — поверх картинки (типово) або зсуває її (налаштування).
-        resizeToAvoidBottomInset: settings.keyboardShiftsScreen,
-        body: Stack(children: [
-          Positioned.fill(child: _body(context)),
-          // Рядок спецклавіш — над екранною клавіатурою.
-          if (live)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: MediaQuery.viewInsetsOf(context).bottom,
-              child: RemoteKeyboard(session: s, focusNode: _keyboardFocus),
+      // Клавіатуру сховали системним «Назад» — поле лишалось у фокусі з рядком спецклавіш: прибираємо.
+      final kb = MediaQuery.viewInsetsOf(context).bottom;
+      if (_keyboardFocus.hasFocus && kb == 0 && _keyboardWasShown) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _keyboardFocus.unfocus());
+      }
+      _keyboardWasShown = kb > 0;
+      final keysRow = _keyboardFocus.hasFocus ? 52.0 : 0.0;
+      return PopScope(
+        canPop: false,
+        // «Назад»: спершу сховати клавіатуру, потім згорнути плашку, а вже тоді вийти з сеансу.
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          if (_keyboardFocus.hasFocus) {
+            _keyboardFocus.unfocus();
+            setState(() {});
+          } else if (_barOpen.value) {
+            _barOpen.value = false;
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          // Клавіатура телефона — поверх картинки (типово) або зсуває її (налаштування).
+          resizeToAvoidBottomInset: settings.keyboardShiftsScreen,
+          body: Stack(children: [
+            Positioned.fill(child: _body(context)),
+            // Рядок спецклавіш — над екранною клавіатурою.
+            if (live)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+                child: RemoteKeyboard(session: s, focusNode: _keyboardFocus),
+              ),
+            Positioned.fill(
+              child: FloatingSessionBar(
+                expanded: _barOpen,
+                placement: settings.bar,
+                onPlacement: (p) => _manager.repo.updateSettings(_manager.repo.settings.copyWith(bar: p)),
+                actions: _touchActions(context),
+                statusColor: switch (s.state) {
+                  SessionState.connected => t.ok,
+                  SessionState.failed => t.error,
+                  _ => t.warn,
+                },
+                collapseTooltip: context.l10n.barCollapse,
+                // Біля нижнього краю плашка — над клавіатурою й рядком спецклавіш.
+                bottomInset: keysRow + (settings.keyboardShiftsScreen ? 0 : kb),
+              ),
             ),
-          Positioned.fill(
-            child: FloatingSessionBar(
-              expanded: _barOpen,
-              placement: settings.bar,
-              onPlacement: (p) => _manager.repo.updateSettings(_manager.repo.settings.copyWith(bar: p)),
-              actions: _touchActions(context),
-              statusColor: switch (s.state) {
-                SessionState.connected => t.ok,
-                SessionState.failed => t.error,
-                _ => t.warn,
-              },
-              collapseTooltip: context.l10n.barCollapse,
-            ),
-          ),
-        ]),
+          ]),
+        ),
       );
     }
     if (_fullscreen) {
@@ -335,23 +361,23 @@ class _SessionScreenState extends State<SessionScreen> {
           icon: _directTouch ? Icons.touch_app_outlined : Icons.mouse_outlined,
           tooltip: _directTouch ? l.touchModeMouse : l.touchModeDirect,
           onTap: () => then(() {
-            setState(() => _directTouch = !_directTouch);
-            _manager.repo.updateSettings(_manager.repo.settings.copyWith(touchAsMouse: !_directTouch));
-          }),
+                setState(() => _directTouch = !_directTouch);
+                _manager.repo.updateSettings(_manager.repo.settings.copyWith(touchAsMouse: !_directTouch));
+              }),
         ),
       if (live)
         (
           icon: kbOpen ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined,
           tooltip: l.onScreenKeyboard,
           onTap: () => then(() {
-            if (kbOpen) {
-              _keyboardFocus.unfocus();
-            } else {
-              _keyboardFocus.requestFocus();
-              SystemChannels.textInput.invokeMethod('TextInput.show');
-            }
-            setState(() {});
-          }),
+                if (kbOpen) {
+                  _keyboardFocus.unfocus();
+                } else {
+                  _keyboardFocus.requestFocus();
+                  SystemChannels.textInput.invokeMethod('TextInput.show');
+                }
+                setState(() {});
+              }),
         ),
       if (s.isActive) (icon: Icons.power_settings_new, tooltip: l.disconnectAction, onTap: () => then(s.disconnect)),
       (
@@ -502,8 +528,7 @@ class _SessionScreenState extends State<SessionScreen> {
       child: LayoutBuilder(builder: (context, box) {
         _onViewSize(box.biggest);
         if (_touch) {
-          return TouchSurface(
-              session: s, image: img, direct: _directTouch, onTouch: () => _barOpen.value = false);
+          return TouchSurface(session: s, image: img, direct: _directTouch, onTouch: () => _barOpen.value = false);
         }
         // Розмір картинки в логічних точках: 1 піксель ПК = 1 фізичний піксель екрана.
         final w = s.width / _dpr, h = s.height / _dpr;
