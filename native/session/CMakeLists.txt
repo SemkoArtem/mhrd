@@ -22,6 +22,9 @@ if(ANDROID)
   # системна libaaudio з NDK.
   add_library(AAudio::AAudio INTERFACE IMPORTED)
   target_link_libraries(AAudio::AAudio INTERFACE aaudio)
+  # WinPR 3.33 на Android посилається на CpuFeatures::ndk_compat, а його конфіг знаходить лише
+  # CpuFeatures — ціль дає окремий пакет CpuFeaturesNdkCompat (з того ж порту cpu-features).
+  find_package(CpuFeaturesNdkCompat CONFIG REQUIRED)
 endif()
 
 find_package(FreeRDP-Client CONFIG REQUIRED)
