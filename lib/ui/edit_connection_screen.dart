@@ -499,18 +499,17 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final t = context.mhrd;
     final l = context.l10n;
     void setD(DeviceSettings x) => _set(_c.copyWith(devices: x));
-    // Телефон: буфера обміну в сеансі поки немає, а спільна папка — це шлях на диску, якого Android
-    // застосунку не дає (лише посилання на документ). Звук і мікрофон працюють.
+    // Телефон: буфер обміну — лише текст; спільна папка — це шлях на диску, якого Android застосунку не
+    // дає (лише посилання на документ). Звук і мікрофон працюють.
     final mobile = Platform.isAndroid || Platform.isIOS;
     return [
-      if (!mobile)
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: d.clipboard,
-          title: Text(l.clipboard),
-          subtitle: Text(l.clipboardHint),
-          onChanged: (v) => setD(d.copyWith(clipboard: v)),
-        ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: d.clipboard,
+        title: Text(l.clipboard),
+        subtitle: Text(mobile ? l.clipboardHintPhone : l.clipboardHint),
+        onChanged: (v) => setD(d.copyWith(clipboard: v)),
+      ),
       const SizedBox(height: 8),
       DropdownButtonFormField<SoundMode>(
         initialValue: d.sound,

@@ -16,3 +16,6 @@ void clipboard_attach(MhrdClipboard* cb, CliprdrClientContext* cliprdr);
 void clipboard_detach(MhrdClipboard* cb);
 
 void clipboard_free(MhrdClipboard* cb);
+
+/* Android (clipboard_proto.c): текст із буфера телефона, який надіслав застосунок (MSG_CLIP_TEXT). */
+void clipboard_set_text(MhrdClipboard* cb, const char* utf8, size_t len);

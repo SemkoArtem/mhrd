@@ -122,6 +122,9 @@ class RdpSession extends ChangeNotifier {
   /// Вікно сеансу просить екранну клавіатуру ОС.
   void Function()? onKeyboard;
 
+  /// Текст, скопійований на віддаленому ПК (Android: екран сеансу кладе його в буфер телефона).
+  void Function(String text)? onClipText;
+
   /// Поточна картинка віддаленого екрана.
   ui.Image? image;
   int width = 0, height = 0;
@@ -181,6 +184,8 @@ class RdpSession extends ChangeNotifier {
       case BarEvent():
         onBarMoved?.call(e);
         return;
+      case ClipTextEvent(:final text):
+        onClipText?.call(text);
       case KeyboardEvent():
         onKeyboard?.call();
         return;
@@ -240,6 +245,11 @@ class RdpSession extends ChangeNotifier {
   /// Дотик сенсора телефона — справжнім дотиком у Windows (режим «Дотик», як у клієнта Microsoft).
   void sendTouch(int flags, int finger, int x, int y) {
     if (_canInput) _channel.send(encodeTouch(flags, finger, x, y));
+  }
+
+  /// Текст буфера телефона — щоб на віддаленому ПК його можна було вставити (Android).
+  void sendClipText(String text) {
+    if (_canInput) _channel.send(encodeClipText(text));
   }
 
   /// Текст з екранної клавіатури телефона — символами, без клавіш (кирилиця, емодзі тощо).

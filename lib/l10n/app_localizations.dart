@@ -1964,6 +1964,42 @@ abstract class AppLocalizations {
   /// **'Головна'**
   String get homeScreen;
 
+  /// No description provided for @lockBiometricPhone.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відкривати відбитком пальця'**
+  String get lockBiometricPhone;
+
+  /// No description provided for @autoBackupInApp.
+  ///
+  /// In uk, this message translates to:
+  /// **'Копії — у пам\'яті MHRD на цьому телефоні. Файл назовні — кнопкою «Зберегти бекап».'**
+  String get autoBackupInApp;
+
+  /// No description provided for @restoreFromFile.
+  ///
+  /// In uk, this message translates to:
+  /// **'З файлу…'**
+  String get restoreFromFile;
+
+  /// No description provided for @clipboardHintPhone.
+  ///
+  /// In uk, this message translates to:
+  /// **'Текст в обидва боки: скопійоване на ПК одразу в буфері телефона, а скопійоване на телефоні — на ПК, щойно повернетесь у MHRD.'**
+  String get clipboardHintPhone;
+
+  /// No description provided for @unlockBiometricPhone.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відбиток пальця'**
+  String get unlockBiometricPhone;
+
+  /// No description provided for @authNeedPinPhone.
+  ///
+  /// In uk, this message translates to:
+  /// **'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні).'**
+  String get authNeedPinPhone;
+
   /// No description provided for @keyboardShiftsScreen.
   ///
   /// In uk, this message translates to:

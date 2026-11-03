@@ -7,11 +7,12 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.view.WindowManager
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+// FlutterFragmentActivity, а не FlutterActivity: інакше вхід відбитком (local_auth) не працює.
+class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val SAVE_REQUEST = 10
         private const val OPEN_REQUEST = 11

@@ -32,7 +32,7 @@ class SessionScreen extends StatefulWidget {
   State<SessionScreen> createState() => _SessionScreenState();
 }
 
-class _SessionScreenState extends State<SessionScreen> {
+class _SessionScreenState extends State<SessionScreen> with WidgetsBindingObserver {
   final _focus = FocusNode(debugLabel: 'rdp-session');
   final _pressed = <int>{};
   int _buttons = 0;
@@ -66,6 +66,24 @@ class _SessionScreenState extends State<SessionScreen> {
 
   /// Телефон: екранна клавіатура щойно була на екрані (щоб помітити, що її сховали «Назад»).
   bool _keyboardWasShown = false;
+
+  /// Телефон: останній текст буфера, який уже є на обох боках (щоб не слати його по колу).
+  String? _lastClip;
+  bool _clipSent = false; // буфер телефона вже надіслано після підключення
+
+  /// Буфер телефона → віддалений ПК. Читаємо лише при підключенні й поверненні в MHRD: Android 12+
+  /// щоразу показує, що застосунок прочитав буфер, тож постійно його не опитуємо.
+  Future<void> _syncClipboard() async {
+    final text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;
+    if (!mounted || text == null || text.isEmpty || text == _lastClip) return;
+    _lastClip = text;
+    s.sendClipText(text);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && s.state == SessionState.connected) _syncClipboard();
+  }
 
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
@@ -128,6 +146,14 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     s.addListener(_onSession);
+    if (_touch && s.connection.devices.clipboard) {
+      // Телефон: буфер обміну — текст через застосунок (native/session/src/clipboard_proto.c).
+      s.onClipText = (text) {
+        _lastClip = text;
+        Clipboard.setData(ClipboardData(text: text));
+      };
+      WidgetsBinding.instance.addObserver(this);
+    }
     // Телефон: сеанс на весь екран, системні панелі — лише свайпом від краю.
     if (_touch) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // «Запуск на весь екран»: налаштування ПК, інакше загальне.
@@ -148,6 +174,7 @@ class _SessionScreenState extends State<SessionScreen> {
   @override
   void dispose() {
     s.removeListener(_onSession);
+    WidgetsBinding.instance.removeObserver(this);
     _resizeTimer?.cancel();
     if (_fullscreen) {
       windowManager.setFullScreen(false).then((_) {
@@ -169,6 +196,11 @@ class _SessionScreenState extends State<SessionScreen> {
   void _onSession() {
     if (!mounted) return;
     setState(() {});
+    // Телефон: щойно підключились — на ПК можна вставити те, що скопійоване на телефоні.
+    if (_touch && !_clipSent && s.state == SessionState.connected && s.connection.devices.clipboard) {
+      _clipSent = true;
+      _syncClipboard();
+    }
     _checkSurface();
     final cert = s.pendingCertificate;
     if (cert != null && !_certDialogOpen) _askCertificate(cert);

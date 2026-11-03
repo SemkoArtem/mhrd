@@ -451,7 +451,7 @@ class _RemoteKeyboardState extends State<RemoteKeyboard> {
       final typed = value.substring(_anchor.length);
       for (final ch in typed.runes) {
         final c = String.fromCharCode(ch);
-        if (c == '\n') {
+        if (c == '\n' || c == '\r') {
           _key(_enter);
         } else if (_held.isNotEmpty && c.length == 1 && RegExp(r'[a-zA-Z]').hasMatch(c)) {
           // Ctrl+C тощо: з модифікатором — клавіша, а не символ.
@@ -541,9 +541,13 @@ class _RemoteKeyboardState extends State<RemoteKeyboard> {
             enableSuggestions: false,
             enableIMEPersonalizedLearning: false,
             keyboardType: TextInputType.visiblePassword,
-            textInputAction: TextInputAction.newline,
-            maxLines: null,
+            // Поле однорядкове: клавіша Enter телефона приходить не символом «\n», а дією клавіатури —
+            // її перетворюємо на Enter на ПК, а поле лишається відкритим (не onEditingComplete за замовчуванням).
+            textInputAction: TextInputAction.go,
+            maxLines: 1,
             onChanged: _changed,
+            onSubmitted: (_) => _key(_enter),
+            onEditingComplete: () {},
           ),
         ),
       ),

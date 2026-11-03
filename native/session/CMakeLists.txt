@@ -30,9 +30,9 @@ find_package(WinPR CONFIG REQUIRED)
 find_package(cJSON CONFIG REQUIRED)
 
 if(ANDROID)
-  # Android: без власного вікна (сеанс показує застосунок) і поки без буфера обміну.
+  # Android: без власного вікна (сеанс показує застосунок); буфер обміну — текст через застосунок.
   set(MHRD_WINDOW src/window_none.c)
-  set(MHRD_CLIPBOARD src/clipboard_none.c)
+  set(MHRD_CLIPBOARD src/clipboard_proto.c)
 else()
   # Власне вікно сеансу (SDL3) і текст плашки (SDL3_ttf)
   find_package(SDL3 CONFIG REQUIRED)

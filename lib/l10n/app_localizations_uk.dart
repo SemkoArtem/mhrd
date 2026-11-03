@@ -1066,6 +1066,27 @@ class AppLocalizationsUk extends AppLocalizations {
   String get homeScreen => 'Головна';
 
   @override
+  String get lockBiometricPhone => 'Відкривати відбитком пальця';
+
+  @override
+  String get autoBackupInApp =>
+      'Копії — у пам\'яті MHRD на цьому телефоні. Файл назовні — кнопкою «Зберегти бекап».';
+
+  @override
+  String get restoreFromFile => 'З файлу…';
+
+  @override
+  String get clipboardHintPhone =>
+      'Текст в обидва боки: скопійоване на ПК одразу в буфері телефона, а скопійоване на телефоні — на ПК, щойно повернетесь у MHRD.';
+
+  @override
+  String get unlockBiometricPhone => 'Відбиток пальця';
+
+  @override
+  String get authNeedPinPhone =>
+      'Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні).';
+
+  @override
   String get keyboardShiftsScreen =>
       'Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)';
 

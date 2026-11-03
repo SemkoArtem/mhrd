@@ -272,7 +272,7 @@ class _GeneralTab extends StatelessWidget {
                 ? const SizedBox.shrink()
                 : SwitchListTile(
                     value: s.lockBiometric,
-                    title: Text(l.lockBiometric),
+                    title: Text(Platform.isAndroid || Platform.isIOS ? l.lockBiometricPhone : l.lockBiometric),
                     onChanged: (v) async {
                       // Вмикаємо, лише якщо відбиток / Windows Hello справді спрацював.
                       if (v && !await AppLock(repo).unlockWithBiometric(l.lockReason)) return;
@@ -1060,6 +1060,8 @@ class _GroupsTab extends StatelessWidget {
 // ── Бекап ─────────────────────────────────────────────────────────
 
 class _BackupTab extends StatelessWidget {
+  static bool get _mobile => Platform.isAndroid || Platform.isIOS;
+
   const _BackupTab({required this.repo});
   final Repository repo;
 
@@ -1083,7 +1085,7 @@ class _BackupTab extends StatelessWidget {
 
   Future<void> _import(BuildContext context) async {
     final l = context.l10n;
-    final f = await openBytes(backupTypes(l));
+    final f = await _pickBackup(context);
     if (f == null || !context.mounted) return;
     final pw = await promptText(context, title: l.backupPasswordLabel, label: l.password, obscure: true, ok: l.open);
     if (pw == null || !context.mounted) return;
@@ -1124,9 +1126,35 @@ class _BackupTab extends StatelessWidget {
     }
   }
 
+  /// Телефон: автобекап — у пам'яті застосунку (Android не дає застосунку теки на диску, лише
+  /// посилання на документ); назовні файл потрапляє лише через «Зберегти бекап».
+  static Future<String> _inAppBackupDir() async =>
+      p.join((Portable.dataDir ?? await getApplicationSupportDirectory()).path, 'backups');
+
+  /// Бекап для відновлення: на телефоні з увімкненим автобекапом — на вибір копія з пам'яті MHRD
+  /// чи файл, інакше — файл.
+  Future<(String, Uint8List)?> _pickBackup(BuildContext context) async {
+    final l = context.l10n;
+    final auto = AppScope.of(context).autoBackup;
+    if (_mobile && auto.enabled) {
+      final dir = Directory(auto.dir!);
+      final copies = dir.existsSync()
+          ? (dir.listSync().whereType<File>().where((f) => f.path.endsWith('.rdpbackup')).toList()
+            ..sort((a, b) => b.path.compareTo(a.path)))
+          : <File>[];
+      if (copies.isNotEmpty) {
+        final names = [for (final f in copies) p.basename(f.path)];
+        final i = await pickOne(context, title: l.restoreFromBackup, options: [...names, l.restoreFromFile]);
+        if (i == null) return null;
+        if (i < copies.length) return (names[i], await copies[i].readAsBytes());
+      }
+    }
+    return openBytes(backupTypes(l));
+  }
+
   Future<void> _enableAuto(BuildContext context, AutoBackup auto) async {
     final l = context.l10n;
-    final dir = await pickFolder();
+    final dir = _mobile ? await _inAppBackupDir() : await pickFolder();
     if (dir == null || !context.mounted) return;
     final pw = await promptNewPassword(context, title: l.autoBackupPasswordTitle);
     if (pw == null || !context.mounted) return;
@@ -1190,49 +1218,47 @@ class _BackupTab extends StatelessWidget {
         OutlinedButton.icon(
             icon: const Icon(Icons.restore), label: Text(l.restoreFromBackup), onPressed: () => _import(context)),
       ]),
-      // Автобекап пише в теку на диску, а Android замість теки дає посилання на документ — на телефоні
-      // лише бекап вручну («Зберегти як»).
-      if (!(Platform.isAndroid || Platform.isIOS)) ...[
-        _caption(context, l.autoBackup),
-        ListenableBuilder(
-          listenable: auto,
-          builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(l.autoBackupHint, style: TextStyle(color: t.textMuted)),
-            const SizedBox(height: 6),
+      _caption(context, l.autoBackup),
+      ListenableBuilder(
+        listenable: auto,
+        builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(l.autoBackupHint, style: TextStyle(color: t.textMuted)),
+          const SizedBox(height: 6),
+          if (!auto.enabled)
+            Text(l.disabled, style: TextStyle(color: t.textMuted, fontSize: 13))
+          else ...[
+            // Телефон: копії — у пам'яті MHRD (шлях усередині застосунку нічого не скаже).
+            if (_mobile) Text(l.autoBackupInApp) else Text(auto.dir!, style: t.mono),
+            const SizedBox(height: 2),
+            Text(
+              auto.lastAt == null ? l.autoBackupNone : l.autoBackupLast(formatDateTime(auto.lastAt!)),
+              style: TextStyle(color: t.textMuted, fontSize: 13),
+            ),
+            if (auto.lastError != null)
+              Text(l.autoBackupFailure(auto.lastError!), style: TextStyle(color: t.error, fontSize: 13)),
+          ],
+          const SizedBox(height: 12),
+          Wrap(spacing: 10, runSpacing: 10, children: [
             if (!auto.enabled)
-              Text(l.disabled, style: TextStyle(color: t.textMuted, fontSize: 13))
+              OutlinedButton.icon(
+                  icon: const Icon(Icons.schedule),
+                  label: Text(l.enableEllipsis),
+                  onPressed: () => _enableAuto(context, auto))
             else ...[
-              Text(auto.dir!, style: t.mono),
-              const SizedBox(height: 2),
-              Text(
-                auto.lastAt == null ? l.autoBackupNone : l.autoBackupLast(formatDateTime(auto.lastAt!)),
-                style: TextStyle(color: t.textMuted, fontSize: 13),
-              ),
-              if (auto.lastError != null)
-                Text(l.autoBackupFailure(auto.lastError!), style: TextStyle(color: t.error, fontSize: 13)),
-            ],
-            const SizedBox(height: 12),
-            Wrap(spacing: 10, runSpacing: 10, children: [
-              if (!auto.enabled)
-                OutlinedButton.icon(
-                    icon: const Icon(Icons.schedule),
-                    label: Text(l.enableEllipsis),
-                    onPressed: () => _enableAuto(context, auto))
-              else ...[
-                OutlinedButton.icon(
-                    icon: const Icon(Icons.save_outlined),
-                    label: Text(l.autoBackupNow),
-                    onPressed: () => _autoNow(context, auto)),
+              OutlinedButton.icon(
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(l.autoBackupNow),
+                  onPressed: () => _autoNow(context, auto)),
+              if (!_mobile)
                 OutlinedButton.icon(
                     icon: const Icon(Icons.folder_open_outlined),
                     label: Text(l.autoBackupChange),
                     onPressed: () => _enableAuto(context, auto)),
-                TextButton.icon(icon: const Icon(Icons.close), label: Text(l.disable), onPressed: auto.disable),
-              ],
-            ]),
+              TextButton.icon(icon: const Icon(Icons.close), label: Text(l.disable), onPressed: auto.disable),
+            ],
           ]),
-        ),
-      ],
+        ]),
+      ),
       _caption(context, l.sharePcList),
       Text(l.sharePcListHint, style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 12),

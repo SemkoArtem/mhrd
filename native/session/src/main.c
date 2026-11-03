@@ -1107,6 +1107,11 @@ static void handle_input(MhrdContext* m)
 					}
 				}
 				break;
+#ifdef __ANDROID__
+			case MSG_CLIP_TEXT:
+				clipboard_set_text(m->clipboard, (const char*)d, msg->len);
+				break;
+#endif
 			case MSG_UNICODE:
 				if (msg->len >= 2)
 				{

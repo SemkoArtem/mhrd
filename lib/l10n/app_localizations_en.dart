@@ -1066,6 +1066,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeScreen => 'Home';
 
   @override
+  String get lockBiometricPhone => 'Unlock with fingerprint';
+
+  @override
+  String get autoBackupInApp =>
+      'Copies are kept inside MHRD on this phone. To get a file out, use “Save backup”.';
+
+  @override
+  String get restoreFromFile => 'From a file…';
+
+  @override
+  String get clipboardHintPhone =>
+      'Text both ways: what you copy on the PC lands in the phone clipboard right away, and what you copy on the phone reaches the PC as soon as you return to MHRD.';
+
+  @override
+  String get unlockBiometricPhone => 'Fingerprint';
+
+  @override
+  String get authNeedPinPhone =>
+      'To edit keys, turn on the PIN lock (Settings → General).';
+
+  @override
   String get keyboardShiftsScreen =>
       'On-screen keyboard pushes the session picture up (otherwise it covers it)';
 

@@ -17,6 +17,7 @@ abstract final class Msg {
   static const latency = 0x0A;
   static const unicode = 0x0B;
   static const touch = 0x0C;
+  static const clipText = 0x0D;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -25,6 +26,7 @@ abstract final class Msg {
   static const evtDisconnected = 0x85;
   static const evtBar = 0x86;
   static const evtKeyboard = 0x87;
+  static const evtClipText = 0x88;
 }
 
 /// Кнопки миші в протоколі.
@@ -67,6 +69,9 @@ Uint8List encodeConnect(Map<String, Object?> config) => encodeFrame(Msg.connect,
 
 Uint8List encodeKey(int scancode, bool down) =>
     encodeFrame(Msg.key, [scancode & 0xFF, (scancode >> 8) & 0xFF, down ? 1 : 0]);
+
+/// Текст буфера телефона для віддаленого ПК (Android; UTF-8).
+Uint8List encodeClipText(String text) => encodeFrame(Msg.clipText, utf8.encode(text));
 
 /// Символ без клавіші (екранна клавіатура телефона): одиниця UTF-16.
 Uint8List encodeUnicode(int codeUnit) => encodeFrame(Msg.unicode, _u16s([codeUnit]));
@@ -167,6 +172,12 @@ class BarEvent extends SessionEvent {
 }
 
 /// Кнопка «Екранна клавіатура» у вікні сеансу: osk.exe запускає застосунок (сеансу не можна).
+/// Текст, скопійований на віддаленому ПК (Android: у буфер телефона).
+class ClipTextEvent extends SessionEvent {
+  const ClipTextEvent(this.text);
+  final String text;
+}
+
 class KeyboardEvent extends SessionEvent {
   const KeyboardEvent();
 }
@@ -228,6 +239,8 @@ class SessionEventDecoder extends StreamTransformerBase<List<int>, SessionEvent>
         return DisconnectedEvent(r, u32(1), utf8.decode(d.sublist(5), allowMalformed: true));
       case Msg.evtBar when d.length >= 5:
         return BarEvent(d[0], bd.getUint16(1, Endian.little), bd.getUint16(3, Endian.little));
+      case Msg.evtClipText:
+        return ClipTextEvent(utf8.decode(d, allowMalformed: true));
       case Msg.evtKeyboard:
         return const KeyboardEvent();
       default:

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +14,9 @@ import 'dialogs.dart';
 import 'portable_gate.dart';
 
 /// Показує [child] лише після PIN-коду чи відбитка / Windows Hello, якщо блокування ввімкнено.
+/// Телефон: відбиток пальця (без «Windows Hello» у текстах).
+bool get _phone => Platform.isAndroid || Platform.isIOS;
+
 class LockGate extends StatefulWidget {
   const LockGate({super.key, required this.child});
   final Widget child;
@@ -122,8 +126,7 @@ class _LockScreenState extends State<LockScreen> {
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.lock_outline, size: 44, color: t.accent),
             const SizedBox(height: 14),
-            Text('MHRD',
-                style: TextStyle(fontFamily: t.fontMono, fontSize: 22, letterSpacing: 0.8, color: t.accent)),
+            Text('MHRD', style: TextStyle(fontFamily: t.fontMono, fontSize: 22, letterSpacing: 0.8, color: t.accent)),
             const SizedBox(height: 6),
             Text(l.lockTitle, style: TextStyle(color: t.textMuted)),
             const SizedBox(height: 22),
@@ -154,7 +157,10 @@ class _LockScreenState extends State<LockScreen> {
             ),
             if (biometric) ...[
               const SizedBox(height: 8),
-              TextButton.icon(icon: const Icon(Icons.fingerprint), label: Text(l.unlockBiometric), onPressed: _biometric),
+              TextButton.icon(
+                  icon: const Icon(Icons.fingerprint),
+                  label: Text(_phone ? l.unlockBiometricPhone : l.unlockBiometric),
+                  onPressed: _biometric),
             ],
           ]),
         ),
@@ -237,7 +243,7 @@ Future<bool> authorizeSensitive(BuildContext context, Repository repo) async {
     return ok;
   }
   if (await lock.biometricAvailable()) return lock.unlockWithBiometric(l.authEditReason);
-  if (context.mounted) toast(context, l.authNeedPin);
+  if (context.mounted) toast(context, _phone ? l.authNeedPinPhone : l.authNeedPin);
   return false;
 }
 

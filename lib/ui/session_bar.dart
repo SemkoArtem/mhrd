@@ -119,9 +119,10 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
     final pad = MediaQuery.paddingOf(context);
     return LayoutBuilder(builder: (context, box) {
       final size = Size(box.maxWidth, (box.maxHeight - widget.bottomInset).clamp(0.0, box.maxHeight));
-      // Поки тягнуть — край і місце за пальцем (орієнтація змінюється на льоту).
-      final (edge, pos) =
-          _drag != null ? _nearest(_drag!, size) : (widget.placement.edge, widget.placement.pos / 10000);
+      // Під час перетягування орієнтація лишається тією самою: перебудова рядок↔стовпчик губила жест
+      // (плашка «застрягала»). Край визначається, коли відпустять.
+      final edge = widget.placement.edge;
+      final pos = widget.placement.pos / 10000;
       final horizontal = _horizontal(edge);
       final expanded = widget.expanded.value;
 
@@ -152,6 +153,7 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
             onPanStart: _start,
             onPanUpdate: _update,
             onPanEnd: (_) => _end(size, edge, handle: false),
+            onPanCancel: () => setState(() => _drag = null),
             child: SizedBox.square(
                 dimension: _button, child: Icon(Icons.drag_indicator, size: 20, color: t.textMuted)),
           ),
@@ -199,6 +201,7 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
           onPanStart: _start,
           onPanUpdate: _update,
           onPanEnd: (_) => _end(size, edge, handle: true),
+          onPanCancel: () => setState(() => _drag = null),
           child: Center(
             child: Container(
               width: grip.width,
@@ -233,8 +236,13 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
         BarEdge.left => (pad.left + inset, clampY(pos * size.height - h / 2)),
         BarEdge.right => (size.width - pad.right - inset - w, clampY(pos * size.height - h / 2)),
       };
+      // Тягнуть — плашка вільно йде за пальцем.
+      final drag = _drag;
+      final (x, y) = drag == null
+          ? (left, top)
+          : (fit(drag.dx - w / 2, 0, size.width - w), fit(drag.dy - h / 2, 0, size.height - h));
       return Stack(children: [
-        Positioned(left: left, top: top, width: w, height: h, child: body),
+        Positioned(left: x, top: y, width: w, height: h, child: body),
       ]);
     });
   }

@@ -56,3 +56,8 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Тема AppCompat (styles.xml) — без неї вікно відбитка (local_auth) на Android 8 і старших падає.
+    implementation("androidx.appcompat:appcompat:1.7.0")
+}
