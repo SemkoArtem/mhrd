@@ -184,6 +184,7 @@ class PcRow extends StatelessWidget {
     final l = context.l10n;
     final c = connection;
     final s = state;
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return Material(
       color: s.selected ? t.accent.withValues(alpha: 0.12) : t.surface,
       borderRadius: BorderRadius.circular(t.radius),
@@ -212,14 +213,20 @@ class PcRow extends StatelessWidget {
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
                 Text(c.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.mono),
+                // Телефон: маршрут і акаунт — рядком нижче, а не окремими колонками.
+                if (narrow)
+                  Text('${routeLabel(l, repo, c)} · ${accountLabel(l, repo, c)}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
               ]),
             ),
-            Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: Tag(text: routeLabel(l, repo, c)))),
-            Expanded(
-              flex: 2,
-              child: Text(accountLabel(l, repo, c),
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.textMuted, fontSize: 13)),
-            ),
+            if (!narrow) ...[
+              Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: Tag(text: routeLabel(l, repo, c)))),
+              Expanded(
+                flex: 2,
+                child: Text(accountLabel(l, repo, c),
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: t.textMuted, fontSize: 13)),
+              ),
+            ],
             PcMenu(connection: c, repo: repo, actions: actions),
           ]),
         ),

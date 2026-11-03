@@ -237,6 +237,14 @@ class RdpSession extends ChangeNotifier {
     if (_canInput) _channel.send(encodeKey(scancode, down));
   }
 
+  /// Текст з екранної клавіатури телефона — символами, без клавіш (кирилиця, емодзі тощо).
+  void sendText(String text) {
+    if (!_canInput) return;
+    for (final unit in text.codeUnits) {
+      _channel.send(encodeUnicode(unit));
+    }
+  }
+
   /// Рух миші — не частіше разу на кадр: миша дає до 1000 подій/с, і через інтернет
   /// кожна окремим пакетом забиває канал. Перший рух іде одразу, решта в межах 16 мс —
   /// одним повідомленням з останньою позицією.

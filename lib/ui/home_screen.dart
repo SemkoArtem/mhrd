@@ -10,6 +10,7 @@ import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../platform/android_paths.dart';
 import '../platform/shell_bridge.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
@@ -55,6 +56,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       _recentSource = repo..addListener(_syncRecent);
       _syncRecent();
+      _sessionsSource = AppScope.of(context).sessions..addListener(_syncService);
       _onShellConnect(); // запустили зі списку «Недавні» — підключаємось одразу
     });
   }
@@ -72,6 +74,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Repository? _recentSource; // за ним стежимо для «Недавніх» (у dispose контексту вже не можна)
+  SessionManager? _sessionsSource; // за ним — для служби Android
+
+  /// Android: поки є активні сеанси — служба переднього плану зі сповіщенням «Активних сеансів: N».
+  void _syncService() {
+    final n = _sessionsSource?.sessions.where((s) => s.isActive).length ?? 0;
+    if (mounted) AndroidPaths.updateSessions(n, context.l10n.activeSessions(n));
+  }
 
   void _syncRecent() {
     if (mounted) ShellBridge.instance.setRecent(context.l10n.recent, ShellBridge.recent(repo.connections.values));
@@ -81,6 +90,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     ShellBridge.instance.pendingConnect.removeListener(_onShellConnect);
     _recentSource?.removeListener(_syncRecent);
+    _sessionsSource?.removeListener(_syncService);
     _quick.dispose();
     _quickFocus.dispose();
     _searchFocus.dispose();
@@ -176,6 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _startInApp(Connection c, String user, String password,
       {String? credentialId, String? gatewayPassword}) async {
     final sessions = AppScope.of(context).sessions;
+    if (c.devices.microphone) AndroidPaths.requestMicrophone();
     // Роздільність = розмір вікна у фізичних пікселях (масштаб Windows 150% → ×1.5), а масштаб
     // ОС передаємо серверу — так картинка чітка, а текст на ПК звичного розміру.
     final size = MediaQuery.sizeOf(context);
@@ -185,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
         username: user,
         password: password,
         width: even(size.width * dpr, 640, 8192),
-        height: even((size.height - 40) * dpr, 480, 8192),
+        // Телефон: сеанс на весь екран (панель — поверх картинки), на ПК — мінус панель сеансу.
+        height: even((size.height - (Platform.isAndroid || Platform.isIOS ? 0 : 40)) * dpr, 480, 8192),
         scale: (dpr * 100).round(),
         gatewayPassword: gatewayPassword);
     if (mounted) _openSession(s, c, credentialId: credentialId);

@@ -1048,6 +1048,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copied => 'Copied.';
 
   @override
+  String activeSessions(int count) {
+    return 'Active sessions: $count';
+  }
+
+  @override
   String get authEditReason => 'Editing MHRD tunnel keys';
 
   @override

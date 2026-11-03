@@ -1088,6 +1088,13 @@ static void handle_input(MhrdContext* m)
 				if (msg->len >= 3)
 					freerdp_input_send_keyboard_event_ex(input, d[2] != 0, FALSE, get_u16(d));
 				break;
+			case MSG_UNICODE:
+				if (msg->len >= 2)
+				{
+					freerdp_input_send_unicode_keyboard_event(input, 0, get_u16(d));
+					freerdp_input_send_unicode_keyboard_event(input, KBD_FLAGS_RELEASE, get_u16(d));
+				}
+				break;
 			case MSG_MOUSE_MOVE:
 				if (msg->len >= 4)
 					freerdp_input_send_mouse_event(input, PTR_FLAGS_MOVE, get_u16(d), get_u16(d + 2));

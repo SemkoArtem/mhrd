@@ -12,17 +12,44 @@
 #include <unistd.h>
 #endif
 #ifdef __ANDROID__
-#include <linux/memfd.h>
+#include <dlfcn.h>
+#include <linux/ashmem.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/syscall.h>
 #include <sys/un.h>
 #endif
 
 static unsigned g_counter;
 
 #ifdef __ANDROID__
+/* Анонімна спільна пам'ять: ASharedMemory (Android 8+, сам вибирає ashmem чи memfd — прямий
+ * memfd_create на Android 8–9 фільтр seccomp застосунків не пускає), на Android 7 — /dev/ashmem.
+ * ASharedMemory беремо через dlsym, щоб модуль запускався й там, де її ще немає. */
+static int shared_memory(size_t size)
+{
+	typedef int (*CreateFn)(const char*, size_t);
+	void* lib = dlopen("libandroid.so", RTLD_NOW);
+	CreateFn create = lib ? (CreateFn)dlsym(lib, "ASharedMemory_create") : NULL;
+	if (create)
+	{
+		const int fd = create("mhrd-frame", size);
+		if (fd >= 0)
+			fcntl(fd, F_SETFD, FD_CLOEXEC);
+		return fd;
+	}
+	const int fd = open("/dev/ashmem", O_RDWR | O_CLOEXEC);
+	if (fd < 0)
+		return -1;
+	if (ioctl(fd, ASHMEM_SET_NAME, "mhrd-frame") < 0 || ioctl(fd, ASHMEM_SET_SIZE, size) < 0)
+	{
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
 /* Дескриптор пам'яті кадру → застосунку: дейтаграма з міткою на його абстрактний сокет
  * (ім'я — у MHRD_FRAME_SOCKET, без початкового нуля), сам дескриптор — у SCM_RIGHTS. */
 static BOOL send_fd(int fd, const char* tag)
@@ -83,19 +110,14 @@ BOOL shm_create(ShmBuffer* b, size_t size)
 	}
 	b->handle = h;
 #elif defined(__ANDROID__)
-	/* POSIX shm на Android немає, а відкрити чужий memfd за шляхом (/proc/<pid>/fd) не дає SELinux.
-	 * Тож анонімна пам'ять (memfd) передається застосунку самим дескриптором (SCM_RIGHTS) через
+	/* POSIX shm на Android немає, а відкрити чужу анонімну пам'ять за шляхом (/proc/<pid>/fd) не дає SELinux.
+	 * Тож пам'ять (shared_memory) передається застосунку самим дескриптором (SCM_RIGHTS) через
 	 * його локальний сокет (MHRD_FRAME_SOCKET); «ім'я» — fd:<мітка>, за нею застосунок знаходить
 	 * отриманий дескриптор (lib/sessions/frame_buffer.dart). */
 	snprintf(b->name, sizeof(b->name), "fd:%ld-%u", (long)getpid(), ++g_counter);
-	const int fd = (int)syscall(__NR_memfd_create, "mhrd-frame", MFD_CLOEXEC);
+	const int fd = shared_memory(size);
 	if (fd < 0)
 		return FALSE;
-	if (ftruncate(fd, (off_t)size) != 0)
-	{
-		close(fd);
-		return FALSE;
-	}
 	b->data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	const BOOL sent = b->data != MAP_FAILED && send_fd(fd, b->name + 3);
 	close(fd); /* відображення живе й без дескриптора */

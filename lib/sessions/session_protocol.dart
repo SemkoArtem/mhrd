@@ -15,6 +15,7 @@ abstract final class Msg {
   static const resize = 0x08;
   static const focus = 0x09;
   static const latency = 0x0A;
+  static const unicode = 0x0B;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -60,6 +61,9 @@ Uint8List encodeConnect(Map<String, Object?> config) => encodeFrame(Msg.connect,
 
 Uint8List encodeKey(int scancode, bool down) =>
     encodeFrame(Msg.key, [scancode & 0xFF, (scancode >> 8) & 0xFF, down ? 1 : 0]);
+
+/// Символ без клавіші (екранна клавіатура телефона): одиниця UTF-16.
+Uint8List encodeUnicode(int codeUnit) => encodeFrame(Msg.unicode, _u16s([codeUnit]));
 
 Uint8List encodeMouseMove(int x, int y) => encodeFrame(Msg.mouseMove, _u16s([x, y]));
 

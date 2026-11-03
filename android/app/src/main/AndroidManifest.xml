@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- RDP-клієнту потрібна мережа і в релізній збірці (шаблон дає дозвіл лише в debug). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Служба переднього плану, поки є активні сеанси (SessionService): інакше Android заморожує
+         згорнутий застосунок разом із процесами сеансів. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Мікрофон на віддаленому ПК (якщо його ввімкнено в налаштуваннях ПК). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- Системний бекап Android вимкнено: ключі Keystore не переносяться, тож скопійовані
          секрети flutter_secure_storage на новому пристрої не розшифруються.
@@ -34,6 +41,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service
+            android:name=".SessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Remote desktop session: keeps the RDP connection alive while the app is in the background"/>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

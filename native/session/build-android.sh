@@ -23,7 +23,7 @@ cmake -S "$here" -B "$here/build-android-$abi" -G Ninja \
   "-DVCPKG_TARGET_TRIPLET=$triplet" \
   "-DVCPKG_INSTALLED_DIR=$here/vcpkg_installed_android" \
   "-DANDROID_ABI=$abi" \
-  -DANDROID_PLATFORM=android-28
+  -DANDROID_PLATFORM=android-24
 cmake --build "$here/build-android-$abi"
 
 out="$here/../../android/app/src/main/jniLibs/$abi"

@@ -13,6 +13,7 @@ import '../sessions/scancodes.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
 import '../theme/mhrd_theme.dart';
+import 'touch_session.dart';
 
 /// Екран одного сеансу: картинка віддаленого ПК (піксель у піксель з урахуванням масштабу ОС),
 /// клавіатура й миша, повний екран із плашкою, що ховається, діалог сертифіката, пояснення
@@ -49,16 +50,25 @@ class _SessionScreenState extends State<SessionScreen> {
 
   static bool get _desktop => Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
+  /// Телефон, планшет: дотики як миша (touch_session.dart), картинка на весь екран.
+  static bool get _touch => Platform.isAndroid || Platform.isIOS;
+
+  /// Екранна клавіатура телефона для сеансу (невидиме поле RemoteKeyboard).
+  final _keyboardFocus = FocusNode(debugLabel: 'rdp-keyboard');
+
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
   /// На весь екран — завжди заповнюємо екран, незалежно від режиму ПК.
   void _onViewSize(Size size) {
+    // Телефон: виїхала екранна клавіатура — роздільність ПК не чіпаємо (лише поворот екрана).
+    if (_touch && MediaQuery.viewInsetsOf(context).bottom > 0) return;
     if (!_followsWindow || size == _viewSize) return;
     _viewSize = size;
     _scheduleResize(size);
   }
 
-  bool get _followsWindow => _fullscreen || s.connection.display.resizeMode == ResizeMode.changeResolution;
+  bool get _followsWindow =>
+      _touch || _fullscreen || s.connection.display.resizeMode == ResizeMode.changeResolution;
 
   /// Сервер надіслав картинку іншого розміру, ніж вікно (наприклад, проігнорував ранній запит) —
   /// просимо ще раз. RdpSession не повторює той самий запит, тож циклу немає.
@@ -108,6 +118,8 @@ class _SessionScreenState extends State<SessionScreen> {
   void initState() {
     super.initState();
     s.addListener(_onSession);
+    // Телефон: сеанс на весь екран, системні панелі — лише свайпом від краю.
+    if (_touch) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // «Запуск на весь екран»: налаштування ПК, інакше загальне.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -133,6 +145,8 @@ class _SessionScreenState extends State<SessionScreen> {
     _releaseKeys();
     _manager.close(s);
     _focus.dispose();
+    _keyboardFocus.dispose();
+    if (_touch) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
@@ -238,6 +252,21 @@ class _SessionScreenState extends State<SessionScreen> {
   Widget build(BuildContext context) {
     final t = context.mhrd;
     _dpr = MediaQuery.devicePixelRatioOf(context);
+    if (_touch) {
+      final live = s.image != null && s.state == SessionState.connected;
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Column(children: [
+          Expanded(
+            child: Stack(children: [
+              Positioned.fill(child: _body(context)),
+              Positioned(top: MediaQuery.paddingOf(context).top + 8, right: 8, child: _touchBar(context)),
+            ]),
+          ),
+          if (live) RemoteKeyboard(session: s, focusNode: _keyboardFocus),
+        ]),
+      );
+    }
     if (_fullscreen) {
       return Scaffold(
         backgroundColor: Colors.black,
@@ -260,6 +289,61 @@ class _SessionScreenState extends State<SessionScreen> {
           Expanded(child: _body(context)),
         ]),
       ),
+    );
+  }
+
+  /// Телефон: невелика панель поверх картинки — стан, клавіатура, відключитись, назад.
+  Widget _touchBar(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final kbOpen = _keyboardFocus.hasFocus;
+    return Container(
+      decoration: BoxDecoration(
+        color: t.surface.withValues(alpha: 0.85),
+        border: Border.all(color: t.border),
+        borderRadius: BorderRadius.circular(t.radius * 2),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: switch (s.state) {
+              SessionState.connected => t.ok,
+              SessionState.failed => t.error,
+              _ => t.warn,
+            },
+          ),
+        ),
+        if (s.isActive && s.image != null)
+          IconButton(
+            tooltip: l.onScreenKeyboard,
+            icon: Icon(kbOpen ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined, size: 20),
+            onPressed: () {
+              if (kbOpen) {
+                _keyboardFocus.unfocus();
+              } else {
+                _keyboardFocus.requestFocus();
+                SystemChannels.textInput.invokeMethod('TextInput.show');
+              }
+              setState(() {});
+            },
+          ),
+        if (s.isActive)
+          IconButton(
+            tooltip: l.disconnectAction,
+            icon: const Icon(Icons.power_settings_new, size: 20),
+            onPressed: s.disconnect,
+          ),
+        IconButton(
+          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+          icon: const Icon(Icons.close, size: 20),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+      ]),
     );
   }
 
@@ -402,6 +486,7 @@ class _SessionScreenState extends State<SessionScreen> {
       },
       child: LayoutBuilder(builder: (context, box) {
         _onViewSize(box.biggest);
+        if (_touch) return TouchSurface(session: s, image: img);
         // Розмір картинки в логічних точках: 1 піксель ПК = 1 фізичний піксель екрана.
         final w = s.width / _dpr, h = s.height / _dpr;
         final exact = (box.maxWidth - w).abs() < 1 && (box.maxHeight - h).abs() < 1;

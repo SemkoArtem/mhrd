@@ -1048,6 +1048,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get copied => 'Скопійовано.';
 
   @override
+  String activeSessions(int count) {
+    return 'Активних сеансів: $count';
+  }
+
+  @override
   String get authEditReason => 'Редагування ключів тунелю MHRD';
 
   @override

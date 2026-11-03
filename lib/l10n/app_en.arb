@@ -313,6 +313,7 @@
   "wgAddressRequired": "Enter Address — this device's address inside the tunnel, e.g. 10.8.0.2/32.",
   "copy": "Copy",
   "copied": "Copied.",
+  "activeSessions": "Active sessions: {count}",
   "authEditReason": "Editing MHRD tunnel keys",
   "authNeedPin": "To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.",
   "sessionStartFailed": "Couldn't start the session: {detail}",

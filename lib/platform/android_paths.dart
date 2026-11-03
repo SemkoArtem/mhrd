@@ -27,9 +27,39 @@ class AndroidPaths {
     }
   }
 
+  /// Служба переднього плану зі сповіщенням [text], поки [count] > 0 (MainActivity → SessionService):
+  /// інакше Android заморожує згорнутий застосунок разом із процесами сеансів.
+  static Future<void> updateSessions(int count, String text) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod('sessions', {'count': count, 'text': text});
+    } on PlatformException {
+      // служба не запустилась (наприклад, Android заборонив з фону) — сеанс працює й так
+    } on MissingPluginException {
+      // не Android-раннер MHRD
+    }
+  }
+
+  /// Попросити дозвіл на мікрофон (для ПК з увімкненим мікрофоном), якщо його ще немає.
+  static Future<void> requestMicrophone() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod('microphone');
+    } on PlatformException {
+      // без дозволу сеанс працює, лише без мікрофона
+    } on MissingPluginException {
+      // не Android-раннер MHRD
+    }
+  }
+
   /// Модуль сеансу; null — його немає в APK.
-  String? get engine {
-    final path = '$nativeLibraryDir/libmhrd_session.so';
+  String? get engine => _module('libmhrd_session.so');
+
+  /// Вбудований тунель WireGuard (native/tunnels/build-android.sh); null — його немає в APK.
+  String? get tunnel => _module('libmhrd_tunnel.so');
+
+  String? _module(String file) {
+    final path = '$nativeLibraryDir/$file';
     return File(path).existsSync() ? path : null;
   }
 

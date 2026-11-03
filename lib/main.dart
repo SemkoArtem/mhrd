@@ -36,6 +36,7 @@ Future<void> main(List<String> args) async {
   final android = await AndroidPaths.load();
   final sessions = SessionManager(repo,
       enginePath: android?.engine,
+      tunnelPath: android?.tunnel,
       channelFactory:
           android == null ? null : (exe) => ProcessChannel.start(exe, environment: android.environment),
       log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')),

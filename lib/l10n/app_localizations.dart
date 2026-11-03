@@ -1934,6 +1934,12 @@ abstract class AppLocalizations {
   /// **'Скопійовано.'**
   String get copied;
 
+  /// No description provided for @activeSessions.
+  ///
+  /// In uk, this message translates to:
+  /// **'Активних сеансів: {count}'**
+  String activeSessions(int count);
+
   /// No description provided for @authEditReason.
   ///
   /// In uk, this message translates to:

@@ -271,6 +271,8 @@ class SessionManager extends ChangeNotifier {
     });
     final log = this.log;
     if (log != null) s.done.then((_) => log.write(s));
+    // Сеанс у застосунку завершився, а екран ще відкритий — лічильник активних (служба Android) оновлюється.
+    if (window == null) s.done.then((_) => notifyListeners());
     if (window != null) {
       final timer = _watchLatency(s, tunnel);
       s.done.then((_) {

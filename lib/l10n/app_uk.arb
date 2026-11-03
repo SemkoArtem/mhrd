@@ -345,6 +345,8 @@
   "wgAddressRequired": "Вкажіть Address — адресу цього пристрою в тунелі, наприклад 10.8.0.2/32.",
   "copy": "Копіювати",
   "copied": "Скопійовано.",
+  "activeSessions": "Активних сеансів: {count}",
+  "@activeSessions": {"placeholders": {"count": {"type": "int"}}},
   "authEditReason": "Редагування ключів тунелю MHRD",
   "authNeedPin": "Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.",
   "sessionStartFailed": "Не вдалося запустити сеанс: {detail}",
