@@ -14,8 +14,9 @@ import '../theme/mhrd_theme.dart';
 /// - «Дотик» ([direct]): пальці — справжніми дотиками у Windows (прокрутку, щипок, утримання для
 ///   правого кліку роблять самі програми ПК);
 /// - «Миша»: екран — як тачпад ноутбука, курсор видно. Палець рухає курсор, торкання = клік
-///   (двічі — подвійний), утримати = правий клік, торкнутись і одразу затиснути й повести =
-///   перетягування, двома пальцями: торкання = правий клік,
+///   (двічі — подвійний), утримати = правий клік, торкнутись і одразу притиснути знову = ліва кнопка
+///   натиснута (повести — виділення чи перетягування з цього місця),
+///   двома пальцями: торкання = правий клік,
 ///   рух = прокрутка, щипок = збільшити картинку.
 /// Миша (Bluetooth, USB) в обох режимах — звичайна миша.
 class TouchSurface extends StatefulWidget {
@@ -51,7 +52,7 @@ class _TouchSurfaceState extends State<TouchSurface> {
   Timer? _holdTimer;
   bool _moved = false, _dragging = false, _consumed = false;
   bool _armed = false; // торкнулись і одразу знову притиснули — рух тягне
-  DateTime? _lastTap; // коли було останнє торкання-клік
+  Timer? _clickTimer; // клік торкання, що чекає: чи не притиснуть одразу знову
 
   // Два пальці: початкова відстань і центр, режим — масштаб чи прокрутка.
   double _pinchDist = 0, _pinchZoom = 1;
@@ -80,6 +81,7 @@ class _TouchSurfaceState extends State<TouchSurface> {
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _clickTimer?.cancel();
     super.dispose();
   }
 
@@ -180,12 +182,18 @@ class _TouchSurfaceState extends State<TouchSurface> {
     if (widget.direct) return _touch(e, TouchFlags.down);
     _touches[e.pointer] = e.localPosition;
     if (_touches.length == 1) {
-      final now = DateTime.now();
-      // Торкнулись і одразу знову притиснули — як на тачпаді: рух тепер тягне (ліва кнопка натиснута).
-      _armed = _lastTap != null && now.difference(_lastTap!) < _tapMax;
+      // Торкнулись і одразу знову притиснули — як на тачпаді: клік першого торкання скасовано, ліва
+      // кнопка натиснута вже зараз, і рух виділяє/тягне з цього місця. Відпустили, не рушивши, —
+      // подвійний клік.
+      _armed = _clickTimer?.isActive ?? false;
+      _clickTimer?.cancel();
       _last = e.localPosition;
-      _downAt = now;
+      _downAt = DateTime.now();
       _moved = _dragging = _consumed = false;
+      if (_armed) {
+        _dragging = true;
+        _button(RemoteButton.left, true);
+      }
       _holdTimer?.cancel();
       _holdTimer = Timer(_hold, () {
         if (_moved || _armed || _touches.length != 1) return;
@@ -222,11 +230,6 @@ class _TouchSurfaceState extends State<TouchSurface> {
       if (!_moved) {
         _moved = true;
         _holdTimer?.cancel();
-        if (_armed) {
-          // Торкання + затиснули й повели — перетягування.
-          _dragging = true;
-          _button(RemoteButton.left, true);
-        }
       }
       _last = e.localPosition;
       _moveCursor(delta);
@@ -276,13 +279,13 @@ class _TouchSurfaceState extends State<TouchSurface> {
     }
     if (was != 1) return;
     _holdTimer?.cancel();
-    _lastTap = null;
     if (_dragging) {
       _button(RemoteButton.left, false);
+      // Друге торкання без руху — це був подвійний клік: ще один клік.
+      if (_armed && !_moved) _click(RemoteButton.left);
     } else if (!_moved && !_consumed && quick && e is PointerUpEvent) {
-      // Торкання — клік (два поспіль — подвійний клік); запам'ятати — для «торкнись і тягни».
-      _click(RemoteButton.left);
-      _lastTap = DateTime.now();
+      // Торкання — клік, але трохи згодом: якщо одразу притиснуть знову — це виділення/перетягування.
+      _clickTimer = Timer(_tapMax, () => _click(RemoteButton.left));
     }
     _dragging = _armed = false;
   }

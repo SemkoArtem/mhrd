@@ -1190,45 +1190,49 @@ class _BackupTab extends StatelessWidget {
         OutlinedButton.icon(
             icon: const Icon(Icons.restore), label: Text(l.restoreFromBackup), onPressed: () => _import(context)),
       ]),
-      _caption(context, l.autoBackup),
-      ListenableBuilder(
-        listenable: auto,
-        builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(l.autoBackupHint, style: TextStyle(color: t.textMuted)),
-          const SizedBox(height: 6),
-          if (!auto.enabled)
-            Text(l.disabled, style: TextStyle(color: t.textMuted, fontSize: 13))
-          else ...[
-            Text(auto.dir!, style: t.mono),
-            const SizedBox(height: 2),
-            Text(
-              auto.lastAt == null ? l.autoBackupNone : l.autoBackupLast(formatDateTime(auto.lastAt!)),
-              style: TextStyle(color: t.textMuted, fontSize: 13),
-            ),
-            if (auto.lastError != null)
-              Text(l.autoBackupFailure(auto.lastError!), style: TextStyle(color: t.error, fontSize: 13)),
-          ],
-          const SizedBox(height: 12),
-          Wrap(spacing: 10, runSpacing: 10, children: [
+      // Автобекап пише в теку на диску, а Android замість теки дає посилання на документ — на телефоні
+      // лише бекап вручну («Зберегти як»).
+      if (!(Platform.isAndroid || Platform.isIOS)) ...[
+        _caption(context, l.autoBackup),
+        ListenableBuilder(
+          listenable: auto,
+          builder: (context, _) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(l.autoBackupHint, style: TextStyle(color: t.textMuted)),
+            const SizedBox(height: 6),
             if (!auto.enabled)
-              OutlinedButton.icon(
-                  icon: const Icon(Icons.schedule),
-                  label: Text(l.enableEllipsis),
-                  onPressed: () => _enableAuto(context, auto))
+              Text(l.disabled, style: TextStyle(color: t.textMuted, fontSize: 13))
             else ...[
-              OutlinedButton.icon(
-                  icon: const Icon(Icons.save_outlined),
-                  label: Text(l.autoBackupNow),
-                  onPressed: () => _autoNow(context, auto)),
-              OutlinedButton.icon(
-                  icon: const Icon(Icons.folder_open_outlined),
-                  label: Text(l.autoBackupChange),
-                  onPressed: () => _enableAuto(context, auto)),
-              TextButton.icon(icon: const Icon(Icons.close), label: Text(l.disable), onPressed: auto.disable),
+              Text(auto.dir!, style: t.mono),
+              const SizedBox(height: 2),
+              Text(
+                auto.lastAt == null ? l.autoBackupNone : l.autoBackupLast(formatDateTime(auto.lastAt!)),
+                style: TextStyle(color: t.textMuted, fontSize: 13),
+              ),
+              if (auto.lastError != null)
+                Text(l.autoBackupFailure(auto.lastError!), style: TextStyle(color: t.error, fontSize: 13)),
             ],
+            const SizedBox(height: 12),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              if (!auto.enabled)
+                OutlinedButton.icon(
+                    icon: const Icon(Icons.schedule),
+                    label: Text(l.enableEllipsis),
+                    onPressed: () => _enableAuto(context, auto))
+              else ...[
+                OutlinedButton.icon(
+                    icon: const Icon(Icons.save_outlined),
+                    label: Text(l.autoBackupNow),
+                    onPressed: () => _autoNow(context, auto)),
+                OutlinedButton.icon(
+                    icon: const Icon(Icons.folder_open_outlined),
+                    label: Text(l.autoBackupChange),
+                    onPressed: () => _enableAuto(context, auto)),
+                TextButton.icon(icon: const Icon(Icons.close), label: Text(l.disable), onPressed: auto.disable),
+              ],
+            ]),
           ]),
-        ]),
-      ),
+        ),
+      ],
       _caption(context, l.sharePcList),
       Text(l.sharePcListHint, style: TextStyle(color: t.textMuted)),
       const SizedBox(height: 12),

@@ -499,14 +499,18 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final t = context.mhrd;
     final l = context.l10n;
     void setD(DeviceSettings x) => _set(_c.copyWith(devices: x));
+    // Телефон: буфера обміну в сеансі поки немає, а спільна папка — це шлях на диску, якого Android
+    // застосунку не дає (лише посилання на документ). Звук і мікрофон працюють.
+    final mobile = Platform.isAndroid || Platform.isIOS;
     return [
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: d.clipboard,
-        title: Text(l.clipboard),
-        subtitle: Text(l.clipboardHint),
-        onChanged: (v) => setD(d.copyWith(clipboard: v)),
-      ),
+      if (!mobile)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: d.clipboard,
+          title: Text(l.clipboard),
+          subtitle: Text(l.clipboardHint),
+          onChanged: (v) => setD(d.copyWith(clipboard: v)),
+        ),
       const SizedBox(height: 8),
       DropdownButtonFormField<SoundMode>(
         initialValue: d.sound,
@@ -530,53 +534,55 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         subtitle: Text(l.microphoneHint),
         onChanged: (v) => setD(d.copyWith(microphone: v)),
       ),
-      _section(l.folders),
-      Text(l.foldersHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
-      const SizedBox(height: 6),
-      if (d.folders.isEmpty) Text(l.noFolders, style: TextStyle(color: t.textMuted)),
-      for (var i = 0; i < d.folders.length; i++)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.folder_outlined),
-          title: Text(d.folders[i].name),
-          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(d.folders[i].path, style: t.mono),
-            DropdownButton<FolderAccess>(
-              value: d.folders[i].access,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              items: [
-                DropdownMenuItem(value: FolderAccess.addOnly, child: Text(l.folderAddOnly)),
-                DropdownMenuItem(value: FolderAccess.full, child: Text(l.folderFull)),
-                DropdownMenuItem(value: FolderAccess.readOnly, child: Text(l.readOnly)),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                final f = [...d.folders];
-                f[i] = f[i].copyWith(access: v);
-                setD(d.copyWith(folders: f));
-              },
+      if (!mobile) ...[
+        _section(l.folders),
+        Text(l.foldersHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
+        const SizedBox(height: 6),
+        if (d.folders.isEmpty) Text(l.noFolders, style: TextStyle(color: t.textMuted)),
+        for (var i = 0; i < d.folders.length; i++)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.folder_outlined),
+            title: Text(d.folders[i].name),
+            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(d.folders[i].path, style: t.mono),
+              DropdownButton<FolderAccess>(
+                value: d.folders[i].access,
+                isDense: true,
+                underline: const SizedBox.shrink(),
+                items: [
+                  DropdownMenuItem(value: FolderAccess.addOnly, child: Text(l.folderAddOnly)),
+                  DropdownMenuItem(value: FolderAccess.full, child: Text(l.folderFull)),
+                  DropdownMenuItem(value: FolderAccess.readOnly, child: Text(l.readOnly)),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  final f = [...d.folders];
+                  f[i] = f[i].copyWith(access: v);
+                  setD(d.copyWith(folders: f));
+                },
+              ),
+            ]),
+            trailing: IconButton(
+              tooltip: l.removeFolder,
+              icon: const Icon(Icons.close),
+              onPressed: () => setD(d.copyWith(folders: [...d.folders]..removeAt(i))),
             ),
-          ]),
-          trailing: IconButton(
-            tooltip: l.removeFolder,
-            icon: const Icon(Icons.close),
-            onPressed: () => setD(d.copyWith(folders: [...d.folders]..removeAt(i))),
+          ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.create_new_folder_outlined),
+            label: Text(l.addFolder),
+            onPressed: () async {
+              final path = await pickFolder();
+              if (path == null) return;
+              final name = path.split(RegExp(r'[\\/]')).where((s) => s.isNotEmpty).lastOrNullSafe ?? path;
+              setD(d.copyWith(folders: [...d.folders, SharedFolder(name: name, path: path)]));
+            },
           ),
         ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          icon: const Icon(Icons.create_new_folder_outlined),
-          label: Text(l.addFolder),
-          onPressed: () async {
-            final path = await pickFolder();
-            if (path == null) return;
-            final name = path.split(RegExp(r'[\\/]')).where((s) => s.isNotEmpty).lastOrNullSafe ?? path;
-            setD(d.copyWith(folders: [...d.folders, SharedFolder(name: name, path: path)]));
-          },
-        ),
-      ),
+      ],
     ];
   }
 
