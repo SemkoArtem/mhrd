@@ -28,14 +28,68 @@ import 'lock_screen.dart';
 import 'portable_gate.dart';
 import 'theme_editor.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  int _section = 0; // телефон: вибраний розділ
 
   @override
   Widget build(BuildContext context) {
     final t = context.mhrd;
     final l = context.l10n;
     final repo = AppScope.of(context).repo;
+    final sections = [
+      (Icons.tune, l.tabGeneral, () => _GeneralTab(repo: repo)),
+      (Icons.palette_outlined, l.tabTheme, () => const ThemeEditor()),
+      (Icons.person_outline, l.accounts, () => _AccountsTab(repo: repo)),
+      (Icons.alt_route, l.tabRoutes, () => _RoutesTab(repo: repo)),
+      (Icons.folder_outlined, l.groups, () => _GroupsTab(repo: repo)),
+      (Icons.aspect_ratio, l.screenTemplates, () => _ScreensTab(repo: repo)),
+      (Icons.backup_outlined, l.tabBackup, () => _BackupTab(repo: repo)),
+    ];
+    // Телефон: сім вкладок у рядок не влазять — розділи в меню, що виїжджає зліва по кнопці «☰».
+    if (MediaQuery.sizeOf(context).width < 600) {
+      final (_, title, page) = sections[_section];
+      return Scaffold(
+        appBar: AppBar(backgroundColor: t.surface, title: Text(title)),
+        drawer: Drawer(
+          child: SafeArea(
+            child: ListView(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text(l.settings,
+                    style: TextStyle(fontFamily: t.fontMono, fontSize: 20, letterSpacing: 0.8, color: t.accent)),
+              ),
+              for (final (i, (icon, label, _)) in sections.indexed)
+                ListTile(
+                  leading: Icon(icon),
+                  title: Text(label),
+                  selected: i == _section,
+                  onTap: () {
+                    Navigator.pop(context); // закрити меню
+                    setState(() => _section = i);
+                  },
+                ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.arrow_back),
+                title: Text(MaterialLocalizations.of(context).backButtonTooltip),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.maybePop(context);
+                },
+              ),
+            ]),
+          ),
+        ),
+        body: ListenableBuilder(listenable: repo, builder: (context, _) => page()),
+      );
+    }
     return DefaultTabController(
       length: 7,
       child: Scaffold(
