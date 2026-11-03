@@ -45,6 +45,17 @@ class AndroidPaths {
   static Future<String?> saveFile(String name, Uint8List bytes) =>
       _channel.invokeMethod<String>('saveFile', {'name': name, 'bytes': bytes});
 
+  /// Вибір файлів системним вікном з одразу видимою пам'яттю телефона (MainActivity → openFiles).
+  /// Повертає (назва, вміст); порожньо — скасовано.
+  static Future<List<(String, Uint8List)>> openFiles({bool multiple = false, String mime = '*/*'}) async {
+    final r = await _channel.invokeListMethod<Map<Object?, Object?>>('openFiles', {'multiple': multiple, 'mime': mime});
+    return [
+      for (final m in r ?? const <Map<Object?, Object?>>[])
+        if (m['name'] case final String name)
+          if (m['bytes'] case final Uint8List bytes) (name, bytes),
+    ];
+  }
+
   /// Попросити дозвіл на мікрофон (для ПК з увімкненим мікрофоном), якщо його ще немає.
   static Future<void> requestMicrophone() async {
     if (!Platform.isAndroid) return;

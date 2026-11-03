@@ -40,27 +40,28 @@ Future<String?> saveBytes(Uint8List bytes, String suggestedName, List<XTypeGroup
   return path;
 }
 
-/// Android вибирає файли за типом (MIME), а розширень .rdpbackup, .conf, .rdp, .mhrd-theme не знає
-/// й ховає такі файли — там показуємо всі (вміст однаково перевіряється при читанні). Картинки
-/// Android розпізнає сам, їх фільтр лишається.
-List<XTypeGroup> _openable(List<XTypeGroup> types) {
-  if (!Platform.isAndroid) return types;
+/// Android: власне вікно вибору (android_paths.dart) — з одразу видимою пам'яттю телефона. Фільтр
+/// за типом (MIME) лише для картинок: розширень .rdpbackup, .conf, .rdp, .mhrd-theme Android не знає
+/// й сховав би такі файли (вміст однаково перевіряється при читанні).
+String _androidMime(List<XTypeGroup> types) {
   const images = {'png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'};
-  return [
-    for (final t in types)
-      (t.extensions ?? const []).every(images.contains) ? t : XTypeGroup(label: t.label),
-  ];
+  return types.every((t) => (t.extensions ?? const []).every(images.contains)) ? 'image/*' : '*/*';
 }
 
 /// Відкриває один файл. Повертає (ім'я, байти) або null.
 Future<(String, Uint8List)?> openBytes(List<XTypeGroup> types) async {
-  final f = await openFile(acceptedTypeGroups: _openable(types));
+  if (Platform.isAndroid) {
+    final picked = await AndroidPaths.openFiles(mime: _androidMime(types));
+    return picked.isEmpty ? null : picked.first;
+  }
+  final f = await openFile(acceptedTypeGroups: types);
   if (f == null) return null;
   return (f.name, await f.readAsBytes());
 }
 
 Future<List<(String, Uint8List)>> openManyBytes(List<XTypeGroup> types) async {
-  final files = await openFiles(acceptedTypeGroups: _openable(types));
+  if (Platform.isAndroid) return AndroidPaths.openFiles(multiple: true, mime: _androidMime(types));
+  final files = await openFiles(acceptedTypeGroups: types);
   return [for (final f in files) (f.name, await f.readAsBytes())];
 }
 

@@ -37,6 +37,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   int _section = 0; // телефон: вибраний розділ
+  final _scaffold = GlobalKey<ScaffoldState>();
+  bool _menuShown = false; // телефон: меню розділів відкривається одразу при вході
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +57,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Телефон: сім вкладок у рядок не влазять — розділи в меню, що виїжджає зліва по кнопці «☰».
     if (MediaQuery.sizeOf(context).width < 600) {
       final (_, title, page) = sections[_section];
+      if (!_menuShown) {
+        _menuShown = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scaffold.currentState?.openDrawer());
+      }
       return Scaffold(
+        key: _scaffold,
         appBar: AppBar(backgroundColor: t.surface, title: Text(title)),
         drawer: Drawer(
           child: SafeArea(
