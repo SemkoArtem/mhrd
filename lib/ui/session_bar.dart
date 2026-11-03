@@ -42,6 +42,8 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
 
   Offset? _drag; // де зараз палець, поки плашку чи ручку тягнуть
   Offset _dragStart = Offset.zero;
+  Offset _grab = Offset.zero; // де на плашці її взяли (від її лівого верхнього кута)
+  Offset _shown = Offset.zero; // де плашка намальована зараз
 
   @override
   void initState() {
@@ -90,7 +92,10 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
       };
 
   // Плашка лежить поверх усього екрана сеансу, тож координати екрана = координати шару.
-  void _start(DragStartDetails d) => setState(() => _dragStart = _drag = d.globalPosition);
+  void _start(DragStartDetails d) => setState(() {
+        _dragStart = _drag = d.globalPosition;
+        _grab = d.globalPosition - _shown;
+      });
 
   void _update(DragUpdateDetails d) => setState(() => _drag = d.globalPosition);
 
@@ -236,11 +241,12 @@ class _FloatingSessionBarState extends State<FloatingSessionBar> {
         BarEdge.left => (pad.left + inset, clampY(pos * size.height - h / 2)),
         BarEdge.right => (size.width - pad.right - inset - w, clampY(pos * size.height - h / 2)),
       };
-      // Тягнуть — плашка вільно йде за пальцем.
+      // Тягнуть — плашка вільно йде за пальцем, тримаючись за те місце, де її взяли.
       final drag = _drag;
       final (x, y) = drag == null
           ? (left, top)
-          : (fit(drag.dx - w / 2, 0, size.width - w), fit(drag.dy - h / 2, 0, size.height - h));
+          : (fit(drag.dx - _grab.dx, 0, size.width - w), fit(drag.dy - _grab.dy, 0, size.height - h));
+      _shown = Offset(x, y);
       return Stack(children: [
         Positioned(left: x, top: y, width: w, height: h, child: body),
       ]);
