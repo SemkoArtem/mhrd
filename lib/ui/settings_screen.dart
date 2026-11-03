@@ -51,7 +51,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (Icons.person_outline, l.accounts, () => _AccountsTab(repo: repo)),
       (Icons.alt_route, l.tabRoutes, () => _RoutesTab(repo: repo)),
       (Icons.folder_outlined, l.groups, () => _GroupsTab(repo: repo)),
-      (Icons.aspect_ratio, l.screenTemplates, () => _ScreensTab(repo: repo)),
+      // Шаблони роздільності — лише на ПК: на телефоні сеанс завжди за розміром екрана.
+      if (!(Platform.isAndroid || Platform.isIOS))
+        (Icons.aspect_ratio, l.screenTemplates, () => _ScreensTab(repo: repo)),
       (Icons.backup_outlined, l.tabBackup, () => _BackupTab(repo: repo)),
     ];
     // Телефон: сім вкладок у рядок не влазять — розділи в меню, що виїжджає зліва по кнопці «☰».
@@ -67,8 +69,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         drawer: Drawer(
           child: SafeArea(
             child: ListView(children: [
+              // Вгорі — на головний екран (список ПК), далі — розділи налаштувань.
+              ListTile(
+                leading: const Icon(Icons.home_outlined),
+                title: Text(l.homeScreen),
+                onTap: () {
+                  Navigator.pop(context); // закрити меню
+                  Navigator.maybePop(context); // вийти з налаштувань
+                },
+              ),
+              const Divider(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                 child: Text(l.settings,
                     style: TextStyle(fontFamily: t.fontMono, fontSize: 20, letterSpacing: 0.8, color: t.accent)),
               ),
@@ -82,15 +94,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     setState(() => _section = i);
                   },
                 ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.arrow_back),
-                title: Text(MaterialLocalizations.of(context).backButtonTooltip),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.maybePop(context);
-                },
-              ),
             ]),
           ),
         ),
@@ -148,10 +151,7 @@ Future<void> _guardedDelete(BuildContext context, Future<void> Function(bool for
     if (!context.mounted) return;
     final l = context.l10n;
     final ok = await confirm(context,
-        title: l.inUseTitle(l.inUseKind(e.kind)),
-        body: l.inUseBody(l.inUseUsers(e)),
-        ok: l.delete,
-        danger: true);
+        title: l.inUseTitle(l.inUseKind(e.kind)), body: l.inUseBody(l.inUseUsers(e)), ok: l.delete, danger: true);
     if (ok) await del(true);
   }
 }
@@ -166,6 +166,7 @@ class _GeneralTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l10n;
     final s = repo.settings;
+    final mobile = Platform.isAndroid || Platform.isIOS;
     void set(AppSettings x) => repo.updateSettings(x);
     return _pane([
       Padding(
@@ -183,41 +184,46 @@ class _GeneralTab extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 12),
-      SwitchListTile(
-        value: s.startFullscreen,
-        title: Text(l.startSessionsFullscreen),
-        onChanged: (v) => set(s.copyWith(startFullscreen: v)),
-      ),
+      // Телефон: сеанс і так на весь екран, мініатюр і перехоплення Win/Alt+Tab там немає.
+      if (!mobile)
+        SwitchListTile(
+          value: s.startFullscreen,
+          title: Text(l.startSessionsFullscreen),
+          onChanged: (v) => set(s.copyWith(startFullscreen: v)),
+        ),
       SwitchListTile(
         value: s.keepScreenAwake,
         title: Text(l.keepScreenAwake),
         onChanged: (v) => set(s.copyWith(keepScreenAwake: v)),
       ),
-      if (Platform.isAndroid || Platform.isIOS)
+      if (mobile)
         SwitchListTile(
           value: s.keyboardShiftsScreen,
           title: Text(l.keyboardShiftsScreen),
           onChanged: (v) => set(s.copyWith(keyboardShiftsScreen: v)),
         ),
-      SwitchListTile(
-        value: s.showPreviews,
-        title: Text(l.showPreviews),
-        onChanged: (v) => set(s.copyWith(showPreviews: v)),
-      ),
-      const SizedBox(height: 12),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: DropdownButtonFormField<KeyboardCapture>(
-          initialValue: s.keyboardCapture,
-          decoration: InputDecoration(labelText: l.keyboardCapture),
-          items: [
-            DropdownMenuItem(value: KeyboardCapture.fullscreenOnly, child: Text(l.captureFullscreenOnly)),
-            DropdownMenuItem(value: KeyboardCapture.always, child: Text(l.always)),
-            DropdownMenuItem(value: KeyboardCapture.never, child: Text(l.never)),
-          ],
-          onChanged: (v) => set(s.copyWith(keyboardCapture: v)),
+      if (!mobile)
+        SwitchListTile(
+          value: s.showPreviews,
+          title: Text(l.showPreviews),
+          onChanged: (v) => set(s.copyWith(showPreviews: v)),
         ),
-      ),
+      if (!mobile) ...[
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonFormField<KeyboardCapture>(
+            initialValue: s.keyboardCapture,
+            decoration: InputDecoration(labelText: l.keyboardCapture),
+            items: [
+              DropdownMenuItem(value: KeyboardCapture.fullscreenOnly, child: Text(l.captureFullscreenOnly)),
+              DropdownMenuItem(value: KeyboardCapture.always, child: Text(l.always)),
+              DropdownMenuItem(value: KeyboardCapture.never, child: Text(l.never)),
+            ],
+            onChanged: (v) => set(s.copyWith(keyboardCapture: v)),
+          ),
+        ),
+      ],
       if (repo.secrets case final FileSecretStore store) ...[
         // Портативна версія чи Linux без сховища паролів: замок — майстер-пароль файлу секретів,
         // PIN і Windows Hello не потрібні.
@@ -242,38 +248,38 @@ class _GeneralTab extends StatelessWidget {
           },
         ),
       ] else ...[
-      _caption(context, l.lockSection),
-      SwitchListTile(
-        value: s.lockEnabled,
-        title: Text(l.lockEnable),
-        subtitle: Text(l.lockEnableHint),
-        onChanged: (v) async {
-          final lock = AppLock(repo);
-          if (v) {
-            final pin = await askNewPin(context);
-            if (pin != null) await lock.setPin(pin);
-          } else if (await confirmPin(context, lock)) {
-            await lock.disable();
-          } else if (context.mounted) {
-            toast(context, l.pinWrong);
-          }
-        },
-      ),
-      if (s.lockEnabled)
-        FutureBuilder<bool>(
-          future: AppLock(repo).biometricAvailable(),
-          builder: (context, snap) => snap.data != true
-              ? const SizedBox.shrink()
-              : SwitchListTile(
-                  value: s.lockBiometric,
-                  title: Text(l.lockBiometric),
-                  onChanged: (v) async {
-                    // Вмикаємо, лише якщо відбиток / Windows Hello справді спрацював.
-                    if (v && !await AppLock(repo).unlockWithBiometric(l.lockReason)) return;
-                    set(repo.settings.copyWith(lockBiometric: v));
-                  },
-                ),
+        _caption(context, l.lockSection),
+        SwitchListTile(
+          value: s.lockEnabled,
+          title: Text(l.lockEnable),
+          subtitle: Text(l.lockEnableHint),
+          onChanged: (v) async {
+            final lock = AppLock(repo);
+            if (v) {
+              final pin = await askNewPin(context);
+              if (pin != null) await lock.setPin(pin);
+            } else if (await confirmPin(context, lock)) {
+              await lock.disable();
+            } else if (context.mounted) {
+              toast(context, l.pinWrong);
+            }
+          },
         ),
+        if (s.lockEnabled)
+          FutureBuilder<bool>(
+            future: AppLock(repo).biometricAvailable(),
+            builder: (context, snap) => snap.data != true
+                ? const SizedBox.shrink()
+                : SwitchListTile(
+                    value: s.lockBiometric,
+                    title: Text(l.lockBiometric),
+                    onChanged: (v) async {
+                      // Вмикаємо, лише якщо відбиток / Windows Hello справді спрацював.
+                      if (v && !await AppLock(repo).unlockWithBiometric(l.lockReason)) return;
+                      set(repo.settings.copyWith(lockBiometric: v));
+                    },
+                  ),
+          ),
       ],
     ]);
   }
@@ -473,12 +479,13 @@ class _RoutesTab extends StatelessWidget {
     if (ok != true) return;
     final a = parseAddress(addr.text, defaultPort: defaultPort())!;
     final username = user.text.trim();
-    final profile =
-        ProxyProfile(id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username);
+    final profile = ProxyProfile(
+        id: p?.id ?? newId(), name: name.text.trim(), type: type, host: a.host, port: a.port, username: username);
     // Спершу перевіряємо проксі (і ПК за ним, якщо через нього вже ходить ПК), потім зберігаємо.
     // Поле пароля вже містить збережений: що в ньому — те й буде (порожнє — пароль видаляється).
     final password = username.isEmpty ? '' : pass.text;
-    final target = repo.connections.values.where((c) => c.route == RouteKind.proxy && c.routeRefId == p?.id).firstOrNull;
+    final target =
+        repo.connections.values.where((c) => c.route == RouteKind.proxy && c.routeRefId == p?.id).firstOrNull;
     if (!context.mounted) return;
     final save = await checkBeforeSave(
       context,
@@ -576,7 +583,10 @@ class _RoutesTab extends StatelessWidget {
   /// Перевіряє налаштування WireGuard (рукостискання з сервером) і, якщо людина погодилась, зберігає.
   /// Зайві старі секрети (наприклад, прибраний PSK) видаляє зі сховища.
   Future<bool> _saveTunnelChecked(BuildContext context,
-      {String? id, required String name, required Map<String, dynamic> config, required Map<String, String> secrets}) async {
+      {String? id,
+      required String name,
+      required Map<String, dynamic> config,
+      required Map<String, String> secrets}) async {
     final l = context.l10n;
     final health = AppScope.of(context).sessions.health;
     final save = await checkBeforeSave(
@@ -608,8 +618,7 @@ class _RoutesTab extends StatelessWidget {
   Future<void> _editTunnel(BuildContext context, [TunnelProfile? tu]) async {
     final l = context.l10n;
     if (tu != null && !await authorizeSensitive(context, repo)) return;
-    final Map<String, dynamic> cfg =
-        tu == null ? const {'mtu': 1420, 'keepalive': 25} : await repo.wireGuardConfig(tu);
+    final Map<String, dynamic> cfg = tu == null ? const {'mtu': 1420, 'keepalive': 25} : await repo.wireGuardConfig(tu);
     if (!context.mounted) return;
     String list(Object? v) => v is List ? v.join(', ') : '${v ?? ''}';
     final c = {
@@ -675,8 +684,7 @@ class _RoutesTab extends StatelessWidget {
                               decoration: InputDecoration(labelText: l.wgYourPublicKey, isDense: true),
                               child: Row(children: [
                                 Expanded(
-                                    child: SelectableText(pub,
-                                        style: TextStyle(fontFamily: t.fontMono, fontSize: 13))),
+                                    child: SelectableText(pub, style: TextStyle(fontFamily: t.fontMono, fontSize: 13))),
                                 IconButton(
                                   tooltip: l.copy,
                                   icon: const Icon(Icons.copy, size: 18),
@@ -789,7 +797,8 @@ class _RoutesTab extends StatelessWidget {
               icon: const Icon(Icons.sync),
               onPressed: () => _importWireGuard(context, into: tu),
             ),
-            IconButton(tooltip: l.edit, icon: const Icon(Icons.edit_outlined), onPressed: () => _editTunnel(context, tu)),
+            IconButton(
+                tooltip: l.edit, icon: const Icon(Icons.edit_outlined), onPressed: () => _editTunnel(context, tu)),
             IconButton(
               tooltip: l.delete,
               icon: const Icon(Icons.delete_outline),
@@ -870,16 +879,16 @@ class _ScreensTab extends StatelessWidget {
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
-                child: TextField(
-                    controller: w,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: l.screenWidth))),
+                  child: TextField(
+                      controller: w,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(labelText: l.screenWidth))),
               const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text('×')),
               Expanded(
-                child: TextField(
-                    controller: h,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: l.screenHeight))),
+                  child: TextField(
+                      controller: h,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(labelText: l.screenHeight))),
             ]),
             if (error != null) ...[
               const SizedBox(height: 10),
@@ -980,16 +989,15 @@ class _GroupsTab extends StatelessWidget {
 
   Future<void> _edit(BuildContext context, [Group? g]) async {
     final l = context.l10n;
-    final name = await promptText(context,
-        title: g == null ? l.groupNew : l.groupRename, label: l.name, initial: g?.name ?? '');
+    final name =
+        await promptText(context, title: g == null ? l.groupNew : l.groupRename, label: l.name, initial: g?.name ?? '');
     if (name == null || name.trim().isEmpty) return;
     repo.saveGroup(g == null ? Group(id: newId(), name: name.trim()) : g.copyWith(name: name.trim()));
   }
 
   Future<void> _setParent(BuildContext context, Group g) async {
     final l = context.l10n;
-    final others = repo.groups.values.where((x) => x.id != g.id).toList()
-      ..sort((a, b) => _path(a).compareTo(_path(b)));
+    final others = repo.groups.values.where((x) => x.id != g.id).toList()..sort((a, b) => _path(a).compareTo(_path(b)));
     final i = await pickOne(context, title: l.groupNestInto(g.name), options: [l.topLevel, ...others.map(_path)]);
     if (i == null) return;
     try {
@@ -1005,8 +1013,8 @@ class _GroupsTab extends StatelessWidget {
     final hasContent = repo.countInGroup(g.id) > 0 || repo.groups.values.any((x) => x.parentId == g.id);
     String? moveTo;
     if (hasContent) {
-      final i = await pickOne(context,
-          title: l.groupMoveContentsTo(g.name), options: [l.savedPcs, ...others.map(_path)]);
+      final i =
+          await pickOne(context, title: l.groupMoveContentsTo(g.name), options: [l.savedPcs, ...others.map(_path)]);
       if (i == null) return;
       moveTo = i == 0 ? null : others[i - 1].id;
     } else if (!await confirm(context, title: l.groupDeleteTitle(g.name), ok: l.delete, danger: true)) {
@@ -1135,7 +1143,8 @@ class _BackupTab extends StatelessWidget {
     final path = await auto.runNow();
     if (!context.mounted) return;
     final err = auto.lastError;
-    toast(context, path != null ? l.autoBackupSaved(path) : (err != null ? l.autoBackupFailure(err) : l.autoBackupBusy));
+    toast(
+        context, path != null ? l.autoBackupSaved(path) : (err != null ? l.autoBackupFailure(err) : l.autoBackupBusy));
   }
 
   Future<void> _exportShare(BuildContext context) async {

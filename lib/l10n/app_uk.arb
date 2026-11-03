@@ -349,6 +349,7 @@
   "touchModeDirect": "Перейти на дотик: пальці — як сенсорний екран ПК",
   "touchModeMouse": "Перейти на мишу: курсор, як тачпад",
   "barCollapse": "Згорнути плашку",
+  "homeScreen": "Головна",
   "keyboardShiftsScreen": "Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)",
   "@activeSessions": {"placeholders": {"count": {"type": "int"}}},
   "authEditReason": "Редагування ключів тунелю MHRD",

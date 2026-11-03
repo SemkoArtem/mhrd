@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -62,6 +63,15 @@ class MainActivity : FlutterActivity() {
                             .putExtra(Intent.EXTRA_TITLE, name)
                         startActivityForResult(intent, SAVE_REQUEST)
                     }
+                }
+                "keepScreenOn" -> {
+                    // «Не вимикати екран», поки відкритий сеанс.
+                    if (call.arguments == true) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                    result.success(null)
                 }
                 "openFiles" -> {
                     // Вибір файлів системним вікном. SHOW_ADVANCED — одразу з пам'яттю телефона: без нього

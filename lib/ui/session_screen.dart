@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
+import '../platform/android_paths.dart';
 import '../sessions/scancodes.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
@@ -133,6 +134,8 @@ class _SessionScreenState extends State<SessionScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (s.connection.display.startFullscreen ?? _manager.repo.settings.startFullscreen) _setFullscreen(true);
+      // Телефон: «Не вимикати екран», поки відкритий сеанс.
+      if (_touch && _manager.repo.settings.keepScreenAwake) AndroidPaths.keepScreenOn(true);
     });
   }
 
@@ -156,7 +159,10 @@ class _SessionScreenState extends State<SessionScreen> {
     _focus.dispose();
     _keyboardFocus.dispose();
     _barOpen.dispose();
-    if (_touch) SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (_touch) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      AndroidPaths.keepScreenOn(false);
+    }
     super.dispose();
   }
 

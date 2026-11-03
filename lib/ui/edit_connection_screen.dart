@@ -134,9 +134,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       port: addr.port,
       name: _name.text.trim(),
       tags: _tags.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
-      wakeOnLan: () => mac == null
-          ? null
-          : WakeOnLan(mac: formatMac(mac), broadcast: bc, port: _c.wakeOnLan?.port ?? 9),
+      wakeOnLan: () =>
+          mac == null ? null : WakeOnLan(mac: formatMac(mac), broadcast: bc, port: _c.wakeOnLan?.port ?? 9),
     ));
     Navigator.pop(context);
   }
@@ -223,10 +222,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         ],
         onChanged: (v) => _set(_c.copyWith(groupId: () => v)),
       ),
-
       _section(l.pcImage),
       _imagePicker(context),
-
       _section(l.accounts),
       if (creds.isEmpty) Text(l.noAccountsHint, style: TextStyle(color: t.textMuted)),
       if (creds.isNotEmpty)
@@ -251,8 +248,8 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
                 trailing: IconButton(
                   tooltip: l.removeFromPc,
                   icon: const Icon(Icons.close),
-                  onPressed: () => _set(_c.copyWith(
-                      credentialIds: _c.credentialIds.where((x) => x != creds[i].id).toList())),
+                  onPressed: () =>
+                      _set(_c.copyWith(credentialIds: _c.credentialIds.where((x) => x != creds[i].id).toList())),
                 ),
               ),
           ],
@@ -277,7 +274,6 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
             },
           ),
       ]),
-
       _section(l.route),
       DropdownButtonFormField<RouteKind>(
         initialValue: _c.route,
@@ -336,7 +332,6 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
             child: Text(_checkText!, style: TextStyle(color: _checkOk ? t.ok : t.error, fontSize: 13)),
           ),
       ]),
-
       _section(l.sectionConnection),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
@@ -419,48 +414,53 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     final defaultName = s.screenTemplate(s.defaultScreen) == null
         ? l.screenAuto
         : l.screenTemplateName(s.screenTemplate(s.defaultScreen)!);
+    // Телефон: сеанс завжди на весь екран за його розміром — роздільність, монітори, повний екран і
+    // поведінка вікна там не діють.
+    final mobile = Platform.isAndroid || Platform.isIOS;
     return [
-      DropdownButtonFormField<String?>(
-        initialValue: screenIds.contains(d.screen) ? d.screen : null,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: l.resolution, helperText: l.resolutionHint, helperMaxLines: 2),
-        items: [
-          DropdownMenuItem(value: null, child: Text(l.asInGeneralSettingsWith(defaultName))),
-          DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
-          for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
-        ],
-        onChanged: (v) => setD(d.copyWith(screen: () => v, width: () => null, height: () => null)),
-      ),
-      const SizedBox(height: 8),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: d.useAllMonitors,
-        title: Text(l.useAllMonitors),
-        subtitle: Text(l.useAllMonitorsHint, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
-        onChanged: (v) => setD(d.copyWith(useAllMonitors: v)),
-      ),
-      const SizedBox(height: 8),
-      DropdownButtonFormField<int>(
-        initialValue: d.startFullscreen == null ? 0 : (d.startFullscreen! ? 1 : 2),
-        decoration: InputDecoration(labelText: l.startFullscreen),
-        items: [
-          DropdownMenuItem(value: 0, child: Text(l.asInGeneralSettings)),
-          DropdownMenuItem(value: 1, child: Text(l.yes)),
-          DropdownMenuItem(value: 2, child: Text(l.no)),
-        ],
-        onChanged: (v) => setD(d.copyWith(startFullscreen: () => v == 0 ? null : v == 1)),
-      ),
-      _section(l.onWindowResize),
-      SegmentedButton<ResizeMode>(
-        segments: [
-          ButtonSegment(value: ResizeMode.changeResolution, label: Text(l.resizeChangeResolution)),
-          ButtonSegment(value: ResizeMode.scale, label: Text(l.resizeScale)),
-          ButtonSegment(value: ResizeMode.none, label: Text(l.resizeNone)),
-        ],
-        selected: {d.resizeMode},
-        onSelectionChanged: (s) => setD(d.copyWith(resizeMode: s.first)),
-      ),
-      const SizedBox(height: 16),
+      if (!mobile) ...[
+        DropdownButtonFormField<String?>(
+          initialValue: screenIds.contains(d.screen) ? d.screen : null,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: l.resolution, helperText: l.resolutionHint, helperMaxLines: 2),
+          items: [
+            DropdownMenuItem(value: null, child: Text(l.asInGeneralSettingsWith(defaultName))),
+            DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
+            for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
+          ],
+          onChanged: (v) => setD(d.copyWith(screen: () => v, width: () => null, height: () => null)),
+        ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: d.useAllMonitors,
+          title: Text(l.useAllMonitors),
+          subtitle: Text(l.useAllMonitorsHint, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
+          onChanged: (v) => setD(d.copyWith(useAllMonitors: v)),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<int>(
+          initialValue: d.startFullscreen == null ? 0 : (d.startFullscreen! ? 1 : 2),
+          decoration: InputDecoration(labelText: l.startFullscreen),
+          items: [
+            DropdownMenuItem(value: 0, child: Text(l.asInGeneralSettings)),
+            DropdownMenuItem(value: 1, child: Text(l.yes)),
+            DropdownMenuItem(value: 2, child: Text(l.no)),
+          ],
+          onChanged: (v) => setD(d.copyWith(startFullscreen: () => v == 0 ? null : v == 1)),
+        ),
+        _section(l.onWindowResize),
+        SegmentedButton<ResizeMode>(
+          segments: [
+            ButtonSegment(value: ResizeMode.changeResolution, label: Text(l.resizeChangeResolution)),
+            ButtonSegment(value: ResizeMode.scale, label: Text(l.resizeScale)),
+            ButtonSegment(value: ResizeMode.none, label: Text(l.resizeNone)),
+          ],
+          selected: {d.resizeMode},
+          onSelectionChanged: (s) => setD(d.copyWith(resizeMode: s.first)),
+        ),
+        const SizedBox(height: 16),
+      ],
       DropdownButtonFormField<int>(
         initialValue: d.colorDepth,
         decoration: InputDecoration(labelText: l.colorDepth),
@@ -481,13 +481,14 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         ],
         onChanged: (v) => setD(d.copyWith(scalePercent: v)),
       ),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: d.hiDpi,
-        title: Text(l.hiDpi),
-        subtitle: Text(l.hiDpiWarning, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
-        onChanged: (v) => setD(d.copyWith(hiDpi: v)),
-      ),
+      if (!mobile)
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: d.hiDpi,
+          title: Text(l.hiDpi),
+          subtitle: Text(l.hiDpiWarning, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
+          onChanged: (v) => setD(d.copyWith(hiDpi: v)),
+        ),
     ];
   }
 

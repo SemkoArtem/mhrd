@@ -1063,6 +1063,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get barCollapse => 'Collapse the bar';
 
   @override
+  String get homeScreen => 'Home';
+
+  @override
   String get keyboardShiftsScreen =>
       'On-screen keyboard pushes the session picture up (otherwise it covers it)';
 

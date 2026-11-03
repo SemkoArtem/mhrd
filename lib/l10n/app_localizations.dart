@@ -1958,6 +1958,12 @@ abstract class AppLocalizations {
   /// **'Згорнути плашку'**
   String get barCollapse;
 
+  /// No description provided for @homeScreen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Головна'**
+  String get homeScreen;
+
   /// No description provided for @keyboardShiftsScreen.
   ///
   /// In uk, this message translates to:

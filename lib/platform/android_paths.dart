@@ -56,6 +56,18 @@ class AndroidPaths {
     ];
   }
 
+  /// «Не вимикати екран» на час сеансу.
+  static Future<void> keepScreenOn(bool on) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _channel.invokeMethod('keepScreenOn', on);
+    } on PlatformException {
+      // не вдалось — екран просто гасне як завжди
+    } on MissingPluginException {
+      // не Android-раннер MHRD
+    }
+  }
+
   /// Попросити дозвіл на мікрофон (для ПК з увімкненим мікрофоном), якщо його ще немає.
   static Future<void> requestMicrophone() async {
     if (!Platform.isAndroid) return;

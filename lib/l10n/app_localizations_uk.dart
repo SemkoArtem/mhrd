@@ -1063,6 +1063,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get barCollapse => 'Згорнути плашку';
 
   @override
+  String get homeScreen => 'Головна';
+
+  @override
   String get keyboardShiftsScreen =>
       'Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)';
 
