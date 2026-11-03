@@ -1053,6 +1053,13 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get touchModeDirect =>
+      'Перейти на дотик: пальці — як сенсорний екран ПК';
+
+  @override
+  String get touchModeMouse => 'Перейти на мишу: курсор, клік торканням';
+
+  @override
   String get authEditReason => 'Редагування ключів тунелю MHRD';
 
   @override

@@ -1053,6 +1053,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get touchModeDirect =>
+      'Switch to touch: fingers act as the PC\'s touchscreen';
+
+  @override
+  String get touchModeMouse => 'Switch to mouse: pointer, tap to click';
+
+  @override
   String get authEditReason => 'Editing MHRD tunnel keys';
 
   @override

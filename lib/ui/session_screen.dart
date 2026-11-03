@@ -56,6 +56,9 @@ class _SessionScreenState extends State<SessionScreen> {
   /// Екранна клавіатура телефона для сеансу (невидиме поле RemoteKeyboard).
   final _keyboardFocus = FocusNode(debugLabel: 'rdp-keyboard');
 
+  /// Телефон: «Дотик» — пальці справжніми дотиками у Windows (як у клієнта Microsoft), інакше «Миша».
+  bool _directTouch = true;
+
   /// Розмір вікна змінився: через 300 мс після останньої зміни просимо сервер про нову
   /// роздільність (SPEC → «Зміна розміру вікна»). Поки тягнуть — картинка масштабується.
   /// На весь екран — завжди заповнюємо екран, незалежно від режиму ПК.
@@ -320,6 +323,12 @@ class _SessionScreenState extends State<SessionScreen> {
         ),
         if (s.isActive && s.image != null)
           IconButton(
+            tooltip: _directTouch ? l.touchModeMouse : l.touchModeDirect,
+            icon: Icon(_directTouch ? Icons.touch_app_outlined : Icons.mouse_outlined, size: 20),
+            onPressed: () => setState(() => _directTouch = !_directTouch),
+          ),
+        if (s.isActive && s.image != null)
+          IconButton(
             tooltip: l.onScreenKeyboard,
             icon: Icon(kbOpen ? Icons.keyboard_hide_outlined : Icons.keyboard_outlined, size: 20),
             onPressed: () {
@@ -486,7 +495,7 @@ class _SessionScreenState extends State<SessionScreen> {
       },
       child: LayoutBuilder(builder: (context, box) {
         _onViewSize(box.biggest);
-        if (_touch) return TouchSurface(session: s, image: img);
+        if (_touch) return TouchSurface(session: s, image: img, direct: _directTouch);
         // Розмір картинки в логічних точках: 1 піксель ПК = 1 фізичний піксель екрана.
         final w = s.width / _dpr, h = s.height / _dpr;
         final exact = (box.maxWidth - w).abs() < 1 && (box.maxHeight - h).abs() < 1;

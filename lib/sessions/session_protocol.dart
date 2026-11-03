@@ -16,6 +16,7 @@ abstract final class Msg {
   static const focus = 0x09;
   static const latency = 0x0A;
   static const unicode = 0x0B;
+  static const touch = 0x0C;
 
   static const evtState = 0x81;
   static const evtSurface = 0x82;
@@ -28,6 +29,11 @@ abstract final class Msg {
 
 /// Кнопки миші в протоколі.
 enum RemoteButton { left, right, middle }
+
+/// Прапорці дотику — як FREERDP_TOUCH_* у FreeRDP.
+abstract final class TouchFlags {
+  static const down = 0x01, up = 0x02, motion = 0x04;
+}
 
 /// Чому сеанс закрився. Порядок = номери категорій у proto.h (DISC_*); [crashed] — лише в Dart.
 enum DisconnectReason {
@@ -64,6 +70,10 @@ Uint8List encodeKey(int scancode, bool down) =>
 
 /// Символ без клавіші (екранна клавіатура телефона): одиниця UTF-16.
 Uint8List encodeUnicode(int codeUnit) => encodeFrame(Msg.unicode, _u16s([codeUnit]));
+
+/// Дотик сенсора (режим «Дотик»): [flags] — TouchFlags, [finger] 0..9, координати віддаленого екрана.
+Uint8List encodeTouch(int flags, int finger, int x, int y) =>
+    encodeFrame(Msg.touch, [flags & 0xFF, (flags >> 8) & 0xFF, finger, ..._u16s([x, y])]);
 
 Uint8List encodeMouseMove(int x, int y) => encodeFrame(Msg.mouseMove, _u16s([x, y]));
 

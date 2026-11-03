@@ -314,6 +314,8 @@
   "copy": "Copy",
   "copied": "Copied.",
   "activeSessions": "Active sessions: {count}",
+  "touchModeDirect": "Switch to touch: fingers act as the PC's touchscreen",
+  "touchModeMouse": "Switch to mouse: pointer, tap to click",
   "authEditReason": "Editing MHRD tunnel keys",
   "authNeedPin": "To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.",
   "sessionStartFailed": "Couldn't start the session: {detail}",

@@ -10,15 +10,18 @@ import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
 import '../theme/mhrd_theme.dart';
 
-/// Сенсорний екран (телефон, планшет): картинка ПК з масштабом і керування дотиками як мишею —
-/// торкання = клік, довге натискання чи дотик двома пальцями = правий клік, перетягування =
-/// рух із натиснутою кнопкою, двома пальцями — прокрутка, щипок — збільшити й пересунути картинку.
-/// Миша (Bluetooth, USB) працює як звичайна миша.
+/// Сенсорний екран (телефон, планшет), два режими, як у клієнта Microsoft:
+/// - «Дотик» ([direct]): пальці — справжніми дотиками у Windows (прокрутку, щипок, утримання для
+///   правого кліку роблять самі програми ПК);
+/// - «Миша»: торкання = клік, довге натискання чи дотик двома пальцями = правий клік, перетягування =
+///   рух із натиснутою кнопкою, двома пальцями — прокрутка, щипок — збільшити й пересунути картинку.
+/// Миша (Bluetooth, USB) в обох режимах — звичайна миша.
 class TouchSurface extends StatefulWidget {
-  const TouchSurface({super.key, required this.session, required this.image});
+  const TouchSurface({super.key, required this.session, required this.image, this.direct = true});
 
   final RdpSession session;
   final ui.Image image;
+  final bool direct;
 
   @override
   State<TouchSurface> createState() => _TouchSurfaceState();
@@ -48,7 +51,34 @@ class _TouchSurfaceState extends State<TouchSurface> {
   // Миша на телефоні — як на ПК.
   int _mouseButtons = 0;
 
+  // Режим «Дотик»: вказівник Flutter → номер пальця для Windows (0..9).
+  final _fingers = <int, int>{};
+
   RdpSession get s => widget.session;
+
+  @override
+  void didUpdateWidget(TouchSurface old) {
+    super.didUpdateWidget(old);
+    // Перейшли на «Дотик» — картинка знову ціла: збільшує вже сама Windows.
+    if (widget.direct && !old.direct) {
+      _zoom = 1;
+      _pan = Offset.zero;
+    }
+  }
+
+  /// Режим «Дотик»: подія пальця → дотик у Windows.
+  void _touch(PointerEvent e, int flags) {
+    var finger = _fingers[e.pointer];
+    if (flags == TouchFlags.down) {
+      finger = List.generate(10, (i) => i).firstWhere((i) => !_fingers.containsValue(i), orElse: () => -1);
+      if (finger < 0) return; // більше 10 пальців
+      _fingers[e.pointer] = finger;
+    }
+    if (finger == null) return;
+    final (x, y) = _remote(e.localPosition);
+    s.sendTouch(flags, finger, x, y);
+    if (flags == TouchFlags.up) _fingers.remove(e.pointer);
+  }
 
   @override
   void dispose() {
@@ -92,6 +122,7 @@ class _TouchSurfaceState extends State<TouchSurface> {
 
   void _down(PointerDownEvent e) {
     if (e.kind == PointerDeviceKind.mouse) return _mouse(e);
+    if (widget.direct) return _touch(e, TouchFlags.down);
     _touches[e.pointer] = e.localPosition;
     if (_touches.length == 1) {
       _start = e.localPosition;
@@ -125,6 +156,7 @@ class _TouchSurfaceState extends State<TouchSurface> {
 
   void _move(PointerMoveEvent e) {
     if (e.kind == PointerDeviceKind.mouse) return _mouse(e);
+    if (widget.direct) return _touch(e, TouchFlags.motion);
     if (!_touches.containsKey(e.pointer)) return;
     _touches[e.pointer] = e.localPosition;
     if (_touches.length == 1 && _start != null && !_consumed) {
@@ -175,6 +207,7 @@ class _TouchSurfaceState extends State<TouchSurface> {
 
   void _up(PointerEvent e) {
     if (e.kind == PointerDeviceKind.mouse) return _mouse(e);
+    if (widget.direct) return _touch(e, TouchFlags.up);
     final was = _touches.length;
     final at = _touches.remove(e.pointer);
     if (at == null) return;

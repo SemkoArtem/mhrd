@@ -346,6 +346,8 @@
   "copy": "Копіювати",
   "copied": "Скопійовано.",
   "activeSessions": "Активних сеансів: {count}",
+  "touchModeDirect": "Перейти на дотик: пальці — як сенсорний екран ПК",
+  "touchModeMouse": "Перейти на мишу: курсор, клік торканням",
   "@activeSessions": {"placeholders": {"count": {"type": "int"}}},
   "authEditReason": "Редагування ключів тунелю MHRD",
   "authNeedPin": "Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.",

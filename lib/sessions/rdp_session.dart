@@ -237,6 +237,11 @@ class RdpSession extends ChangeNotifier {
     if (_canInput) _channel.send(encodeKey(scancode, down));
   }
 
+  /// Дотик сенсора телефона — справжнім дотиком у Windows (режим «Дотик», як у клієнта Microsoft).
+  void sendTouch(int flags, int finger, int x, int y) {
+    if (_canInput) _channel.send(encodeTouch(flags, finger, x, y));
+  }
+
   /// Текст з екранної клавіатури телефона — символами, без клавіш (кирилиця, емодзі тощо).
   void sendText(String text) {
     if (!_canInput) return;

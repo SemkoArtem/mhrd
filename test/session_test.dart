@@ -85,6 +85,8 @@ void main() {
       expect(encodeKey(0x11D, true), [4, 0, 0, 0, Msg.key, 0x1D, 0x01, 1]);
       // Символ з екранної клавіатури телефона: одиниця UTF-16 (кирилиця «Ї» = 0x0407).
       expect(encodeUnicode(0x0407), [3, 0, 0, 0, Msg.unicode, 0x07, 0x04]);
+      // Дотик: прапорці (u16), палець, x, y.
+      expect(encodeTouch(TouchFlags.down, 1, 300, 2), [8, 0, 0, 0, Msg.touch, 1, 0, 1, 0x2C, 0x01, 2, 0]);
       expect(encodeMouseWheel(-120, x: 1, y: 2).sublist(5, 7), [0x88, 0xFF]); // -120 у 16 бітах
     });
 

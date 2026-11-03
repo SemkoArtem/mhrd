@@ -1088,6 +1088,25 @@ static void handle_input(MhrdContext* m)
 				if (msg->len >= 3)
 					freerdp_input_send_keyboard_event_ex(input, d[2] != 0, FALSE, get_u16(d));
 				break;
+			case MSG_TOUCH:
+				/* Дотик телефона — справжнім дотиком у Windows (канал rdpei: прокрутка, щипок, утримання
+				 * роблять самі програми ПК). Сервер без дотику — перший палець стає мишею. */
+				if (msg->len >= 7)
+				{
+					const UINT16 flags = get_u16(d);
+					const int finger = d[2];
+					const UINT16 x = get_u16(d + 3), y = get_u16(d + 5);
+					if (!(m->common.rdpei && freerdp_client_handle_touch(&m->common, flags, finger, 0, x, y)) &&
+					    finger == 0)
+					{
+						freerdp_input_send_mouse_event(input, PTR_FLAGS_MOVE, x, y);
+						if (flags & FREERDP_TOUCH_DOWN)
+							freerdp_input_send_mouse_event(input, PTR_FLAGS_DOWN | PTR_FLAGS_BUTTON1, x, y);
+						else if (flags & FREERDP_TOUCH_UP)
+							freerdp_input_send_mouse_event(input, PTR_FLAGS_BUTTON1, x, y);
+					}
+				}
+				break;
 			case MSG_UNICODE:
 				if (msg->len >= 2)
 				{

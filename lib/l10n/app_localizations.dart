@@ -1940,6 +1940,18 @@ abstract class AppLocalizations {
   /// **'Активних сеансів: {count}'**
   String activeSessions(int count);
 
+  /// No description provided for @touchModeDirect.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перейти на дотик: пальці — як сенсорний екран ПК'**
+  String get touchModeDirect;
+
+  /// No description provided for @touchModeMouse.
+  ///
+  /// In uk, this message translates to:
+  /// **'Перейти на мишу: курсор, клік торканням'**
+  String get touchModeMouse;
+
   /// No description provided for @authEditReason.
   ///
   /// In uk, this message translates to:
