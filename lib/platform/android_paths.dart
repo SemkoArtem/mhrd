@@ -40,6 +40,11 @@ class AndroidPaths {
     }
   }
 
+  /// «Зберегти як» системним вікном Android (Завантаження, Google Drive…). Повертає назву
+  /// збереженого файлу або null — скасовано.
+  static Future<String?> saveFile(String name, Uint8List bytes) =>
+      _channel.invokeMethod<String>('saveFile', {'name': name, 'bytes': bytes});
+
   /// Попросити дозвіл на мікрофон (для ПК з увімкненим мікрофоном), якщо його ще немає.
   static Future<void> requestMicrophone() async {
     if (!Platform.isAndroid) return;
