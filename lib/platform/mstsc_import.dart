@@ -66,26 +66,31 @@ class _Registry {
   late final _CloseD _close;
 
   List<MstscEntry> read() {
-    final byKey = <String, MstscEntry>{};
-    void add(String text, String? user) {
-      final a = parseAddress(text.trim());
-      if (a == null) return;
-      final key = '${a.host.toLowerCase()}:${a.port}';
-      final old = byKey[key];
-      if (old == null || (old.username == null && user != null)) {
-        byKey[key] = MstscEntry(host: a.host, port: a.port, username: user);
-      }
-    }
-
-    // Servers: підключи — адреси, у кожному UsernameHint.
+    // Servers: підключи названі адресою без порту (mstsc відкидає порт), у кожному UsernameHint.
+    final users = <String, String?>{}; // вузол (малими) → ім'я
+    final hosts = <String, String>{}; // вузол (малими) → як записано
     for (final name in _subkeys('$_root\\Servers')) {
-      final user = _string('$_root\\Servers\\$name', 'UsernameHint');
-      add(name, user == null || user.trim().isEmpty ? null : user.trim());
+      final a = parseAddress(name.trim());
+      if (a == null) continue;
+      final user = _string('$_root\\Servers\\$name', 'UsernameHint')?.trim();
+      final key = a.host.toLowerCase();
+      hosts[key] = a.host;
+      if (user != null && user.isNotEmpty) users[key] = user;
     }
-    // Default: MRU0…MRU9 — останні адреси (бувають і з портом); ім'я — з Servers, якщо є.
+    // Default: MRU0…MRU9 — адреси, як їх вводили (з портом); ім'я — з Servers того ж вузла.
+    final byKey = <String, MstscEntry>{};
+    final inMru = <String>{};
     for (var i = 0; i < 10; i++) {
-      final v = _string('$_root\\Default', 'MRU$i');
-      if (v != null && v.trim().isNotEmpty) add(v, null);
+      final a = parseAddress(_string('$_root\\Default', 'MRU$i')?.trim() ?? '');
+      if (a == null) continue;
+      final host = a.host.toLowerCase();
+      inMru.add(host);
+      byKey.putIfAbsent('$host:${a.port}', () => MstscEntry(host: a.host, port: a.port, username: users[host]));
+    }
+    // Вузли з Servers, яких немає серед останніх адрес, — на стандартному порту.
+    for (final MapEntry(key: host, value: shown) in hosts.entries) {
+      if (inMru.contains(host)) continue;
+      byKey.putIfAbsent('$host:3389', () => MstscEntry(host: shown, port: 3389, username: users[host]));
     }
     return byKey.values.toList()..sort((a, b) => a.address.toLowerCase().compareTo(b.address.toLowerCase()));
   }
