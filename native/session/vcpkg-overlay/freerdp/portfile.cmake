@@ -31,7 +31,6 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
         av1         WITH_AOM
         av1         WITH_GFX_AV1
         client      WITH_CLIENT
-        ffmpeg      WITH_DSP_FFMPEG
         ffmpeg      WITH_FFMPEG
         ffmpeg      WITH_SWSCALE
         server      WITH_SERVER
@@ -123,6 +122,8 @@ vcpkg_cmake_configure(
         -DWITH_PKCS11=OFF
         -DWITH_PROXY_MODULES=OFF
         -DWITH_PULSE=${MHRD_PULSE}
+        # MHRD: FFmpeg (Linux) — лише відео H.264; звук і мікрофон — вбудованими кодеками FreeRDP, як і раніше.
+        -DWITH_DSP_FFMPEG=OFF
         -DWITH_URIPARSER=OFF
     OPTIONS_RELEASE
         -DWITH_VERBOSE_WINPR_ASSERT=OFF

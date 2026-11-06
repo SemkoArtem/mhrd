@@ -19,4 +19,6 @@ cmake --build "$here/build-linux"
 
 mkdir -p "$here/out"
 cp "$here/build-linux/mhrd-session" "$here/out/mhrd-session"
+# Без налагоджувальних символів (FreeRDP, FFmpeg, OpenSSL) — утричі менше.
+if [ "$config" = Release ]; then strip "$here/out/mhrd-session"; fi
 echo "OK: $here/out/mhrd-session"
