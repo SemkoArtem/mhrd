@@ -22,6 +22,7 @@ import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
 import '../util/wireguard_conf.dart';
 import 'credential_dialog.dart';
+import 'edit_connection_screen.dart';
 import 'dialogs.dart';
 import 'file_actions.dart';
 import 'lock_screen.dart';
@@ -51,9 +52,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (Icons.person_outline, l.accounts, () => _AccountsTab(repo: repo)),
       (Icons.alt_route, l.tabRoutes, () => _RoutesTab(repo: repo)),
       (Icons.folder_outlined, l.groups, () => _GroupsTab(repo: repo)),
-      // Шаблони роздільності — лише на ПК: на телефоні сеанс завжди за розміром екрана.
-      if (!(Platform.isAndroid || Platform.isIOS))
-        (Icons.aspect_ratio, l.screenTemplates, () => _ScreensTab(repo: repo)),
+      (Icons.add_to_queue, l.tabNewPcs, () => _ScreensTab(repo: repo)),
       (Icons.backup_outlined, l.tabBackup, () => _BackupTab(repo: repo)),
     ];
     // Телефон: сім вкладок у рядок не влазять — розділи в меню, що виїжджає зліва по кнопці «☰».
@@ -115,7 +114,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Tab(text: l.accounts),
               Tab(text: l.tabRoutes),
               Tab(text: l.groups),
-              Tab(text: l.screenTemplates),
+              Tab(text: l.tabNewPcs),
               Tab(text: l.tabBackup),
             ],
           ),
@@ -942,30 +941,53 @@ class _ScreensTab extends StatelessWidget {
     final s = repo.settings;
     final ids = {ScreenTemplate.auto, ...s.allScreenTemplates.map((x) => x.id)};
     return _pane([
-      DropdownButtonFormField<String>(
-        initialValue: ids.contains(s.defaultScreen) ? s.defaultScreen : ScreenTemplate.auto,
-        isExpanded: true,
-        decoration: InputDecoration(labelText: l.defaultScreen, helperText: l.resolutionHint, helperMaxLines: 2),
-        items: [
-          DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
-          for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
-        ],
-        onChanged: (v) => repo.updateSettings(s.copyWith(defaultScreen: v)),
-      ),
-      _caption(context, l.customScreens),
-      if (s.screenTemplates.isEmpty) Text(l.noCustomScreens, style: TextStyle(color: t.textMuted)),
-      for (final x in s.screenTemplates)
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(x.portrait ? Icons.stay_current_portrait : Icons.desktop_windows_outlined),
-          title: Text(l.screenTemplateName(x)),
-          trailing: IconButton(tooltip: l.delete, icon: const Icon(Icons.delete_outline), onPressed: () => _delete(x)),
+      Text(l.newPcDefaultsHint, style: TextStyle(color: t.textMuted)),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        FilledButton.icon(
+          icon: const Icon(Icons.tune),
+          label: Text(l.newPcDefaultsEdit),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => const EditConnectionScreen(template: true),
+          )),
         ),
-      const SizedBox(height: 12),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.icon(icon: const Icon(Icons.add), label: Text(l.addScreen), onPressed: () => _add(context)),
-      ),
+        if (s.newPc != null)
+          TextButton(
+            onPressed: () => repo.updateSettings(s.copyWith(newPc: () => null)),
+            child: Text(l.newPcDefaultsReset),
+          ),
+      ]),
+      // Шаблони роздільності — лише на ПК: на телефоні сеанс завжди за розміром екрана.
+      if (!(Platform.isAndroid || Platform.isIOS)) ...[
+        _caption(context, l.screenTemplates),
+        DropdownButtonFormField<String>(
+          initialValue: ids.contains(s.defaultScreen) ? s.defaultScreen : ScreenTemplate.auto,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: l.defaultScreen, helperText: l.resolutionHint, helperMaxLines: 2),
+          items: [
+            DropdownMenuItem(value: ScreenTemplate.auto, child: Text(l.screenAuto)),
+            for (final x in s.allScreenTemplates) DropdownMenuItem(value: x.id, child: Text(l.screenTemplateName(x))),
+          ],
+          onChanged: (v) => repo.updateSettings(s.copyWith(defaultScreen: v)),
+        ),
+        _caption(context, l.customScreens),
+        if (s.screenTemplates.isEmpty) Text(l.noCustomScreens, style: TextStyle(color: t.textMuted)),
+        for (final x in s.screenTemplates)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(x.portrait ? Icons.stay_current_portrait : Icons.desktop_windows_outlined),
+            title: Text(l.screenTemplateName(x)),
+            trailing:
+                IconButton(tooltip: l.delete, icon: const Icon(Icons.delete_outline), onPressed: () => _delete(x)),
+          ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child:
+              FilledButton.icon(icon: const Icon(Icons.add), label: Text(l.addScreen), onPressed: () => _add(context)),
+        ),
+      ],
     ]);
   }
 }

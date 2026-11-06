@@ -150,6 +150,33 @@ class Repository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Новий (ще не збережений) ПК із «Налаштуваннями нових ПК» ([AppSettings.newPc]): маршрут, акаунти,
+  /// екран, пристрої. Акаунти й профілі, яких уже немає, не переносяться.
+  Connection newConnection({String host = '', int port = 3389, String name = '', String? groupId}) {
+    final now = DateTime.now();
+    final base = Connection(id: newId(), name: name, host: host, port: port, groupId: groupId, createdAt: now, updatedAt: now);
+    final t = settings.newPc;
+    if (t == null) return base;
+    final routeOk = switch (t.route) {
+      RouteKind.direct => true,
+      RouteKind.tunnel => tunnels.containsKey(t.routeRefId),
+      RouteKind.proxy => proxies.containsKey(t.routeRefId),
+    };
+    return base.copyWith(
+      tags: t.tags,
+      credentialIds: t.credentialIds.where(credentials.containsKey).toList(),
+      route: routeOk ? t.route : RouteKind.direct,
+      routeRefId: () => routeOk ? t.routeRefId : null,
+      gatewayId: () => gateways.containsKey(t.gatewayId) ? t.gatewayId : null,
+      gatewayBypassLocal: t.gatewayBypassLocal,
+      adminSession: t.adminSession,
+      swapMouseButtons: t.swapMouseButtons,
+      reconnectOnDrop: t.reconnectOnDrop,
+      display: t.display,
+      devices: t.devices,
+    );
+  }
+
   /// [name] — назва копії (UI передає перекладене «… (копія)»).
   Connection duplicateConnection(Connection c, {required String name}) {
     final now = DateTime.now();

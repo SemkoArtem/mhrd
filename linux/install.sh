@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Встановлення MHRD для Linux (Debian 12+, Ubuntu 22.04+/Mint 21+, Arch/Manjaro) одною командою:
+# Встановлення MHRD для Linux (Debian 12+, Ubuntu 22.04+/Mint 21+, Arch/Manjaro, Fedora 39+,
+# openSUSE Tumbleweed і Leap 16) одною командою:
 #   curl -fsSL https://raw.githubusercontent.com/SemkoArtem/mhrd/linux/linux/install.sh | bash
 # Бере найновіший реліз Linux із GitHub (tar.gz), перевіряє контрольну суму, ставить системні
-# бібліотеки (apt чи pacman, через sudo) і саму програму — для поточного користувача:
+# бібліотеки (apt, pacman, dnf чи zypper — через sudo) і саму програму — для поточного користувача:
 #   ~/.local/opt/mhrd              програма
 #   ~/.local/bin/mhrd              команда запуску
 #   ~/.local/share/applications    пункт у меню програм
@@ -27,6 +28,11 @@ fi
 
 [ "$(uname -m)" = "x86_64" ] || die "поки є лише збірка для x86_64 (64-бітні Intel/AMD)."
 [ "$(id -u)" -ne 0 ] || die "запускайте від свого користувача, не від root (sudo попросять лише для системних пакетів)."
+# Збірка — з Ubuntu 22.04: потрібна glibc 2.35 чи новіша (старіші системи програму не запустять).
+glibc="$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')"
+if [ -n "$glibc" ] && [ "$(printf '%s\n2.35\n' "$glibc" | sort -V | head -n1)" != "2.35" ]; then
+  die "система застара (glibc $glibc, потрібна 2.35+): Debian 12+, Ubuntu 22.04+, Fedora 36+, openSUSE Leap 16."
+fi
 
 # Системні бібліотеки: GTK 3 (вікно), libsecret (сховище паролів), PulseAudio/PipeWire (звук),
 # OpenGL/EGL, xkbcommon (клавіатура).
@@ -43,6 +49,14 @@ case "$family" in
     say "Системні пакети (apt)"
     $sudo apt-get update
     $sudo apt-get install -y libgtk-3-0 libsecret-1-0 libpulse0 libegl1 libgl1 libxkbcommon0 curl ca-certificates
+    ;;
+  *" fedora "*|*" rhel "*)
+    say "Системні пакети (dnf)"
+    $sudo dnf install -y gtk3 libsecret pulseaudio-libs mesa-libEGL mesa-libGL libxkbcommon curl ca-certificates
+    ;;
+  *" suse "*|*" opensuse "*)
+    say "Системні пакети (zypper)"
+    $sudo zypper --non-interactive install libgtk-3-0 libsecret-1-0 libpulse0 Mesa-libEGL1 Mesa-libGL1 libxkbcommon0 curl ca-certificates
     ;;
   *)
     say "Невідомий дистрибутив (${ID:-?}): пропускаю системні пакети — потрібні GTK 3, libsecret, libpulse, OpenGL."

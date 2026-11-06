@@ -882,6 +882,44 @@ class AppLocalizationsUk extends AppLocalizations {
   String get screenTemplates => 'Шаблони екрана';
 
   @override
+  String get tabNewPcs => 'Нові ПК';
+
+  @override
+  String get newPcDefaults => 'Налаштування нових ПК';
+
+  @override
+  String get newPcDefaultsHint =>
+      'З цими налаштуваннями створюється кожен новий ПК: «Додати ПК», швидке підключення, імпорт з mstsc. Маршрут, акаунти, екран, звук, буфер обміну — один раз тут, а не для кожного ПК. Уже додані ПК не змінюються.';
+
+  @override
+  String get newPcDefaultsEdit => 'Налаштувати нові ПК';
+
+  @override
+  String get newPcDefaultsReset => 'Скинути до типових';
+
+  @override
+  String get importMstsc =>
+      'Імпорт з «Підключення до віддаленого робочого стола»';
+
+  @override
+  String get mstscTitle => 'ПК зі стандартного клієнта Windows';
+
+  @override
+  String get mstscHint =>
+      'Windows пам\'ятає ці адреси й імена користувачів. Паролі не переносяться — MHRD спитає під час першого підключення.';
+
+  @override
+  String get mstscNothing => 'Стандартний клієнт Windows не має збережених ПК.';
+
+  @override
+  String get mstscAlready => 'уже є';
+
+  @override
+  String mstscAdd(int count) {
+    return 'Додати: $count';
+  }
+
+  @override
   String get defaultScreen => 'Роздільність за замовчуванням для всіх ПК';
 
   @override

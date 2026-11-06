@@ -54,8 +54,20 @@ docs/SPEC.md                   специфікація (джерело прав
 - Етап 1 компілюється: `flutter analyze` чистий, `flutter test` проходить, збірки
   `flutter build windows` і `flutter build apk` працюють, вручну перевірено на Windows.
 - **Порядок платформ:** спершу все робимо й перевіряємо на **Windows**, потім переносимо на
-  **Android**. Mac у власника немає: Linux і macOS збирає лише GitHub Actions
-  (теки `linux/`, `macos/` у репозиторії не тримаємо — CI створює їх сам).
+  **Android**. Mac у власника немає: macOS збирає лише GitHub Actions
+  (теки `macos/` у репозиторії не тримаємо — CI створює її сам).
+- **Linux** (гілка `linux`, реліз за тегом `linux-v*`): збирається в WSL2 (Ubuntu 22.04 для
+  поширення — glibc 2.35) і в Actions (`.github/workflows/linux.yml`); пакування —
+  `linux/packaging/package.sh` (AppImage + tar.gz), встановлення одною командою — `linux/install.sh`.
+  - H.264 на Linux — FFmpeg (фіча `ffmpeg` порту freerdp лише для `linux` у `native/session/vcpkg.json`;
+    `WITH_DSP_FFMPEG=OFF` — звук і мікрофон вбудованими кодеками FreeRDP).
+  - SDL3 — власна копія порту (`vcpkg-overlay/sdl3`, блоки «MHRD:»): порт vcpkg вимикає всі
+    розширення X11 і libdecor; у нас увімкнено XFixes (сповіщення про буфер обміну), XRandR
+    («Усі монітори»), XInput2, XCursor, XScrnSaver, XSync і libdecor (рамка вікна на GNOME Wayland).
+    SDL вантажить кожне, лише якщо воно є в системі.
+  - Буфер обміну (`clipboard_sdl.c`): текст, картинки, файли в обидва боки. Файли сервера
+    завантажуються в `~/.cache/mhrd/clipboard/<pid>-<n>` (потік; старт — коли вікно сеансу втратило
+    фокус або на «Вставити»), буфер віддає `text/uri-list` і `x-special/gnome-copied-files`.
 - Середовище розробки (Windows): Flutter у `C:\src\flutter`, JDK 17 (Temurin), Android SDK у
   `%LOCALAPPDATA%\Android\Sdk`, VS Build Tools 2022 з C++ і **ATL** (без ATL не збирається
   `flutter_secure_storage_windows`). `sdkmanager` у новому SDK замінено утилітою `android`:
@@ -82,7 +94,7 @@ docs/SPEC.md                   специфікація (джерело прав
   виглядають як версії).
 - Журнал сеансів: `<AppSupport>/logs/session-ДАТА.log`, 7 днів (`lib/sessions/session_log.dart`) —
   stderr FreeRDP + рядок `audio: playback/remoteConsole/capture` і «channel connected: …».
-- **H.264 (AVC444/AVC420)** — через Media Foundation (`WITH_MEDIA_FOUNDATION=ON` в overlay-порті);
+- **H.264 (AVC444/AVC420)** — Windows: Media Foundation (`WITH_MEDIA_FOUNDATION=ON` в overlay-порті), Linux: FFmpeg;
   `h264_available()` у PreConnect перевіряє декодер і лише тоді вмикає GfxH264 (Windows N — без).
 - **Автоперепідключення:** `client_auto_reconnect_ex` у `run_session` (до 20 спроб по 3 с,
   `mhrd_retry_dialog`); EVT_STATE 3 = reconnecting; ввід із вікна на час відновлення не йде;

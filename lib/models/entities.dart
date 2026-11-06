@@ -1,3 +1,4 @@
+import 'connection.dart';
 import 'json_util.dart';
 
 /// Обліковий запис. Пароль лежить у системному сховищі під ключем [secretKey].
@@ -283,6 +284,7 @@ class AppSettings {
     this.collapsedGroups = const [noGroupSection],
     this.screenTemplates = const [],
     this.defaultScreen = ScreenTemplate.auto,
+    this.newPc,
     this.lockEnabled = false,
     this.lockBiometric = false,
     this.lastBackupAt,
@@ -321,6 +323,10 @@ class AppSettings {
   /// Типовий шаблон для ПК, у яких «як у загальних»: id шаблону або [ScreenTemplate.auto].
   final String defaultScreen;
 
+  /// Налаштування, з якими створюється новий ПК («Додати ПК», швидке підключення, імпорт з mstsc):
+  /// маршрут, акаунти, екран, пристрої тощо. Адреса, назва й група тут не діють. null — типові.
+  final Connection? newPc;
+
   /// Блокування MHRD при запуску PIN-кодом (сам PIN — лише хеш у сховищі, див. AppLock).
   final bool lockEnabled;
 
@@ -356,6 +362,7 @@ class AppSettings {
     List<String>? collapsedGroups,
     List<ScreenTemplate>? screenTemplates,
     String? defaultScreen,
+    Connection? Function()? newPc,
     bool? lockEnabled,
     bool? lockBiometric,
     DateTime? lastBackupAt,
@@ -375,6 +382,7 @@ class AppSettings {
         collapsedGroups: collapsedGroups ?? this.collapsedGroups,
         screenTemplates: screenTemplates ?? this.screenTemplates,
         defaultScreen: defaultScreen ?? this.defaultScreen,
+        newPc: newPc != null ? newPc() : this.newPc,
         lockEnabled: lockEnabled ?? this.lockEnabled,
         lockBiometric: lockBiometric ?? this.lockBiometric,
         lastBackupAt: lastBackupAt ?? this.lastBackupAt,
@@ -395,6 +403,7 @@ class AppSettings {
         'collapsedGroups': collapsedGroups,
         'screenTemplates': [for (final t in screenTemplates) t.toJson()],
         'defaultScreen': defaultScreen,
+        'newPc': newPc?.toJson(),
         'lockEnabled': lockEnabled,
         'lockBiometric': lockBiometric,
         'lastBackupAt': lastBackupAt?.toIso8601String(),
@@ -420,6 +429,7 @@ class AppSettings {
               if (x is Map) ScreenTemplate.fromJson(x.cast<String, dynamic>()),
         ],
         defaultScreen: strOr(j['defaultScreen'], ScreenTemplate.auto),
+        newPc: j['newPc'] is Map ? Connection.fromJson((j['newPc'] as Map).cast<String, dynamic>()) : null,
         lockEnabled: boolOr(j['lockEnabled'], false),
         lockBiometric: boolOr(j['lockBiometric'], false),
         lastBackupAt: dateOrNull(j['lastBackupAt']),
