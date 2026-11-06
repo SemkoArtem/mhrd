@@ -22,6 +22,7 @@ import '../theme/mhrd_theme.dart';
 import '../util/address.dart';
 import '../util/wireguard_conf.dart';
 import 'credential_dialog.dart';
+import 'edit_connection_screen.dart';
 import 'dialogs.dart';
 import 'file_actions.dart';
 import 'lock_screen.dart';
@@ -51,7 +52,7 @@ class SettingsScreen extends StatelessWidget {
               Tab(text: l.accounts),
               Tab(text: l.tabRoutes),
               Tab(text: l.groups),
-              Tab(text: l.screenTemplates),
+              Tab(text: l.tabNewPcs),
               Tab(text: l.tabBackup),
             ],
           ),
@@ -866,6 +867,24 @@ class _ScreensTab extends StatelessWidget {
     final s = repo.settings;
     final ids = {ScreenTemplate.auto, ...s.allScreenTemplates.map((x) => x.id)};
     return _pane([
+      Text(l.newPcDefaultsHint, style: TextStyle(color: t.textMuted)),
+      const SizedBox(height: 10),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        FilledButton.icon(
+          icon: const Icon(Icons.tune),
+          label: Text(l.newPcDefaultsEdit),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => const EditConnectionScreen(template: true),
+          )),
+        ),
+        if (s.newPc != null)
+          TextButton(
+            onPressed: () => repo.updateSettings(s.copyWith(newPc: () => null)),
+            child: Text(l.newPcDefaultsReset),
+          ),
+      ]),
+      _caption(context, l.screenTemplates),
       DropdownButtonFormField<String>(
         initialValue: ids.contains(s.defaultScreen) ? s.defaultScreen : ScreenTemplate.auto,
         isExpanded: true,

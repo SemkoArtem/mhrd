@@ -1634,6 +1634,72 @@ abstract class AppLocalizations {
   /// **'Шаблони екрана'**
   String get screenTemplates;
 
+  /// No description provided for @tabNewPcs.
+  ///
+  /// In uk, this message translates to:
+  /// **'Нові ПК'**
+  String get tabNewPcs;
+
+  /// No description provided for @newPcDefaults.
+  ///
+  /// In uk, this message translates to:
+  /// **'Налаштування нових ПК'**
+  String get newPcDefaults;
+
+  /// No description provided for @newPcDefaultsHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'З цими налаштуваннями створюється кожен новий ПК: «Додати ПК», швидке підключення, імпорт з mstsc. Маршрут, акаунти, екран, звук, буфер обміну — один раз тут, а не для кожного ПК. Уже додані ПК не змінюються.'**
+  String get newPcDefaultsHint;
+
+  /// No description provided for @newPcDefaultsEdit.
+  ///
+  /// In uk, this message translates to:
+  /// **'Налаштувати нові ПК'**
+  String get newPcDefaultsEdit;
+
+  /// No description provided for @newPcDefaultsReset.
+  ///
+  /// In uk, this message translates to:
+  /// **'Скинути до типових'**
+  String get newPcDefaultsReset;
+
+  /// No description provided for @importMstsc.
+  ///
+  /// In uk, this message translates to:
+  /// **'Імпорт з «Підключення до віддаленого робочого стола»'**
+  String get importMstsc;
+
+  /// No description provided for @mstscTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'ПК зі стандартного клієнта Windows'**
+  String get mstscTitle;
+
+  /// No description provided for @mstscHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Windows пам\'ятає ці адреси й імена користувачів. Паролі не переносяться — MHRD спитає під час першого підключення.'**
+  String get mstscHint;
+
+  /// No description provided for @mstscNothing.
+  ///
+  /// In uk, this message translates to:
+  /// **'Стандартний клієнт Windows не має збережених ПК.'**
+  String get mstscNothing;
+
+  /// No description provided for @mstscAlready.
+  ///
+  /// In uk, this message translates to:
+  /// **'уже є'**
+  String get mstscAlready;
+
+  /// No description provided for @mstscAdd.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додати: {count}'**
+  String mstscAdd(int count);
+
   /// No description provided for @defaultScreen.
   ///
   /// In uk, this message translates to:

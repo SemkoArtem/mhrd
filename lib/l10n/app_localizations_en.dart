@@ -881,6 +881,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenTemplates => 'Screen templates';
 
   @override
+  String get tabNewPcs => 'New PCs';
+
+  @override
+  String get newPcDefaults => 'Settings for new PCs';
+
+  @override
+  String get newPcDefaultsHint =>
+      'Every new PC starts with these settings: Add PC, quick connect, import from mstsc. Set the route, accounts, display, sound and clipboard once here instead of for each PC. PCs you already have don\'t change.';
+
+  @override
+  String get newPcDefaultsEdit => 'Set up new PCs';
+
+  @override
+  String get newPcDefaultsReset => 'Reset to defaults';
+
+  @override
+  String get importMstsc => 'Import from Remote Desktop Connection';
+
+  @override
+  String get mstscTitle => 'PCs from the built-in Windows client';
+
+  @override
+  String get mstscHint =>
+      'Windows remembers these addresses and user names. Passwords aren\'t transferred — MHRD asks on the first connection.';
+
+  @override
+  String get mstscNothing => 'The built-in Windows client has no saved PCs.';
+
+  @override
+  String get mstscAlready => 'already added';
+
+  @override
+  String mstscAdd(int count) {
+    return 'Add: $count';
+  }
+
+  @override
   String get defaultScreen => 'Default resolution for all PCs';
 
   @override

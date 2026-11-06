@@ -17,13 +17,15 @@ import 'dialogs.dart';
 import 'file_actions.dart';
 
 /// Вікно «Додати ПК» / «Редагувати ПК». Вкладки як у старого клієнта:
-/// Загальні · Екран · Пристрої · Додатково.
+/// Загальні · Екран · Пристрої · Додатково. [template] — «Налаштування нових ПК» (без адреси, назви,
+/// групи, картинки й того, що стосується одного ПК): зберігаються в загальних налаштуваннях.
 class EditConnectionScreen extends StatefulWidget {
-  const EditConnectionScreen({super.key, this.initial, this.isNew = false, this.defaultGroupId});
+  const EditConnectionScreen({super.key, this.initial, this.isNew = false, this.defaultGroupId, this.template = false});
 
   final Connection? initial;
   final bool isNew;
   final String? defaultGroupId;
+  final bool template;
 
   @override
   State<EditConnectionScreen> createState() => _EditConnectionScreenState();
@@ -43,9 +45,10 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
     _c = widget.initial ??
-        Connection(id: newId(), name: '', host: '', groupId: widget.defaultGroupId, createdAt: now, updatedAt: now);
+        (widget.template
+            ? repo.settings.newPc ?? repo.newConnection()
+            : repo.newConnection(groupId: widget.defaultGroupId));
     _address = TextEditingController(text: _c.host.isEmpty ? '' : _c.address);
     _name = TextEditingController(text: _c.name);
     _tags = TextEditingController(text: _c.tags.join(', '));
@@ -110,8 +113,27 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
     });
   }
 
+  List<String> _parseTags() => _tags.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+
   void _save() {
     final l = context.l10n;
+    if (widget.template) {
+      repo.updateSettings(repo.settings.copyWith(
+        newPc: () => _c.copyWith(
+          id: '',
+          name: '',
+          host: '',
+          tags: _parseTags(),
+          groupId: () => null,
+          certPin: () => null,
+          wakeOnLan: () => null,
+          lastUsed: () => null,
+          image: () => null,
+        ),
+      ));
+      Navigator.pop(context);
+      return;
+    }
     final addr = parseAddress(_address.text);
     if (addr == null) {
       setState(() => _addressError = l.addressRequired);
@@ -133,7 +155,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
       host: addr.host,
       port: addr.port,
       name: _name.text.trim(),
-      tags: _tags.text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList(),
+      tags: _parseTags(),
       wakeOnLan: () => mac == null
           ? null
           : WakeOnLan(mac: formatMac(mac), broadcast: bc, port: _c.wakeOnLan?.port ?? 9),
@@ -145,16 +167,17 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
   Widget build(BuildContext context) {
     final t = context.mhrd;
     final l = context.l10n;
+    final template = widget.template;
     return DefaultTabController(
       length: 4,
       child: Scaffold(
         appBar: AppBar(
           backgroundColor: t.surface,
-          title: Text(widget.isNew ? l.addPc : l.editPcTitle),
+          title: Text(template ? l.newPcDefaults : (widget.isNew ? l.addPc : l.editPcTitle)),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 12),
-              child: FilledButton(onPressed: _save, child: Text(widget.isNew ? l.add : l.save)),
+              child: FilledButton(onPressed: _save, child: Text(widget.isNew && !template ? l.add : l.save)),
             ),
           ],
           bottom: TabBar(
@@ -166,7 +189,13 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         body: ListenableBuilder(
           listenable: repo,
           builder: (context, _) => TabBarView(children: [
-            _page(_general(context)),
+            _page([
+              if (template) ...[
+                Text(l.newPcDefaultsHint, style: TextStyle(color: t.textMuted)),
+                const SizedBox(height: 8),
+              ],
+              ..._general(context),
+            ]),
             _page(_display(context)),
             _page(_devices(context)),
             _page(_advanced(context)),
@@ -185,17 +214,11 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
 
   // ── Загальні ────────────────────────────────────────────────────
 
-  List<Widget> _general(BuildContext context) {
+  /// Адреса, назва, група й картинка — лише в конкретного ПК.
+  List<Widget> _identity(BuildContext context) {
     final t = context.mhrd;
     final l = context.l10n;
     final groups = repo.groups.values.toList()..sort((a, b) => a.name.compareTo(b.name));
-    final gateways = repo.gateways.values.toList();
-    final creds = _c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
-    final routeOptions = <RouteKind, List<(String, String)>>{
-      RouteKind.tunnel: repo.tunnels.values.map((x) => (x.id, x.label)).toList(),
-      RouteKind.proxy: repo.proxies.values.map((x) => (x.id, x.label)).toList(),
-    };
-
     return [
       TextField(
         controller: _address,
@@ -226,7 +249,22 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
 
       _section(l.pcImage),
       _imagePicker(context),
+    ];
+  }
 
+  List<Widget> _general(BuildContext context) {
+    final t = context.mhrd;
+    final l = context.l10n;
+    final gateways = repo.gateways.values.toList();
+    final creds = _c.credentialIds.map((id) => repo.credentials[id]).whereType<Credential>().toList();
+    final routeOptions = <RouteKind, List<(String, String)>>{
+      RouteKind.tunnel: repo.tunnels.values.map((x) => (x.id, x.label)).toList(),
+      RouteKind.proxy: repo.proxies.values.map((x) => (x.id, x.label)).toList(),
+    };
+    final template = widget.template;
+
+    return [
+      if (!template) ..._identity(context),
       _section(l.accounts),
       if (creds.isEmpty) Text(l.noAccountsHint, style: TextStyle(color: t.textMuted)),
       if (creds.isNotEmpty)
@@ -322,7 +360,7 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
           onChanged: (v) => _set(_c.copyWith(gatewayBypassLocal: v)),
         ),
       const SizedBox(height: 12),
-      Row(children: [
+      if (!template) Row(children: [
         OutlinedButton.icon(
           icon: _checking
               ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
@@ -589,26 +627,28 @@ class _EditConnectionScreenState extends State<EditConnectionScreen> {
         controller: _tags,
         decoration: InputDecoration(labelText: l.tags, helperText: l.tagsHelper),
       ),
-      const SizedBox(height: 14),
-      TextField(
-        controller: _mac,
-        style: TextStyle(fontFamily: t.fontMono),
-        decoration: InputDecoration(
-          labelText: l.wolMac,
-          hintText: 'AA:BB:CC:DD:EE:FF',
-          helperText: l.wolMacHelper,
+      if (!widget.template) ...[
+        const SizedBox(height: 14),
+        TextField(
+          controller: _mac,
+          style: TextStyle(fontFamily: t.fontMono),
+          decoration: InputDecoration(
+            labelText: l.wolMac,
+            hintText: 'AA:BB:CC:DD:EE:FF',
+            helperText: l.wolMacHelper,
+          ),
         ),
-      ),
-      const SizedBox(height: 14),
-      TextField(
-        controller: _broadcast,
-        style: TextStyle(fontFamily: t.fontMono),
-        decoration: InputDecoration(
-          labelText: l.wolBroadcast,
-          hintText: _defaultBroadcast,
-          helperText: l.wolBroadcastHelper,
+        const SizedBox(height: 14),
+        TextField(
+          controller: _broadcast,
+          style: TextStyle(fontFamily: t.fontMono),
+          decoration: InputDecoration(
+            labelText: l.wolBroadcast,
+            hintText: _defaultBroadcast,
+            helperText: l.wolBroadcastHelper,
+          ),
         ),
-      ),
+      ],
       if (_c.certPin != null) ...[
         _section(l.serverCertificate),
         Text(l.trustedFingerprint(_c.certPin!), style: t.mono),

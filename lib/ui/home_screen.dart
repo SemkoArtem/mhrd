@@ -10,6 +10,7 @@ import '../app.dart';
 import '../l10n/l10n.dart';
 import '../models/connection.dart';
 import '../models/entities.dart';
+import '../platform/mstsc_import.dart';
 import '../platform/shell_bridge.dart';
 import '../sessions/session_manager.dart';
 import '../sessions/session_protocol.dart';
@@ -426,8 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
       toast(context, l.invalidAddressExamples);
       return;
     }
-    final now = DateTime.now();
-    final temp = Connection(id: newId(), name: '', host: addr.host, port: addr.port, createdAt: now, updatedAt: now);
+    final temp = repo.newConnection(host: addr.host, port: addr.port);
     toast(context, l.connectingTo(temp.address),
         action: SnackBarAction(label: l.saveThisPc, onPressed: () => _edit(temp, isNew: true)));
     _connect(temp);
@@ -620,6 +620,78 @@ class _HomeScreenState extends State<HomeScreen> {
     toast(context, errors.isEmpty ? l.importedPcs(ok) : l.importedWithErrors(ok, errors.join('; ')));
   }
 
+  /// Імпорт ПК, які пам'ятає стандартний клієнт Windows: список із галочками — що додавати.
+  Future<void> _importMstsc() async {
+    final l = context.l10n;
+    final t = context.mhrd;
+    final found = readMstscHistory();
+    if (found.isEmpty) {
+      toast(context, l.mstscNothing);
+      return;
+    }
+    bool exists(MstscEntry e) =>
+        repo.connections.values.any((c) => c.host.toLowerCase() == e.host.toLowerCase() && c.port == e.port);
+    final picked = {for (var i = 0; i < found.length; i++) if (!exists(found[i])) i};
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dc) => StatefulBuilder(
+        builder: (dc, setState) => AlertDialog(
+          title: Text(l.mstscTitle),
+          content: SizedBox(
+            width: 480,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(l.mstscHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (var i = 0; i < found.length; i++)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: picked.contains(i),
+                      onChanged: exists(found[i])
+                          ? null
+                          : (v) => setState(() => v == true ? picked.add(i) : picked.remove(i)),
+                      title: Text(found[i].address, style: TextStyle(fontFamily: t.fontMono)),
+                      subtitle: Text(
+                        [if (found[i].username != null) found[i].username!, if (exists(found[i])) l.mstscAlready]
+                            .join(' · '),
+                        style: TextStyle(color: t.textMuted, fontSize: 12),
+                      ),
+                    ),
+                ]),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dc, false), child: Text(l.cancel)),
+            FilledButton(
+              onPressed: picked.isEmpty ? null : () => Navigator.pop(dc, true),
+              child: Text(l.mstscAdd(picked.length)),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final groupId = _filter.startsWith('__') ? null : _filter;
+    for (final i in picked) {
+      final e = found[i];
+      var conn = repo.newConnection(host: e.host, port: e.port, groupId: groupId);
+      if (e.username != null) {
+        // Як і в імпорті .rdp: наявний акаунт з тим самим ім'ям, інакше новий «питати пароль».
+        final existing = repo.credentials.values.where((c) => c.username == e.username).toList();
+        final cred = existing.isNotEmpty
+            ? existing.first
+            : Credential(id: newId(), name: '', username: e.username!, authMode: AuthMode.askPassword);
+        if (existing.isEmpty) await repo.saveCredential(cred);
+        conn = conn.copyWith(credentialIds: [cred.id, ...conn.credentialIds.where((x) => x != cred.id)]);
+      }
+      repo.saveConnection(conn);
+    }
+    if (mounted) toast(context, l.importedPcs(picked.length));
+  }
+
   Future<void> _wake(Connection c) async {
     final l = context.l10n;
     final w = c.wakeOnLan;
@@ -792,10 +864,15 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(width: 12),
         PopupMenuButton<String>(
           tooltip: l.add,
-          onSelected: (v) => v == 'pc' ? _edit(null) : _importRdp(),
+          onSelected: (v) => switch (v) {
+            'pc' => _edit(null),
+            'mstsc' => _importMstsc(),
+            _ => _importRdp(),
+          },
           itemBuilder: (_) => [
             PopupMenuItem(value: 'pc', child: Text(l.addPc)),
             PopupMenuItem(value: 'rdp', child: Text(l.importRdpFiles)),
+            if (Platform.isWindows) PopupMenuItem(value: 'mstsc', child: Text(l.importMstsc)),
           ],
           child: IgnorePointer(
             child: FilledButton.icon(
