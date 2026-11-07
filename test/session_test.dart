@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +14,7 @@ import 'package:mhrd/sessions/tunnel.dart';
 import 'package:mhrd/storage/database.dart';
 import 'package:mhrd/storage/repository.dart';
 import 'package:mhrd/storage/secret_store.dart';
+import 'package:path/path.dart' as p;
 
 /// Фальшивий процес mhrd-session: ми «пишемо» за нього події й дивимось, що надіслав застосунок.
 class FakeChannel implements SessionChannel {
@@ -362,7 +364,13 @@ void main() {
         expect(req['target'], '10.0.0.5:3389');
         expect((req['wireguard'] as Map)['privateKey'], 'PRIV');
         expect((req['wireguard'] as Map).containsKey('extraPeersIgnored'), isFalse);
-        expect(tun.sent.last, {'watchPid': 4242}); // тунель житиме, поки живе сеанс
+        expect(tun.sent.last, {'watchPid': 4242, 'lid': 0}); // тунель житиме, поки живе сеанс
+        // «Візитка» для інших копій MHRD: файл з хешем ключів у назві (самих ключів там немає) і токен.
+        if (!Platform.isAndroid) {
+          expect(p.basename(req['stateFile'] as String), matches(RegExp(r'^[0-9a-f]{32}\.json$')));
+          expect(req['stateFile'] as String, isNot(contains('PRIV')));
+          expect(req['token'] as String, matches(RegExp(r'^[0-9a-f]{64}$')));
+        }
         final json = jsonDecode(utf8.decode(ch.sent.first.sublist(5))) as Map;
         expect([json['host'], json['port']], ['127.0.0.1', 50123]);
       });
@@ -416,7 +424,7 @@ void main() {
         expect([second['host'], second['port']], ['127.0.0.1', 50124]);
         expect(tun.sent.where((x) => x['watchPid'] == 4242), hasLength(2)); // тунель стежить за обома
         // Перевірка маршруту й «Перевірити» — крізь відкритий тунель, без нового процесу.
-        expect(m.liveTunnel(await repo.wireGuardConfig(repo.tunnels['wg']!)), same(tun));
+        expect(await m.withTunnel(await repo.wireGuardConfig(repo.tunnels['wg']!), (live) async => live), same(tun));
         expect(await m.health.measure(viaWg), 42);
         expect(started, 1);
         // Скопійований профіль з тим самим ключем — той самий процес (для сервера це той самий клієнт).
@@ -425,6 +433,56 @@ void main() {
             username: 'u', password: 'p', width: 800, height: 600);
         expect(started, 1);
         expect(tun.sent.where((x) => x['forward'] == '10.0.0.7:3389'), hasLength(1));
+      });
+
+      test('два сеанси з одним ключем одночасно — один процес тунелю (другий чекає в черзі ключа)', () async {
+        var started = 0;
+        m = SessionManager(repo,
+            enginePath: 'mhrd-session.exe',
+            channelFactory: (_) async => ch,
+            tunnelPath: 'mhrd-tunnel.exe',
+            tunnelFactory: (_) async {
+              started++;
+              return tun;
+            });
+        await repo.saveTunnel(const TunnelProfile(id: 'wg', name: 'WG', type: TunnelType.wireguard));
+        tun.script = [
+          {'event': 'listening', 'port': 50123, 'lid': 1}
+        ];
+        final viaWg = pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg');
+        await Future.wait([
+          m.start(viaWg, username: 'u', password: 'p', width: 800, height: 600),
+          m.start(viaWg.copyWith(id: 'pc2', host: '10.0.0.6'), username: 'u', password: 'p', width: 800, height: 600),
+        ]);
+        expect(started, 1);
+        expect(tun.sent.where((x) => x['forward'] == '10.0.0.6:3389'), hasLength(1));
+        expect(tun.sent.where((x) => x['watchPid'] == 4242 && x['lid'] == 1), hasLength(1)); // свій порт — свій lid
+      });
+
+      test('тунель іншої копії MHRD: під\'єднання за «візиткою» лише з правильним токеном', () async {
+        final server = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+        addTearDown(server.close);
+        server.listen((s) {
+          s.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+            final m = jsonDecode(line) as Map;
+            if (m.containsKey('token')) {
+              m['token'] == 'right' ? s.writeln('{"event":"hello"}') : s.destroy();
+            } else if (m['ping'] == true) {
+              s.writeln(jsonEncode({'event': 'pong', 'ms': 7, 'id': m['id']}));
+            }
+          });
+        });
+        final dir = Directory.systemTemp.createTempSync('mhrd_tunstate_');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final state = File(p.join(dir.path, 'k.json'));
+        state.writeAsStringSync(jsonEncode({'pid': 1, 'port': server.port, 'token': 'right'}));
+        final ch = await attachTunnel(state);
+        expect(ch, isNotNull);
+        expect(await pingTunnel(ch!), 7);
+        ch.kill();
+        state.writeAsStringSync(jsonEncode({'pid': 1, 'port': server.port, 'token': 'wrong'}));
+        expect(await attachTunnel(state), isNull);
+        expect(await attachTunnel(File(p.join(dir.path, 'немає.json'))), isNull);
       });
 
       test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {

@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -166,7 +167,7 @@ func TestSharedTunnelProcess(t *testing.T) {
 	sPub, port := wgServer(t, cPub)
 
 	cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$")
-	cmd.Env = append(os.Environ(), "MHRD_TUNNEL_MAIN=1")
+	cmd.Env = append(os.Environ(), "MHRD_TUNNEL_MAIN=1", "MHRD_TUNNEL_IDLE_MS=500")
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
@@ -204,7 +205,9 @@ func TestSharedTunnelProcess(t *testing.T) {
 		}
 	}
 
-	send(map[string]any{"type": "wireguard", "target": "10.9.0.1:3389", "wireguard": clientConf(cPriv, sPub, port)})
+	stateFile := filepath.Join(t.TempDir(), "tunnels", "k.json")
+	send(map[string]any{"type": "wireguard", "target": "10.9.0.1:3389", "wireguard": clientConf(cPriv, sPub, port),
+		"stateFile": stateFile, "token": "s3cret"})
 	first := next()
 	if first["event"] != "listening" {
 		t.Fatalf("first: %v", first)
@@ -240,6 +243,70 @@ func TestSharedTunnelProcess(t *testing.T) {
 		t.Fatalf("live PC ping waited behind the silent one: %v", time.Since(start))
 	}
 
+	// Інша (перезапущена) копія MHRD: за stateFile — порт керування; без токена — нічого.
+	var state struct {
+		Pid, Port int
+		Token     string
+	}
+	raw, err := os.ReadFile(stateFile)
+	if err != nil || json.Unmarshal(raw, &state) != nil || state.Pid != cmd.Process.Pid || state.Token != "s3cret" {
+		t.Fatalf("state file: %s %v", raw, err)
+	}
+	ctl := func(token string) (net.Conn, *bufio.Scanner) {
+		c, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", state.Port))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.SetDeadline(time.Now().Add(15 * time.Second))
+		b, _ := json.Marshal(map[string]any{"token": token})
+		c.Write(append(b, '\n'))
+		return c, bufio.NewScanner(c)
+	}
+	bad, badEvents := ctl("wrong")
+	bad.Write([]byte(`{"forward":"10.9.0.1:3389","id":20}` + "\n"))
+	if badEvents.Scan() {
+		t.Fatalf("control port answered without the token: %s", badEvents.Text())
+	}
+	bad.Close()
+	good, goodEvents := ctl("s3cret")
+	defer good.Close()
+	good.Write([]byte(`{"forward":"10.9.0.1:3389","id":21}` + "\n"))
+	var viaCtl map[string]any
+	for goodEvents.Scan() {
+		json.Unmarshal(goodEvents.Bytes(), &viaCtl)
+		if viaCtl["id"] == float64(21) {
+			break
+		}
+	}
+	if viaCtl["event"] != "listening" {
+		t.Fatalf("forward via control port: %v", viaCtl)
+	}
+	echoVia(int(viaCtl["port"].(float64)))
+	next() // ту саму подію бачить і stdout
+
+	// Порт сеансу закривається, коли закінчився сам сеанс (watchPid з lid).
+	short := exec.Command(os.Args[0], "-test.run=^TestHelperSleep$")
+	short.Env = append(os.Environ(), "MHRD_SLEEP=1")
+	if err := short.Start(); err != nil {
+		t.Fatal(err)
+	}
+	send(map[string]any{"watchPid": short.Process.Pid, "lid": second["lid"]})
+	short.Wait()
+	secondAddr := fmt.Sprintf("127.0.0.1:%d", int(second["port"].(float64)))
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		c, err := net.DialTimeout("tcp", secondAddr, time.Second)
+		if err != nil {
+			break // закрито
+		}
+		c.Close()
+		if time.Now().After(deadline) {
+			t.Fatal("session port still open after its session ended")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	echoVia(int(first["port"].(float64))) // порт іншого сеансу — живий
+
 	stdin.Close() // застосунок закрився, сеансів немає — тунель виходить сам
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -248,4 +315,16 @@ func TestSharedTunnelProcess(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("tunnel did not exit after stdin closed")
 	}
+	if _, err := os.Stat(stateFile); !os.IsNotExist(err) {
+		t.Fatalf("state file left after exit: %v", err)
+	}
+}
+
+// Короткий «процес сеансу» для TestSharedTunnelProcess: живе секунду.
+func TestHelperSleep(t *testing.T) {
+	if os.Getenv("MHRD_SLEEP") != "1" {
+		t.Skip("лише як процес для TestSharedTunnelProcess")
+	}
+	time.Sleep(time.Second)
+	os.Exit(0)
 }
