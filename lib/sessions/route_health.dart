@@ -82,9 +82,9 @@ class RouteHealth extends ChangeNotifier {
   final TunnelFactory _tunnelFactory;
   final Duration interval;
 
-  /// Уже відкритий сеансом тунель профілю (SessionManager.liveTunnel): перевірки йдуть крізь нього —
-  /// окремий процес з тим самим ключем WireGuard перебив би з'єднання сеансу з сервером.
-  final TunnelChannel? Function(String? profileId)? liveTunnel;
+  /// Уже відкритий сеансом тунель з тим самим ключем WireGuard (SessionManager.liveTunnel): перевірки
+  /// йдуть крізь нього — окремий процес з тим самим ключем перебив би з'єднання сеансу з сервером.
+  final TunnelChannel? Function(Map<String, Object?> wireguard)? liveTunnel;
 
   final _status = <String, RouteStatus>{};
   final _running = <String, Future<void>>{};
@@ -100,13 +100,17 @@ class RouteHealth extends ChangeNotifier {
     _seen.addAll(_profiles());
     repo.addListener(_onRepo);
     checkAll();
-    _timer = Timer.periodic(interval, (_) => checkAll());
+    // За розкладом — лише проксі. Перевірка тунелю WireGuard — рукостискання з його ключем: якщо той
+    // самий ключ зараз працює на іншому пристрої (той самий .conf на ПК і телефоні), сервер
+    // перемкнеться на нас і там обірветься сеанс. Тож тунелі — при запуску, при зміні профілю й за
+    // кнопкою оновлення.
+    _timer = Timer.periodic(interval, (_) => checkAll(tunnels: false));
   }
 
   /// Усе по черзі: одночасні перевірки кількох тунелів (часто — з одним ключем WireGuard) заважали б
   /// одна одній і показували робочі тунелі непрацюючими.
-  Future<void> checkAll() async {
-    for (final id in [...repo.tunnels.keys, ...repo.proxies.keys]) {
+  Future<void> checkAll({bool tunnels = true}) async {
+    for (final id in [if (tunnels) ...repo.tunnels.keys, ...repo.proxies.keys]) {
       if (_disposed) return;
       await check(id);
     }
@@ -164,15 +168,14 @@ class RouteHealth extends ChangeNotifier {
     if (repo.tunnels.containsKey(id) || repo.proxies.containsKey(id)) _set(id, result);
   }
 
-  Future<int> _checkTunnel(TunnelProfile t) async {
-    final live = liveTunnel?.call(t.id);
-    if (live != null) return pingTunnel(live); // тунель працює — у ньому сеанс; затримка до його ПК
-    return checkWireGuard(await repo.wireGuardConfig(t));
-  }
+  Future<int> _checkTunnel(TunnelProfile t) async => checkWireGuard(await repo.wireGuardConfig(t));
 
   /// Рукостискання з сервером WireGuard за налаштуваннями [wireguard] (з ключами) — і для ще не
   /// збереженого профілю, щоб перевірити його перед збереженням. Повертає мс.
   Future<int> checkWireGuard(Map<String, Object?> wireguard) async {
+    // Тунель з цим ключем уже працює (у ньому сеанс) — затримка крізь нього, без нового рукостискання.
+    final live = liveTunnel?.call(wireguard);
+    if (live != null) return pingTunnel(live);
     final exe = tunnelPath;
     if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
     final request = {
@@ -205,10 +208,12 @@ class RouteHealth extends ChangeNotifier {
     final target = c.host.contains(':') ? '[${c.host}]:${c.port}' : '${c.host}:${c.port}';
     switch (c.route) {
       case RouteKind.tunnel:
-        final open = sessionTunnel ?? liveTunnel?.call(c.routeRefId);
-        if (open != null) return pingTunnel(open, target: target);
+        if (sessionTunnel != null) return pingTunnel(sessionTunnel, target: target);
         final t = repo.tunnels[c.routeRefId];
         if (t == null) throw const RouteException(RouteError.tunnelMissing);
+        final wireguard = await repo.wireGuardConfig(t);
+        final open = liveTunnel?.call(wireguard);
+        if (open != null) return pingTunnel(open, target: target);
         final exe = tunnelPath;
         if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
         final ch = await _tunnelFactory(exe);
@@ -217,7 +222,7 @@ class RouteHealth extends ChangeNotifier {
             'type': 'wireguard',
             'check': true,
             'target': target,
-            'wireguard': await repo.wireGuardConfig(t),
+            'wireguard': wireguard,
           }).timeout(const Duration(seconds: 45), onTimeout: () => throw const TunnelException(TunnelError.handshake));
         } finally {
           ch.kill();

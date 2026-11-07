@@ -180,40 +180,49 @@ func main() {
 		lastActivity = time.Now()
 		mu.Unlock()
 	}
+	// Кожен запит — окремо: ПК, що не відповідає (до 20 с), не затримує решту сеансів тунелю.
 	go func() {
 		for f := range forwards {
 			touch()
-			if _, err := dialTime(d, f.Forward); err != nil {
-				emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "unreachable", "detail": err.Error()})
-				continue
-			}
-			l, err := net.Listen("tcp", "127.0.0.1:0")
-			if err != nil {
-				emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "listen", "detail": err.Error()})
-				continue
-			}
-			go serve(l, d, f.Forward)
-			emit(map[string]any{"event": "listening", "id": f.ID, "port": l.Addr().(*net.TCPAddr).Port})
+			go func(f request) {
+				if _, err := dialTime(d, f.Forward); err != nil {
+					emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "unreachable", "detail": err.Error()})
+					return
+				}
+				l, err := net.Listen("tcp", "127.0.0.1:0")
+				if err != nil {
+					emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "listen", "detail": err.Error()})
+					return
+				}
+				go serve(l, d, f.Forward)
+				emit(map[string]any{"event": "listening", "id": f.ID, "port": l.Addr().(*net.TCPAddr).Port})
+			}(f)
 		}
 	}()
 
 	// Затримка до ПК крізь тунель — для плашки сеансу (target — до якого ПК; id — чия це відповідь).
+	// Теж кожен окремо (до 8 одночасно — стільки вміщує черга pings).
+	busy := make(chan struct{}, 8)
 	go func() {
 		for p := range pings {
-			target := p.Target
-			if target == "" {
-				target = req.Target
-			}
-			ev := map[string]any{"event": "pong"}
-			if p.ID != 0 {
-				ev["id"] = p.ID
-			}
-			if ms, err := dialTime(d, target); err != nil {
-				ev["error"] = err.Error()
-			} else {
-				ev["ms"] = ms
-			}
-			emit(ev)
+			busy <- struct{}{}
+			go func(p request) {
+				defer func() { <-busy }()
+				target := p.Target
+				if target == "" {
+					target = req.Target
+				}
+				ev := map[string]any{"event": "pong"}
+				if p.ID != 0 {
+					ev["id"] = p.ID
+				}
+				if ms, err := dialTime(d, target); err != nil {
+					ev["error"] = err.Error()
+				} else {
+					ev["ms"] = ms
+				}
+				emit(ev)
+			}(p)
 		}
 	}()
 

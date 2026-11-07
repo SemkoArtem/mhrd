@@ -416,9 +416,15 @@ void main() {
         expect([second['host'], second['port']], ['127.0.0.1', 50124]);
         expect(tun.sent.where((x) => x['watchPid'] == 4242), hasLength(2)); // тунель стежить за обома
         // Перевірка маршруту й «Перевірити» — крізь відкритий тунель, без нового процесу.
-        expect(m.liveTunnel('wg'), same(tun));
+        expect(m.liveTunnel(await repo.wireGuardConfig(repo.tunnels['wg']!)), same(tun));
         expect(await m.health.measure(viaWg), 42);
         expect(started, 1);
+        // Скопійований профіль з тим самим ключем — той самий процес (для сервера це той самий клієнт).
+        await repo.saveTunnel(const TunnelProfile(id: 'wg2', name: 'WG копія', type: TunnelType.wireguard));
+        await m.start(pc().copyWith(id: 'pc3', host: '10.0.0.7', route: RouteKind.tunnel, routeRefId: () => 'wg2'),
+            username: 'u', password: 'p', width: 800, height: 600);
+        expect(started, 1);
+        expect(tun.sent.where((x) => x['forward'] == '10.0.0.7:3389'), hasLength(1));
       });
 
       test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {
