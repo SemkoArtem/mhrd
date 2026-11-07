@@ -1351,6 +1351,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get themeAmber => 'Нічний бурштин';
 
   @override
+  String get themeAurora => 'Північне сяйво';
+
+  @override
+  String get themePaper => 'Папір';
+
+  @override
+  String get themeNeon => 'Неон';
+
+  @override
+  String get themeTerminal => 'Термінал';
+
+  @override
   String themeMine(String name) {
     return '$name (моя)';
   }

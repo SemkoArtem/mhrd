@@ -41,8 +41,15 @@ void main() {
       expect(lines, contains('- family: $f'), reason: f);
     }
     for (final t in MhrdTokens.builtIns) {
-      expect(MhrdTokens.allowedFonts, containsAll([t.fontSans, t.fontMono]), reason: t.name);
+      expect(MhrdTokens.allowedFonts, containsAll({t.fontSans, t.fontMono}), reason: t.name);
     }
+  });
+
+  test('усі вбудовані теми читабельні (контраст ≥ 4.5 : 1), id різні', () {
+    for (final t in MhrdTokens.builtIns) {
+      expect(t.contrastProblems(), isEmpty, reason: t.id);
+    }
+    expect(MhrdTokens.builtIns.map((t) => t.id).toSet().length, MhrdTokens.builtIns.length);
   });
 
   test('не тема — помилка', () {
