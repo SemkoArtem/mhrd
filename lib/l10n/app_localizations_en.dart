@@ -1145,6 +1145,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transferEmpty => 'Nothing here yet.';
 
   @override
+  String get sizeUnits => 'B,KB,MB,GB';
+
+  @override
   String get transferAdd => 'Add files';
 
   @override

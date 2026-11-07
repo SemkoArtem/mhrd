@@ -2102,6 +2102,12 @@ abstract class AppLocalizations {
   /// **'Поки порожньо.'**
   String get transferEmpty;
 
+  /// No description provided for @sizeUnits.
+  ///
+  /// In uk, this message translates to:
+  /// **'Б,КБ,МБ,ГБ'**
+  String get sizeUnits;
+
   /// No description provided for @transferAdd.
   ///
   /// In uk, this message translates to:

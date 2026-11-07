@@ -66,7 +66,7 @@ class _TransferScreenState extends State<TransferScreen> {
   }
 
   String _size(int bytes) {
-    const units = ['Б', 'КБ', 'МБ', 'ГБ'];
+    final units = context.l10n.sizeUnits.split(','); // «Б,КБ,МБ,ГБ»
     var v = bytes.toDouble();
     var u = 0;
     while (v >= 1024 && u < units.length - 1) {

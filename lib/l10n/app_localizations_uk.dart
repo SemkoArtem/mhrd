@@ -1146,6 +1146,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transferEmpty => 'Поки порожньо.';
 
   @override
+  String get sizeUnits => 'Б,КБ,МБ,ГБ';
+
+  @override
   String get transferAdd => 'Додати файли';
 
   @override

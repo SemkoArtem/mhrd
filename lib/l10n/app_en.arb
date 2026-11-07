@@ -342,6 +342,7 @@
   "transferTitle": "Shared files",
   "transferHint": "During a session this folder is the \"Phone\" drive in This PC on the remote PC. Copy files there on the PC and they appear here; add them here (with + or Share → MHRD from any app) and they are on the PC.",
   "transferEmpty": "Nothing here yet.",
+  "sizeUnits": "B,KB,MB,GB",
   "transferAdd": "Add files",
   "transferAdded": "Files added: {count}",
   "@transferAdded": {"placeholders": {"count": {"type": "int"}}},
