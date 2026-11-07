@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -26,6 +25,7 @@ import 'edit_connection_screen.dart';
 import 'file_actions.dart';
 import 'session_screen.dart';
 import 'settings_screen.dart';
+import 'widgets/drag_pc.dart';
 import 'widgets/pc_card.dart';
 
 /// Фільтр списку: усі, нещодавні, без групи («Збережені ПК») або конкретна група.
@@ -513,14 +513,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _tile(Connection c) => _DragPc(
+  Widget _tile(Connection c) => DragPc(
         ids: _selected.contains(c.id) ? _selected.toList() : [c.id],
         label: c.displayName,
         onTouchDrag: () => _selected.contains(c.id) ? null : _toggleSelect(c),
         child: PcTile(connection: c, repo: repo, actions: _actions, state: _cardState(c)),
       );
 
-  Widget _row(Connection c) => _DragPc(
+  Widget _row(Connection c) => DragPc(
         ids: _selected.contains(c.id) ? _selected.toList() : [c.id],
         label: c.displayName,
         onTouchDrag: () => _selected.contains(c.id) ? null : _toggleSelect(c),
@@ -1273,65 +1273,3 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Картку ПК можна перетягнути на групу. Мишею — одразу, пальцем — після довгого натискання
-/// (інакше палець не міг би гортати список); довге натискання ще й позначає ПК.
-class _DragPc extends StatefulWidget {
-  const _DragPc({required this.ids, required this.label, required this.onTouchDrag, required this.child});
-
-  final List<String> ids;
-  final String label;
-  final VoidCallback onTouchDrag;
-  final Widget child;
-
-  @override
-  State<_DragPc> createState() => _DragPcState();
-}
-
-class _DragPcState extends State<_DragPc> {
-  static bool _touch = false; // останній пристрій — палець (спільне для всіх карток)
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.mhrd;
-    final l = context.l10n;
-    final feedback = Material(
-      color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: t.surface,
-          borderRadius: BorderRadius.circular(t.radius),
-          border: Border.all(color: t.accent, width: 2),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.desktop_windows_outlined, size: 18, color: t.accent),
-          const SizedBox(width: 8),
-          Text(widget.ids.length == 1 ? widget.label : l.pcCount(widget.ids.length),
-              style: TextStyle(color: t.text, fontWeight: FontWeight.w600)),
-        ]),
-      ),
-    );
-    final faded = Opacity(opacity: 0.4, child: widget.child);
-    return Listener(
-      onPointerHover: (_) => _touch ? setState(() => _touch = false) : null,
-      onPointerDown: (e) {
-        final touch = e.kind == PointerDeviceKind.touch;
-        if (touch != _touch) setState(() => _touch = touch);
-      },
-      child: _touch
-          ? LongPressDraggable<List<String>>(
-              data: widget.ids,
-              feedback: feedback,
-              childWhenDragging: faded,
-              onDragStarted: widget.onTouchDrag,
-              child: widget.child,
-            )
-          : Draggable<List<String>>(
-              data: widget.ids,
-              feedback: feedback,
-              childWhenDragging: faded,
-              child: widget.child,
-            ),
-    );
-  }
-}

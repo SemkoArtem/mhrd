@@ -65,6 +65,7 @@ class SessionManager extends ChangeNotifier {
     this.log,
     this.latencyInterval = const Duration(seconds: 30),
     this.files,
+    this.clientName,
   })  : enginePath = enginePath ?? _defaultEnginePath(),
         tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel.exe'),
         _channelFactory = channelFactory ?? ProcessChannel.start,
@@ -88,6 +89,9 @@ class SessionManager extends ChangeNotifier {
 
   /// Мініатюри й картинки ПК (null — у тестах).
   final AppFiles? files;
+
+  /// Ім'я цього пристрою для ПК (null — як у системі). Android: модель телефона замість «localhost».
+  final String? clientName;
 
   /// Шлях до `mhrd-session`; null — модуля підключення немає (наприклад, ще не зібрано).
   final String? enginePath;
@@ -356,6 +360,7 @@ class SessionManager extends ChangeNotifier {
       'clipboard': c.devices.clipboard,
       'sound': c.devices.sound.name, // local | remote | off
       'microphone': c.devices.microphone,
+      if (clientName != null) 'clientName': clientName,
       // Режим доступу виконує наш канал дисків (native/session/vcpkg-overlay/freerdp/mhrd).
       'folders': [
         for (final f in c.devices.folders) {'name': f.name, 'path': f.path, 'access': f.access.name},
