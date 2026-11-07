@@ -3,16 +3,21 @@
 // Застосунок запускає процес і пише в stdin рядки JSON (секрети — лише сюди, ніколи в аргументи):
 //
 //	{"type":"wireguard","target":"host:port","wireguard":{...}}
-//	{"watchPid":1234}             — процес mhrd-session; коли він завершиться, тунель теж
+//	{"watchPid":1234}             — процес mhrd-session; тунель живе, поки живий хоч один такий
+//	{"forward":"host:port","id":2} — ще один ПК крізь цей самий тунель (наступний сеанс із тим самим
+//	                                профілем): один процес на профіль, інакше кілька процесів з одним
+//	                                ключем WireGuard перебивали б один одному з'єднання з сервером
 //
-//	{"ping":true}                 — заміряти затримку до ПК крізь тунель (відповідь — pong)
+//	{"ping":true,"target":"host:port","id":3} — затримка до ПК крізь тунель (відповідь — pong з тим
+//	                                самим id; без target — до першого ПК)
 //
 // Або перевірка, чи тунель живий: {"type":"wireguard","check":true,"wireguard":{...}}; з "target" —
 // ще й чи відповідає ПК крізь тунель.
 //
 // У stdout — рядки JSON-подій:
 //
-//	{"event":"listening","port":54321}   — можна підключатися до 127.0.0.1:port
+//	{"event":"listening","port":54321[,"id":2]} — можна підключатися до 127.0.0.1:port
+//	{"event":"forwardError","id":2,"code":"unreachable","detail":"..."} — ПК крізь тунель не відповів
 //	{"event":"ok","handshakeMs":120,"targetMs":35} — відповідь на перевірку
 //	{"event":"pong","ms":35} / {"event":"pong","error":"..."}
 //	{"event":"error","code":"...","detail":"..."}
@@ -34,12 +39,14 @@ import (
 )
 
 type request struct {
-	Type      string          `json:"type"`
-	Target    string          `json:"target"`
-	WireGuard *wireGuardConf  `json:"wireguard"`
-	WatchPid  int             `json:"watchPid"`
-	Check     bool            `json:"check"`
-	Ping      bool            `json:"ping"`
+	Type      string         `json:"type"`
+	Target    string         `json:"target"`
+	WireGuard *wireGuardConf `json:"wireguard"`
+	WatchPid  int            `json:"watchPid"`
+	Check     bool           `json:"check"`
+	Ping      bool           `json:"ping"`
+	Forward   string         `json:"forward"`
+	ID        int            `json:"id"`
 }
 
 // Скільки чекати рукостискання під час перевірки (wireguard-go повторює спробу кожні 5 с).
@@ -69,6 +76,10 @@ func fail(code string, err error) {
 	os.Exit(1)
 }
 
+// Скільки тунель чекає після кінця останнього сеансу, перш ніж вийти: застосунок міг саме
+// попросити ще один ПК крізь нього (forward), а процес сеансу ще не встиг запуститися.
+var idleGrace = 30 * time.Second
+
 func main() {
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 64*1024), 1<<20)
@@ -80,9 +91,11 @@ func main() {
 		fail("config", err)
 	}
 
-	// Подальші повідомлення: PID сеансу і заміри затримки.
-	watch := make(chan int, 1)
-	pings := make(chan struct{}, 4)
+	// Подальші повідомлення: PID сеансів, ще ПК крізь той самий тунель, заміри затримки.
+	pids := make(chan int, 16)
+	forwards := make(chan request, 16)
+	pings := make(chan request, 8)
+	stdinClosed := make(chan struct{})
 	go func() {
 		for in.Scan() {
 			var m request
@@ -90,19 +103,19 @@ func main() {
 				continue
 			}
 			if m.WatchPid > 0 {
-				select {
-				case watch <- m.WatchPid:
-				default: // PID уже є — повторний не має заблокувати читання stdin (і заміри затримки)
-				}
+				pids <- m.WatchPid
+			}
+			if m.Forward != "" {
+				forwards <- m
 			}
 			if m.Ping {
 				select {
-				case pings <- struct{}{}:
+				case pings <- m:
 				default: // попередні заміри ще не відповіли — цей пропускаємо
 				}
 			}
 		}
-		close(watch) // stdin закрито: якщо PID ще не прийшов — застосунок пішов, тунель не потрібен
+		close(stdinClosed) // застосунок закрився — нових сеансів не буде
 	}()
 
 	var d dialer
@@ -151,7 +164,6 @@ func main() {
 	if _, err := dialTime(d, req.Target); err != nil {
 		fail("unreachable", err)
 	}
-
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		fail("listen", err)
@@ -159,23 +171,85 @@ func main() {
 	go serve(ln, d, req.Target)
 	emit(map[string]any{"event": "listening", "port": ln.Addr().(*net.TCPAddr).Port})
 
-	// Затримка до ПК через увесь тунель — для плашки сеансу.
+	// Ще ПК крізь цей самий тунель (наступні сеанси з тим самим профілем): один процес на профіль —
+	// інакше кілька процесів з одним ключем WireGuard перебивали б один одному з'єднання з сервером.
+	var mu sync.Mutex
+	lastActivity := time.Now()
+	touch := func() {
+		mu.Lock()
+		lastActivity = time.Now()
+		mu.Unlock()
+	}
 	go func() {
-		for range pings {
-			if ms, err := dialTime(d, req.Target); err != nil {
-				emit(map[string]any{"event": "pong", "error": err.Error()})
-			} else {
-				emit(map[string]any{"event": "pong", "ms": ms})
+		for f := range forwards {
+			touch()
+			if _, err := dialTime(d, f.Forward); err != nil {
+				emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "unreachable", "detail": err.Error()})
+				continue
 			}
+			l, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				emit(map[string]any{"event": "forwardError", "id": f.ID, "code": "listen", "detail": err.Error()})
+				continue
+			}
+			go serve(l, d, f.Forward)
+			emit(map[string]any{"event": "listening", "id": f.ID, "port": l.Addr().(*net.TCPAddr).Port})
 		}
 	}()
 
-	// Живемо, поки живий сеанс: FreeRDP при перепідключенні знову прийде на цей самий порт.
-	pid, ok := <-watch
-	if !ok {
-		return
+	// Затримка до ПК крізь тунель — для плашки сеансу (target — до якого ПК; id — чия це відповідь).
+	go func() {
+		for p := range pings {
+			target := p.Target
+			if target == "" {
+				target = req.Target
+			}
+			ev := map[string]any{"event": "pong"}
+			if p.ID != 0 {
+				ev["id"] = p.ID
+			}
+			if ms, err := dialTime(d, target); err != nil {
+				ev["error"] = err.Error()
+			} else {
+				ev["ms"] = ms
+			}
+			emit(ev)
+		}
+	}()
+
+	// Живемо, поки живий хоч один сеанс: FreeRDP при перепідключенні знову прийде на свій порт.
+	ended := make(chan struct{}, 16)
+	active, sawPid := 0, false
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	closed := stdinClosed
+	for {
+		select {
+		case pid := <-pids:
+			active++
+			sawPid = true
+			touch()
+			go func() {
+				waitProcess(pid)
+				ended <- struct{}{}
+			}()
+		case <-ended:
+			active--
+			touch()
+		case <-closed:
+			closed = nil // більше не спрацює
+			if active == 0 {
+				return // застосунок пішов, сеансів крізь тунель немає
+			}
+		case <-tick.C:
+			mu.Lock()
+			idle := time.Since(lastActivity)
+			mu.Unlock()
+			if active == 0 && (sawPid || closed == nil) && idle > idleGrace {
+				return
+			}
+		}
 	}
-	waitProcess(pid)
 }
 
 // dialTime — скільки мс триває TCP-з'єднання з ціллю крізь тунель (≈ затримка в обидва боки).
