@@ -76,6 +76,9 @@ class _ThemeEditorState extends State<ThemeEditor> {
     final l = context.l10n;
     final current = repo.settings.themeId;
     final all = [...MhrdTokens.builtIns, ...repo.customThemes.values];
+    // Телефон: по дві картки в ряд (відступи списку 20 + 20 і проміжок 12), на ПК — 190.
+    final screen = MediaQuery.sizeOf(context).width;
+    final cardWidth = screen < 600 ? ((screen - 52) / 2).floorToDouble() : 190.0;
 
     Widget themeCard(String id, String name, MhrdTokens? th) {
       final selected = current == id;
@@ -84,7 +87,7 @@ class _ThemeEditorState extends State<ThemeEditor> {
         onTap: () => repo.updateSettings(repo.settings.copyWith(themeId: id)),
         child: AnimatedContainer(
           duration: t.fast,
-          width: 190,
+          width: cardWidth,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: t.surface,

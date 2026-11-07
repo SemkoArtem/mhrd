@@ -7,3 +7,5 @@ set(VCPKG_CMAKE_SYSTEM_NAME Android)
 set(VCPKG_CMAKE_SYSTEM_VERSION 24)
 set(VCPKG_MAKE_BUILD_TRIPLET "--host=aarch64-linux-android")
 set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=arm64-v8a)
+# Лише Release: налагоджувальні збірки бібліотек не потрібні, а FFmpeg і FreeRDP збираються вдвічі довше.
+set(VCPKG_BUILD_TYPE release)
