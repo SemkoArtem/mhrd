@@ -52,7 +52,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       (Icons.person_outline, l.accounts, () => _AccountsTab(repo: repo)),
       (Icons.alt_route, l.tabRoutes, () => _RoutesTab(repo: repo)),
       (Icons.folder_outlined, l.groups, () => _GroupsTab(repo: repo)),
-      (Icons.add_to_queue, l.tabNewPcs, () => _ScreensTab(repo: repo)),
+      // «Нові ПК» — лише на ПК: на телефоні ПК додають прямо з головного екрана.
+      if (!(Platform.isAndroid || Platform.isIOS))
+        (Icons.add_to_queue, l.tabNewPcs, () => _ScreensTab(repo: repo)),
       (Icons.backup_outlined, l.tabBackup, () => _BackupTab(repo: repo)),
     ];
     // Телефон: сім вкладок у рядок не влазять — розділи в меню, що виїжджає зліва по кнопці «☰».

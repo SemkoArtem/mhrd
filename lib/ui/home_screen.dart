@@ -197,16 +197,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (c.devices.microphone) AndroidPaths.requestMicrophone();
     // Роздільність = розмір вікна у фізичних пікселях (масштаб Windows 150% → ×1.5), а масштаб
     // ОС передаємо серверу — так картинка чітка, а текст на ПК звичного розміру.
-    final size = MediaQuery.sizeOf(context);
+    final mobile = Platform.isAndroid || Platform.isIOS;
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    // Телефон: сеанс — на весь дисплей без системних панелей (immersive), тож одразу його повний розмір,
+    // а не розмір цього екрана з панелями (інакше перші секунди картинка розтягнута до нового розміру).
+    final display = View.of(context).display.size;
+    final size = mobile && display.width > 0 ? display / dpr : MediaQuery.sizeOf(context);
     int even(double v, int min, int max) => (v.floor().clamp(min, max) ~/ 2) * 2;
     final s = await sessions.start(c,
         username: user,
         password: password,
         width: even(size.width * dpr, 640, 8192),
         // Телефон: сеанс на весь екран (панель — поверх картинки), на ПК — мінус панель сеансу.
-        height: even((size.height - (Platform.isAndroid || Platform.isIOS ? 0 : 40)) * dpr, 480, 8192),
-        scale: (dpr * 100).round(),
+        height: even((size.height - (mobile ? 0 : 40)) * dpr, 480, 8192),
+        // Телефон: масштаб інтерфейсу ПК — 100 %, як у клієнтів Microsoft і Remote Desktop Manager.
+        // Масштаб системи телефона (×2.5–3) збільшив би весь робочий стіл ПК утричі. Свій масштаб —
+        // у налаштуваннях ПК («Масштаб елементів на віддаленому ПК»).
+        scale: mobile ? 100 : (dpr * 100).round(),
         gatewayPassword: gatewayPassword);
     if (mounted) _openSession(s, c, credentialId: credentialId);
   }
