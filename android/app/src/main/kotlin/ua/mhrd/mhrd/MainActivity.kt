@@ -57,6 +57,8 @@ class MainActivity : FlutterFragmentActivity() {
                         "filesDir" to filesDir.absolutePath,
                         "cacheDir" to cacheDir.absolutePath,
                         "transferDir" to Transfer.dir(this).absolutePath,
+                        // Ім'я телефона для ПК (диспетчер завдань, диск «Phone на …») — модель замість «localhost».
+                        "deviceName" to (Build.MODEL ?: ""),
                     )
                 )
                 "transferOpen", "transferShare" -> {

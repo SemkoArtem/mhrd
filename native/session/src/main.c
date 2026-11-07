@@ -793,6 +793,22 @@ static BOOL apply_config(MhrdContext* m, const uint8_t* data, uint32_t len)
 	     freerdp_settings_set_bool(s, FreeRDP_AudioCapture, jbool(j, "microphone", FALSE));
 	/* Масштаб: картинка у фізичних пікселях, а інтерфейс ПК збільшено як у ОС клієнта —
 	 * чітко й звичного розміру. DesktopScaleFactor 100–500 %, DeviceScaleFactor лише 100/140/180. */
+	/* Ім'я клієнта, яке бачить ПК (диспетчер завдань, диск «Phone на …»): без нього FreeRDP бере
+	 * ім'я системи, а на Android це завжди «localhost». RDP — до 15 символів: лише літери, цифри, «-». */
+	const char* clientName = jstr(j, "clientName");
+	if (ok && clientName && *clientName)
+	{
+		char name[16] = { 0 };
+		size_t n = 0;
+		for (const char* c = clientName; *c && n < sizeof(name) - 1; c++)
+		{
+			const unsigned char ch = (unsigned char)*c;
+			if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-')
+				name[n++] = (char)ch;
+		}
+		if (n > 0)
+			ok = freerdp_settings_set_string(s, FreeRDP_ClientHostname, name);
+	}
 	int scale = jint(j, "scale", 100);
 	if (scale < 100)
 		scale = 100;

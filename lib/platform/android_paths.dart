@@ -8,12 +8,19 @@ import '../sessions/frame_buffer.dart';
 /// бібліотек застосунку як libmhrd_session.so — лише звідти Android дозволяє його запускати.
 class AndroidPaths {
   const AndroidPaths(
-      {required this.nativeLibraryDir, required this.filesDir, required this.cacheDir, required this.transferDir});
+      {required this.nativeLibraryDir,
+      required this.filesDir,
+      required this.cacheDir,
+      required this.transferDir,
+      this.deviceName = ''});
 
   final String nativeLibraryDir, filesDir, cacheDir;
 
   /// Тека обміну файлами з ПК (під час сеансу — диск «Phone» на ПК; MainActivity → Transfer.kt).
   final String transferDir;
+
+  /// Модель телефона — ім'я цього пристрою для ПК (без нього FreeRDP на Android — «localhost»).
+  final String deviceName;
 
   static const _channel = MethodChannel('mhrd/android');
 
@@ -27,7 +34,8 @@ class AndroidPaths {
           nativeLibraryDir: m['nativeLibraryDir']!,
           filesDir: m['filesDir']!,
           cacheDir: m['cacheDir']!,
-          transferDir: m['transferDir']!);
+          transferDir: m['transferDir']!,
+          deviceName: m['deviceName'] ?? '');
     } on PlatformException {
       return null;
     } on MissingPluginException {

@@ -41,7 +41,8 @@ Future<void> main(List<String> args) async {
           android == null ? null : (exe) => ProcessChannel.start(exe, environment: android.environment),
       log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')),
       files: AppFiles(dir),
-      phoneFolder: android?.transferDir);
+      phoneFolder: android?.transferDir,
+      clientName: android?.deviceName);
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }
