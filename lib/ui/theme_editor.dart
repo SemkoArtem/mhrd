@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -120,41 +121,44 @@ class _ThemeEditorState extends State<ThemeEditor> {
             themeCard('system', l.languageSystem, null),
             for (final th in all) themeCard(th.id, l.themeName(th), th),
           ]),
-          const SizedBox(height: 16),
-          Wrap(spacing: 10, runSpacing: 10, children: [
-            FilledButton.icon(
-              icon: const Icon(Icons.palette_outlined),
-              label: Text(l.createTheme),
-              onPressed: () => _startFrom(repo.themeFor(MediaQuery.platformBrightnessOf(context))),
-            ),
-            OutlinedButton.icon(
-                icon: const Icon(Icons.file_open_outlined), label: Text(l.importTheme), onPressed: _import),
-            if (repo.customThemes.containsKey(current)) ...[
-              OutlinedButton.icon(
-                icon: const Icon(Icons.ios_share),
-                label: Text(l.exportCurrentTheme),
-                onPressed: () => _export(repo.customThemes[current]!),
+          // Телефон: лише вибір теми — створювати й редагувати зручніше на ПК (теми переносить бекап).
+          if (!(Platform.isAndroid || Platform.isIOS)) ...[
+            const SizedBox(height: 16),
+            Wrap(spacing: 10, runSpacing: 10, children: [
+              FilledButton.icon(
+                icon: const Icon(Icons.palette_outlined),
+                label: Text(l.createTheme),
+                onPressed: () => _startFrom(repo.themeFor(MediaQuery.platformBrightnessOf(context))),
               ),
               OutlinedButton.icon(
-                icon: const Icon(Icons.edit_outlined),
-                label: Text(l.editCurrentTheme),
-                onPressed: () => setState(() => _draft = repo.customThemes[current]),
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.delete_outline),
-                label: Text(l.deleteCurrentTheme),
-                onPressed: () => repo.deleteTheme(current),
+                  icon: const Icon(Icons.file_open_outlined), label: Text(l.importTheme), onPressed: _import),
+              if (repo.customThemes.containsKey(current)) ...[
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.ios_share),
+                  label: Text(l.exportCurrentTheme),
+                  onPressed: () => _export(repo.customThemes[current]!),
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(l.editCurrentTheme),
+                  onPressed: () => setState(() => _draft = repo.customThemes[current]),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(l.deleteCurrentTheme),
+                  onPressed: () => repo.deleteTheme(current),
+                ),
+              ],
+            ]),
+            if (_draft != null) ...[
+              const SizedBox(height: 24),
+              _DraftEditor(
+                draft: _draft!,
+                onChanged: (d) => setState(() => _draft = d),
+                onSave: _saveDraft,
+                onCancel: () => setState(() => _draft = null),
               ),
             ],
-          ]),
-          if (_draft != null) ...[
-            const SizedBox(height: 24),
-            _DraftEditor(
-              draft: _draft!,
-              onChanged: (d) => setState(() => _draft = d),
-              onSave: _saveDraft,
-              onCancel: () => setState(() => _draft = null),
-            ),
           ],
         ]),
       ),
@@ -340,8 +344,7 @@ class _ColorField extends StatefulWidget {
 class _ColorFieldState extends State<_ColorField> {
   late final TextEditingController _ctrl = TextEditingController(text: _hex(widget.value));
 
-  static String _hex(Color c) =>
-      '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
+  static String _hex(Color c) => '#${(c.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 
   @override
   void didUpdateWidget(_ColorField old) {
