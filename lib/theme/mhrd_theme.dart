@@ -139,7 +139,86 @@ class MhrdTokens extends ThemeExtension<MhrdTokens> {
     radius: 12,
   );
 
-  static const builtIns = [graphite, light, amber];
+  static const aurora = MhrdTokens(
+    id: 'aurora',
+    name: 'Північне сяйво',
+    brightness: Brightness.dark,
+    background: Color(0xFF0A1416),
+    surface: Color(0xFF0F1D20),
+    surfaceRaised: Color(0xFF16292D),
+    border: Color(0xFF234045),
+    text: Color(0xFFE3F2F1),
+    textMuted: Color(0xFF93B3B0),
+    accent: Color(0xFF3DE0C5),
+    onAccent: Color(0xFF062421),
+    ok: Color(0xFF3DE0C5),
+    warn: Color(0xFFF4C152),
+    error: Color(0xFFFF8E86),
+    fontSans: 'Manrope',
+    fontMono: 'JetBrains Mono',
+    radius: 16,
+  );
+
+  static const paper = MhrdTokens(
+    id: 'paper',
+    name: 'Папір',
+    brightness: Brightness.light,
+    background: Color(0xFFF3EEE4),
+    surface: Color(0xFFFBF8F2),
+    surfaceRaised: Color(0xFFEFE8DB),
+    border: Color(0xFFD6CCBA),
+    text: Color(0xFF2B2118),
+    textMuted: Color(0xFF5E5144),
+    accent: Color(0xFF9C4A1A),
+    onAccent: Color(0xFFFFFFFF),
+    ok: Color(0xFF2F6B2F),
+    warn: Color(0xFF8A5A00),
+    error: Color(0xFFA42E22),
+    radius: 6,
+  );
+
+  static const neon = MhrdTokens(
+    id: 'neon',
+    name: 'Неон',
+    brightness: Brightness.dark,
+    background: Color(0xFF120B1F),
+    surface: Color(0xFF1A1030),
+    surfaceRaised: Color(0xFF251742),
+    border: Color(0xFF3A2660),
+    text: Color(0xFFF2E9FF),
+    textMuted: Color(0xFFB7A6D6),
+    accent: Color(0xFFFF4FD8),
+    onAccent: Color(0xFF1A0A22),
+    ok: Color(0xFF5CF2B4),
+    warn: Color(0xFFFFC857),
+    error: Color(0xFFFF7A90),
+    fontSans: 'Exo 2',
+    fontMono: 'JetBrains Mono',
+    radius: 4,
+  );
+
+  static const terminal = MhrdTokens(
+    id: 'terminal',
+    name: 'Термінал',
+    brightness: Brightness.dark,
+    background: Color(0xFF050805),
+    surface: Color(0xFF0A100A),
+    surfaceRaised: Color(0xFF111A11),
+    border: Color(0xFF1F2E1F),
+    text: Color(0xFFC8F7C5),
+    textMuted: Color(0xFF7FB27A),
+    accent: Color(0xFF39FF6A),
+    onAccent: Color(0xFF031A08),
+    ok: Color(0xFF39FF6A),
+    warn: Color(0xFFFFD24D),
+    error: Color(0xFFFF7B6B),
+    fontSans: 'JetBrains Mono',
+    fontMono: 'JetBrains Mono',
+    radius: 0,
+    density: Density.compact,
+  );
+
+  static const builtIns = [graphite, light, amber, aurora, paper, neon, terminal];
 
   // ── Перевірка контрасту (WCAG) ──────────────────────────────────
 

@@ -1393,6 +1393,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeAmber => 'Night Amber';
 
   @override
+  String get themeAurora => 'Aurora';
+
+  @override
+  String get themePaper => 'Paper';
+
+  @override
+  String get themeNeon => 'Neon';
+
+  @override
+  String get themeTerminal => 'Terminal';
+
+  @override
   String themeMine(String name) {
     return '$name (mine)';
   }

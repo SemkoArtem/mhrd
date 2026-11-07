@@ -2510,6 +2510,30 @@ abstract class AppLocalizations {
   /// **'Нічний бурштин'**
   String get themeAmber;
 
+  /// No description provided for @themeAurora.
+  ///
+  /// In uk, this message translates to:
+  /// **'Північне сяйво'**
+  String get themeAurora;
+
+  /// No description provided for @themePaper.
+  ///
+  /// In uk, this message translates to:
+  /// **'Папір'**
+  String get themePaper;
+
+  /// No description provided for @themeNeon.
+  ///
+  /// In uk, this message translates to:
+  /// **'Неон'**
+  String get themeNeon;
+
+  /// No description provided for @themeTerminal.
+  ///
+  /// In uk, this message translates to:
+  /// **'Термінал'**
+  String get themeTerminal;
+
   /// No description provided for @themeMine.
   ///
   /// In uk, this message translates to:

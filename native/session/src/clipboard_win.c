@@ -60,6 +60,7 @@ struct MhrdClipboard
 	UINT32 fcLen;
 	BOOL fcOk;
 	UINT32 nextStreamId;
+	UINT32 fcStream; /* streamId запиту, на який чекаємо: запізнілі відповіді на старі — ігноруємо */
 };
 
 static CliprdrClientContext* get_cliprdr(MhrdClipboard* cb)
@@ -450,6 +451,11 @@ static UINT on_server_file_contents_response(CliprdrClientContext* c, const CLIP
 {
 	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
 	EnterCriticalSection(&cb->lock);
+	if (resp->streamId != cb->fcStream)
+	{
+		LeaveCriticalSection(&cb->lock); /* відповідь на запит, якого вже не чекаємо */
+		return CHANNEL_RC_OK;
+	}
 	free(cb->fcData);
 	cb->fcData = NULL;
 	cb->fcLen = 0;
@@ -482,6 +488,9 @@ static BOOL request_file_contents(MhrdClipboard* cb, UINT32 index, BOOL sizeOnly
 	CLIPRDR_FILE_CONTENTS_REQUEST req = { 0 };
 	req.common.msgType = CB_FILECONTENTS_REQUEST;
 	req.streamId = ++cb->nextStreamId;
+	EnterCriticalSection(&cb->lock);
+	cb->fcStream = req.streamId;
+	LeaveCriticalSection(&cb->lock);
 	req.listIndex = index;
 	req.dwFlags = sizeOnly ? FILECONTENTS_SIZE : FILECONTENTS_RANGE;
 	req.nPositionLow = (UINT32)pos;

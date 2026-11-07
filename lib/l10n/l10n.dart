@@ -121,6 +121,10 @@ extension L10nMessages on AppLocalizations {
         'graphite' => themeGraphite,
         'light' => themeLight,
         'amber' => themeAmber,
+        'aurora' => themeAurora,
+        'paper' => themePaper,
+        'neon' => themeNeon,
+        'terminal' => themeTerminal,
         _ => t.name,
       };
 
