@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -41,8 +42,32 @@ class AutoBackup extends ChangeNotifier {
   static const _metaKey = 'autoBackup';
   static const passwordKey = 'mhrd.autobackup.password';
 
-  /// Лише такі файли автобекап створює і лише їх видаляє.
-  static final fileNamePattern = RegExp(r'^mhrd-auto-\d{8}-\d{6}\.rdpbackup$');
+  /// Копії автобекапу: `mhrd-auto-<пристрій>-ДАТА-ЧАС.rdpbackup` (старі версії — без пристрою).
+  static final fileNamePattern = RegExp(r'^mhrd-auto-(?:[a-z0-9-]+-)?\d{8}-\d{6}\.rdpbackup$');
+
+  /// Цей пристрій і ця копія MHRD у назві файлу: ім'я комп'ютера + короткий код (встановлена й
+  /// портативна на одному ПК — різні). У спільній (хмарній) теці кожен прибирає лише свої копії —
+  /// інакше частіший пристрій видаляв би бекапи іншого.
+  @visibleForTesting
+  late final String deviceTag = () {
+    var id = repo.db.getMeta(_deviceKey);
+    if (id == null || !RegExp(r'^[0-9a-f]{4}$').hasMatch(id)) {
+      final r = Random.secure();
+      id = List.generate(4, (_) => r.nextInt(16).toRadixString(16)).join();
+      repo.db.setMeta(_deviceKey, id);
+    }
+    var host = '';
+    try {
+      host = Platform.localHostname.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    } catch (_) {
+      // без імені — лише код
+    }
+    host = host.replaceAll(RegExp(r'^-+|-+$'), '');
+    if (host.length > 24) host = host.substring(0, 24).replaceAll(RegExp(r'-+$'), '');
+    return host.isEmpty ? id : '$host-$id';
+  }();
+
+  static const _deviceKey = 'autoBackupDevice';
 
   final Repository repo;
   final BackupService _service;
@@ -142,7 +167,7 @@ class AutoBackup extends ChangeNotifier {
       final pw = await repo.secrets.read(passwordKey);
       if (pw == null || pw.isEmpty) throw const _NoPassword();
       final bytes = await _service.exportEncrypted(pw);
-      final file = File(p.join(dir, 'mhrd-auto-${_stamp(now)}.rdpbackup'));
+      final file = File(p.join(dir, 'mhrd-auto-$deviceTag-${_stamp(now)}.rdpbackup'));
       final tmp = File('${file.path}.tmp');
       await tmp.writeAsBytes(bytes, flush: true);
       await tmp.rename(file.path);
@@ -169,12 +194,17 @@ class AutoBackup extends ChangeNotifier {
     }
   }
 
-  /// Лишає [keep] найновіших копій. Імена містять дату, тож сортування за іменем = за часом.
+  /// Лишає [keep] найновіших копій цього пристрою (чужі й старі, без пристрою в назві, не чіпає).
+  /// Імена містять дату, тож сортування за іменем = за часом.
   void _prune(String dir) {
+    final own = 'mhrd-auto-$deviceTag-';
     final files = Directory(dir)
         .listSync()
         .whereType<File>()
-        .where((f) => fileNamePattern.hasMatch(p.basename(f.path)))
+        .where((f) {
+          final name = p.basename(f.path);
+          return name.startsWith(own) && fileNamePattern.hasMatch(name);
+        })
         .toList()
       ..sort((a, b) => p.basename(b.path).compareTo(p.basename(a.path)));
     for (final f in files.skip(keep)) {
