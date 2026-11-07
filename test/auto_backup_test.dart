@@ -52,21 +52,28 @@ void main() {
     expect((data['credentials'] as List).single['password'], 'p@ss');
   }, skip: _skip);
 
-  test('лишаються 10 найновіших копій, чужі файли не чіпаємо', () async {
+  test('лишаються 10 найновіших копій цього пристрою; чужі пристрої, старі й інші файли не чіпаємо', () async {
+    final own = 'mhrd-auto-${auto.deviceTag}';
+    expect(AutoBackup.fileNamePattern.hasMatch('$own-20200100-000000.rdpbackup'), isTrue);
     for (var i = 0; i < 12; i++) {
-      File(p.join(tmp.path, 'mhrd-auto-2020010${i ~/ 10}-00000${i % 10}.rdpbackup')).writeAsStringSync('старе');
+      File(p.join(tmp.path, '$own-2020010${i ~/ 10}-00000${i % 10}.rdpbackup')).writeAsStringSync('старе');
+      // Інший ПК пише в ту саму (хмарну) теку — його копії лишаються всі.
+      File(p.join(tmp.path, 'mhrd-auto-laptop-ab12-2021010${i ~/ 10}-00000${i % 10}.rdpbackup'))
+          .writeAsStringSync('чуже');
     }
+    File(p.join(tmp.path, 'mhrd-auto-20190101-000000.rdpbackup')).writeAsStringSync('стара версія');
     File(p.join(tmp.path, 'мій-документ.rdpbackup')).writeAsStringSync('не чіпати');
     File(p.join(tmp.path, 'mhrd-auto-нотатки.txt')).writeAsStringSync('не чіпати');
 
     final fresh = await auto.enable(tmp.path, 'пароль');
 
     final names = tmp.listSync().map((f) => p.basename(f.path)).toSet();
-    final autos = names.where(AutoBackup.fileNamePattern.hasMatch).toList()..sort();
-    expect(autos.length, 10);
-    expect(autos.last, p.basename(fresh!));
-    expect(autos.first, 'mhrd-auto-20200100-000003.rdpbackup'); // найстаріші три видалено
-    expect(names, containsAll(['мій-документ.rdpbackup', 'mhrd-auto-нотатки.txt']));
+    final mine = names.where((n) => n.startsWith('$own-')).toList()..sort();
+    expect(mine.length, 10);
+    expect(mine.last, p.basename(fresh!));
+    expect(mine.first, '$own-20200100-000003.rdpbackup'); // найстаріші три видалено
+    expect(names.where((n) => n.startsWith('mhrd-auto-laptop-ab12-')), hasLength(12));
+    expect(names, containsAll(['mhrd-auto-20190101-000000.rdpbackup', 'мій-документ.rdpbackup', 'mhrd-auto-нотатки.txt']));
   }, skip: _skip);
 
   test('зміна в даних позначає, що потрібна нова копія', () async {
