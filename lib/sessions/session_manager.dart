@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -71,7 +72,8 @@ class SessionManager extends ChangeNotifier {
   final Repository repo;
 
   /// Стан тунелів і проксі для лівої панелі (перевірки запускає main).
-  late final RouteHealth health = RouteHealth(repo, tunnelPath: tunnelPath, tunnelFactory: _tunnelFactory);
+  late final RouteHealth health =
+      RouteHealth(repo, tunnelPath: tunnelPath, tunnelFactory: _tunnelFactory, liveTunnel: liveTunnel);
 
   /// Шлях до `mhrd-tunnel` (WireGuard); null — модуля тунелів немає.
   final String? tunnelPath;
@@ -179,6 +181,24 @@ class SessionManager extends ChangeNotifier {
     }
   }
 
+  /// Відкриті тунелі: один процес mhrd-tunnel на профіль (з тими самими налаштуваннями) для всіх
+  /// його сеансів. Ключ — [_sharedKey].
+  final _sharedTunnels = <String, TunnelChannel>{};
+  final _sharedProfiles = <TunnelChannel, String?>{};
+
+  /// Профіль плюс його налаштування: змінили ключі чи сервер — новий процес, а не старий тунель.
+  static String _sharedKey(String? profileId, Map<String, Object?> request) =>
+      '$profileId|${jsonEncode(request['wireguard'])}';
+
+  /// Уже відкритий тунель профілю [profileId] (сеанс через нього працює) або null. Перевірки маршруту
+  /// йдуть крізь нього: окремий процес з тим самим ключем перебив би з'єднання сеансу з сервером.
+  TunnelChannel? liveTunnel(String? profileId) {
+    for (final e in _sharedProfiles.entries) {
+      if (e.value == profileId) return e.key;
+    }
+    return null;
+  }
+
   /// Акаунт шлюзу, для якого треба спитати пароль (свій акаунт без збереженого пароля), або null.
   Credential? gatewayAccountToAsk(Connection c) {
     final g = repo.gateways[c.gatewayId];
@@ -208,17 +228,42 @@ class SessionManager extends ChangeNotifier {
     var host = c.host;
     var port = c.port;
     TunnelChannel? tunnel;
+    var reused = false; // тунель уже відкрито іншим сеансом
     if (tunnelReq != null) {
       final texe = tunnelPath;
       if (texe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-      tunnel = await _tunnelFactory(texe);
-      try {
-        // mhrd-tunnel сам обмежує DNS (10 с) і перевірку ПК (20 с); це — запобіжник від зависання.
-        port = await openTunnel(tunnel, tunnelReq).timeout(const Duration(seconds: 60),
-            onTimeout: () => throw const TunnelException(TunnelError.unreachable, 'timeout'));
-      } catch (_) {
-        tunnel.kill();
-        rethrow;
+      // Тунель цього профілю вже відкрито іншим сеансом — ще один ПК крізь нього, а не другий процес
+      // з тим самим ключем WireGuard (сервер перемикався б між ними, і сеанси обривались би).
+      final key = _sharedKey(c.routeRefId, tunnelReq);
+      final shared = _sharedTunnels[key];
+      if (shared != null) {
+        try {
+          port = await forwardTunnel(shared, tunnelReq['target']! as String);
+          tunnel = shared;
+          reused = true;
+        } on TunnelException catch (e) {
+          if (e.error != TunnelError.failed) rethrow; // ПК не відповідає — так і скажемо
+          _sharedTunnels.remove(key); // процес тунелю саме завершився — відкриємо новий
+        }
+      }
+      if (tunnel == null) {
+        final t = await _tunnelFactory(texe);
+        try {
+          // mhrd-tunnel сам обмежує DNS (10 с) і перевірку ПК (20 с); це — запобіжник від зависання.
+          port = await openTunnel(t, tunnelReq).timeout(const Duration(seconds: 60),
+              onTimeout: () => throw const TunnelException(TunnelError.unreachable, 'timeout'));
+        } catch (_) {
+          t.kill();
+          rethrow;
+        }
+        tunnel = t;
+        _sharedTunnels[key] = t;
+        _sharedProfiles[t] = c.routeRefId;
+        // Процес тунелю вийде сам, коли закінчиться останній його сеанс.
+        t.events.listen((_) {}, onDone: () {
+          if (identical(_sharedTunnels[key], t)) _sharedTunnels.remove(key);
+          _sharedProfiles.remove(t);
+        }, onError: (Object _) {});
       }
       host = '127.0.0.1'; // тунель слухає лише локально
     }
@@ -227,7 +272,11 @@ class SessionManager extends ChangeNotifier {
     try {
       channel = await _channelFactory(exe);
     } catch (_) {
-      tunnel?.kill();
+      // Новий тунель без жодного сеансу — геть; спільний живе далі для інших сеансів.
+      if (tunnel != null && !reused) {
+        tunnel.kill();
+        _sharedTunnels.removeWhere((_, v) => identical(v, tunnel));
+      }
       rethrow;
     }
     // Тунель живе, поки живий процес сеансу (і переживає перепідключення FreeRDP).

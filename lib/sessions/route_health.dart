@@ -74,12 +74,17 @@ class RouteHealth extends ChangeNotifier {
     this.tunnelPath,
     TunnelFactory? tunnelFactory,
     this.interval = const Duration(minutes: 5),
+    this.liveTunnel,
   }) : _tunnelFactory = tunnelFactory ?? TunnelProcess.start;
 
   final Repository repo;
   final String? tunnelPath;
   final TunnelFactory _tunnelFactory;
   final Duration interval;
+
+  /// Уже відкритий сеансом тунель профілю (SessionManager.liveTunnel): перевірки йдуть крізь нього —
+  /// окремий процес з тим самим ключем WireGuard перебив би з'єднання сеансу з сервером.
+  final TunnelChannel? Function(String? profileId)? liveTunnel;
 
   final _status = <String, RouteStatus>{};
   final _running = <String, Future<void>>{};
@@ -98,7 +103,14 @@ class RouteHealth extends ChangeNotifier {
     _timer = Timer.periodic(interval, (_) => checkAll());
   }
 
-  Future<void> checkAll() => Future.wait([...repo.tunnels.keys, ...repo.proxies.keys].map(check));
+  /// Усе по черзі: одночасні перевірки кількох тунелів (часто — з одним ключем WireGuard) заважали б
+  /// одна одній і показували робочі тунелі непрацюючими.
+  Future<void> checkAll() async {
+    for (final id in [...repo.tunnels.keys, ...repo.proxies.keys]) {
+      if (_disposed) return;
+      await check(id);
+    }
+  }
 
   /// Перевірити один профіль (повторний виклик під час перевірки — та сама перевірка).
   Future<void> check(String id) => _running[id] ??= _check(id).whenComplete(() {
@@ -152,7 +164,11 @@ class RouteHealth extends ChangeNotifier {
     if (repo.tunnels.containsKey(id) || repo.proxies.containsKey(id)) _set(id, result);
   }
 
-  Future<int> _checkTunnel(TunnelProfile t) async => checkWireGuard(await repo.wireGuardConfig(t));
+  Future<int> _checkTunnel(TunnelProfile t) async {
+    final live = liveTunnel?.call(t.id);
+    if (live != null) return pingTunnel(live); // тунель працює — у ньому сеанс; затримка до його ПК
+    return checkWireGuard(await repo.wireGuardConfig(t));
+  }
 
   /// Рукостискання з сервером WireGuard за налаштуваннями [wireguard] (з ключами) — і для ще не
   /// збереженого профілю, щоб перевірити його перед збереженням. Повертає мс.
@@ -189,7 +205,8 @@ class RouteHealth extends ChangeNotifier {
     final target = c.host.contains(':') ? '[${c.host}]:${c.port}' : '${c.host}:${c.port}';
     switch (c.route) {
       case RouteKind.tunnel:
-        if (sessionTunnel != null) return pingTunnel(sessionTunnel);
+        final open = sessionTunnel ?? liveTunnel?.call(c.routeRefId);
+        if (open != null) return pingTunnel(open, target: target);
         final t = repo.tunnels[c.routeRefId];
         if (t == null) throw const RouteException(RouteError.tunnelMissing);
         final exe = tunnelPath;

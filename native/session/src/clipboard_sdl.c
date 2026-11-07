@@ -93,6 +93,9 @@ struct MhrdClipboard
 	BOOL owned;
 	/* Перевірка буфера вже запланована (не плодимо таймери на кожну подію). */
 	BOOL checkQueued;
+	/* Серверу оголошено файли нашого буфера: лише тоді віддаємо їхній список (інакше сервер міг би
+	 * попросити його будь-коли, навіть якщо тут файлів не пропонували). */
+	BOOL filesAnnounced;
 
 	/* Завдання для головного потоку чи потік завантаження ще живі: тоді clipboard_free лише позначає
 	 * «закрито», а пам'ять звільняє останній. */
@@ -111,6 +114,7 @@ struct MhrdClipboard
 	UINT32 fcLen;
 	BOOL fcOk;
 	UINT32 nextStreamId;
+	UINT32 fcStream; /* streamId запиту, на який чекаємо: запізнілі відповіді на старі — ігноруємо */
 	UINT32 serial;       /* номер копії на сервері: нова копія скасовує завантаження старої */
 	UINT32 fetchSerial;  /* для якої копії вже запущено завантаження (0 — ні для якої) */
 	BOOL fetchDone;      /* завантаження fetchSerial закінчилось (fetchUris — результат) */
@@ -660,11 +664,15 @@ static void send_client_format_list(MhrdClipboard* cb, UINT32 unused)
 			break;
 		}
 	}
-	if (SDL_HasClipboardData(URI_MIME))
+	const BOOL files = SDL_HasClipboardData(URI_MIME);
+	if (files)
 	{
 		formats[n].formatId = FILE_FORMAT_ID;
 		formats[n++].formatName = (char*)"FileGroupDescriptorW";
 	}
+	EnterCriticalSection(&cb->lock);
+	cb->filesAnnounced = files;
+	LeaveCriticalSection(&cb->lock);
 	CLIPRDR_FORMAT_LIST list = { 0 };
 	list.common.msgType = CB_FORMAT_LIST;
 	list.numFormats = n;
@@ -693,7 +701,13 @@ static void answer_data_request(MhrdClipboard* cb, UINT32 fmt)
 	else if (fmt == CF_DIB)
 		data = local_image_to_dib(&len);
 	else if (fmt == FILE_FORMAT_ID)
-		data = build_file_list(cb, &len);
+	{
+		EnterCriticalSection(&cb->lock);
+		const BOOL announced = cb->filesAnnounced;
+		LeaveCriticalSection(&cb->lock);
+		if (announced)
+			data = build_file_list(cb, &len);
+	}
 	if (data && (len <= CLIP_MAX || fmt == FILE_FORMAT_ID))
 	{
 		resp.common.msgFlags = CB_RESPONSE_OK;
@@ -837,6 +851,11 @@ static UINT on_server_file_contents_response(CliprdrClientContext* c, const CLIP
 {
 	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
 	EnterCriticalSection(&cb->lock);
+	if (resp->streamId != cb->fcStream)
+	{
+		LeaveCriticalSection(&cb->lock); /* відповідь на запит, якого вже не чекаємо */
+		return CHANNEL_RC_OK;
+	}
 	free(cb->fcData);
 	cb->fcData = NULL;
 	cb->fcLen = 0;
@@ -869,6 +888,9 @@ static BOOL request_file_contents(MhrdClipboard* cb, UINT32 index, BOOL sizeOnly
 	CLIPRDR_FILE_CONTENTS_REQUEST req = { 0 };
 	req.common.msgType = CB_FILECONTENTS_REQUEST;
 	req.streamId = ++cb->nextStreamId;
+	EnterCriticalSection(&cb->lock);
+	cb->fcStream = req.streamId;
+	LeaveCriticalSection(&cb->lock);
 	req.listIndex = index;
 	req.dwFlags = sizeOnly ? FILECONTENTS_SIZE : FILECONTENTS_RANGE;
 	req.nPositionLow = (UINT32)pos;
