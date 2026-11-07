@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -131,7 +132,13 @@ class RdpSession extends ChangeNotifier {
 
   FrameBuffer? _frame;
   int _stride = 0;
-  bool _dirty = false, _decoding = false, _disposed = false;
+  bool _decoding = false, _disposed = false;
+
+  /// Наступну картинку зібрати цілком (новий розмір кадру, ще немає попередньої).
+  bool _full = true;
+
+  /// Ділянки, що змінились після останньої картинки: (ліво, верх, право, низ).
+  final _rects = <(int, int, int, int)>[];
   Timer? _killTimer;
   StreamSubscription<SessionEvent>? _sub;
   final _done = Completer<void>();
@@ -169,10 +176,11 @@ class RdpSession extends ChangeNotifier {
         _requestedSize = null; // новий розмір від сервера — можна просити знову
         _stride = e.stride;
         _frame = _openFrameBuffer(e.name, e.stride * e.height);
-        _dirty = true;
+        _full = true;
+        _rects.clear();
         _pump();
       case FrameEvent():
-        _dirty = true;
+        _markDirty(e.x, e.y, e.w, e.h);
         _pump();
         return; // перемалюємо, коли буде готова нова картинка
       case CertificateEvent():
@@ -206,24 +214,106 @@ class RdpSession extends ChangeNotifier {
     if (!_done.isCompleted) _done.complete();
   }
 
+  /// Ділянка кадру змінилась: додаємо до списку, зливаючи з сусідніми (далеко розкидані — окремо,
+  /// щоб годинник у куті й курсор в іншому не перетворились на весь екран).
+  void _markDirty(int x, int y, int w, int h) {
+    var r = (x.clamp(0, width), y.clamp(0, height), (x + w).clamp(0, width), (y + h).clamp(0, height));
+    if (r.$1 >= r.$3 || r.$2 >= r.$4) return;
+    const slack = 32;
+    for (var i = 0; i < _rects.length;) {
+      final o = _rects[i];
+      if (r.$1 <= o.$3 + slack && o.$1 <= r.$3 + slack && r.$2 <= o.$4 + slack && o.$2 <= r.$4 + slack) {
+        r = (math.min(r.$1, o.$1), math.min(r.$2, o.$2), math.max(r.$3, o.$3), math.max(r.$4, o.$4));
+        _rects.removeAt(i);
+        i = 0; // збільшена ділянка може тепер зачепити й ті, що вже переглянули
+      } else {
+        i++;
+      }
+    }
+    _rects.add(r);
+    if (_rects.length > 8) {
+      final all = _rects.reduce((a, b) =>
+          (math.min(a.$1, b.$1), math.min(a.$2, b.$2), math.max(a.$3, b.$3), math.max(a.$4, b.$4)));
+      _rects
+        ..clear()
+        ..add(all);
+    }
+  }
+
   /// Збирає ui.Image зі спільної пам'яті. Поки попередня ще декодується, нові ділянки лише
   /// позначаються — так частота кадрів сама підлаштовується під швидкість пристрою.
+  /// Змінилась невелика частина — копіюються лише змінені ділянки, а нова картинка складається з
+  /// попередньої й цих ділянок на відеокарті (без копіювання всього кадру процесором).
   void _pump() {
     final f = _frame;
-    if (_decoding || !_dirty || f == null || width == 0 || height == 0 || _disposed) return;
-    _dirty = false;
+    if (_decoding || f == null || width == 0 || height == 0 || _disposed) return;
+    if (!_full && _rects.isEmpty) return;
+    final old = image;
+    final area = _rects.fold(0, (a, r) => a + (r.$3 - r.$1) * (r.$4 - r.$2));
+    if (_full || old == null || old.width != width || old.height != height || area * 2 > width * height) {
+      _full = false;
+      _rects.clear();
+      _decoding = true;
+      ui.decodeImageFromPixels(f.bytes, width, height, ui.PixelFormat.bgra8888, (img) {
+        _decoding = false;
+        if (_disposed) {
+          img.dispose();
+          return;
+        }
+        image?.dispose();
+        image = img;
+        _notify();
+        _pump();
+      }, rowBytes: _stride);
+      return;
+    }
+    final rects = List.of(_rects);
+    _rects.clear();
     _decoding = true;
-    ui.decodeImageFromPixels(f.bytes, width, height, ui.PixelFormat.bgra8888, (img) {
-      _decoding = false;
-      if (_disposed) {
-        img.dispose();
-        return;
+    final parts = <(int, int, ui.Image)>[];
+    var left = rects.length;
+    final src = f.bytes;
+    for (final (l, t, r, b) in rects) {
+      final w = r - l, h = b - t, row = w * 4;
+      final buf = Uint8List(row * h);
+      for (var y = 0; y < h; y++) {
+        final from = (t + y) * _stride + l * 4;
+        buf.setRange(y * row, y * row + row, src, from);
       }
-      image?.dispose();
-      image = img;
-      _notify();
+      ui.decodeImageFromPixels(buf, w, h, ui.PixelFormat.bgra8888, (img) {
+        parts.add((l, t, img));
+        if (--left == 0) _compose(parts);
+      });
+    }
+  }
+
+  /// Попередня картинка + змінені ділянки → нова картинка (на відеокарті).
+  void _compose(List<(int, int, ui.Image)> parts) {
+    _decoding = false;
+    final old = image;
+    if (_disposed || old == null || old.width != width || old.height != height) {
+      for (final p in parts) {
+        p.$3.dispose();
+      }
+      _full = !_disposed; // розмір змінився, поки складали — наступна цілком
       _pump();
-    }, rowBytes: _stride);
+      return;
+    }
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    final paint = ui.Paint()..blendMode = ui.BlendMode.src;
+    canvas.drawImage(old, ui.Offset.zero, paint);
+    for (final (x, y, img) in parts) {
+      canvas.drawImage(img, ui.Offset(x.toDouble(), y.toDouble()), paint);
+      img.dispose();
+    }
+    final picture = recorder.endRecording();
+    final next = picture.toImageSync(width, height);
+    picture.dispose();
+    old.dispose();
+    image = next;
+    _notify();
+    _pump();
   }
 
   void answerCertificate(bool accept) {
