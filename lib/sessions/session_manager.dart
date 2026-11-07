@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
+import 'package:cryptography/cryptography.dart' show Sha256;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -61,7 +63,7 @@ class SessionManager extends ChangeNotifier {
     String? tunnelPath,
     TunnelFactory? tunnelFactory,
     this.log,
-    this.latencyInterval = const Duration(seconds: 10),
+    this.latencyInterval = const Duration(seconds: 30),
     this.files,
   })  : enginePath = enginePath ?? _defaultEnginePath(),
         tunnelPath = tunnelPath ?? _besideApp('mhrd-tunnel'),
@@ -72,7 +74,7 @@ class SessionManager extends ChangeNotifier {
 
   /// Стан тунелів і проксі для лівої панелі (перевірки запускає main).
   late final RouteHealth health =
-      RouteHealth(repo, tunnelPath: tunnelPath, tunnelFactory: _tunnelFactory, liveTunnel: liveTunnel);
+      RouteHealth(repo, tunnelPath: tunnelPath, tunnelFactory: _tunnelFactory, withTunnel: withTunnel);
 
   /// Шлях до `mhrd-tunnel` (WireGuard); null — модуля тунелів немає.
   final String? tunnelPath;
@@ -186,9 +188,65 @@ class SessionManager extends ChangeNotifier {
   static String _sharedKey(Map<String, Object?> wireguard) =>
       jsonEncode([wireguard['privateKey'], wireguard['peerPublicKey']]);
 
-  /// Уже відкритий тунель з ключем із [wireguard] (сеанс через нього працює) або null. Перевірки
-  /// маршруту йдуть крізь нього: окремий процес з тим самим ключем перебив би з'єднання сеансу.
-  TunnelChannel? liveTunnel(Map<String, Object?> wireguard) => _sharedTunnels[_sharedKey(wireguard)];
+  /// Черга на кожен ключ: відкриття тунелю для сеансу й перевірки з тим самим ключем ніколи не
+  /// перетинаються — інакше два рукостискання одночасно перебили б одне одного.
+  final _keyLocks = <String, Future<void>>{};
+
+  /// Виконує [fn] у черзі ключа з [wireguard], передаючи вже працюючий тунель з цим ключем (цього
+  /// MHRD чи іншої/попередньої копії — за його stateFile) або null. Сеанси й перевірки (RouteHealth)
+  /// ідуть лише через це.
+  Future<T> withTunnel<T>(Map<String, Object?> wireguard, Future<T> Function(TunnelChannel? live) fn) async {
+    final key = _sharedKey(wireguard);
+    final prev = _keyLocks[key];
+    final done = Completer<void>();
+    _keyLocks[key] = done.future;
+    if (prev != null) await prev;
+    try {
+      return await fn(_sharedTunnels[key] ?? await _attach(key));
+    } finally {
+      done.complete();
+      if (identical(_keyLocks[key], done.future)) _keyLocks.remove(key);
+    }
+  }
+
+  /// Тека «візиток» працюючих тунелів (лише для цього користувача). null — Android: там сеанси
+  /// не переживають застосунок, тож і шукати нічого.
+  static String? get _tunnelStateDir {
+    if (Platform.isAndroid || Platform.isIOS) return null;
+    final runtime = Platform.isLinux ? Platform.environment['XDG_RUNTIME_DIR'] : null;
+    return p.join(runtime != null && runtime.isNotEmpty ? runtime : Directory.systemTemp.path, 'mhrd-tunnels');
+  }
+
+  /// Файл «візитки» тунелю з цим ключем: назва — SHA-256 ключів (самих ключів у назві немає).
+  static Future<File?> _stateFile(String key) async {
+    final dir = _tunnelStateDir;
+    if (dir == null) return null;
+    final hash = await Sha256().hash(utf8.encode(key));
+    final hex = hash.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return File(p.join(dir, '${hex.substring(0, 32)}.json'));
+  }
+
+  /// Тунель з цим ключем, відкритий іншою копією MHRD чи до перезапуску (його сеанси ще живі).
+  Future<TunnelChannel?> _attach(String key) async {
+    final file = await _stateFile(key);
+    final ch = file == null ? null : await attachTunnel(file);
+    if (ch != null) _register(key, ch);
+    return ch;
+  }
+
+  /// Секрет порту керування тунелю (лише в його stateFile, доступному цьому користувачу).
+  static String _newToken() {
+    final r = Random.secure();
+    return List.generate(32, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  void _register(String key, TunnelChannel ch) {
+    _sharedTunnels[key] = ch;
+    // Процес тунелю виходить сам, коли закінчиться останній його сеанс; з'єднання з чужим — рветься.
+    ch.events.listen((_) {}, onDone: () {
+      if (identical(_sharedTunnels[key], ch)) _sharedTunnels.remove(key);
+    }, onError: (Object _) {});
+  }
 
   /// Акаунт шлюзу, для якого треба спитати пароль (свій акаунт без збереженого пароля), або null.
   Credential? gatewayAccountToAsk(Connection c) {
@@ -220,40 +278,43 @@ class SessionManager extends ChangeNotifier {
     var port = c.port;
     TunnelChannel? tunnel;
     var reused = false; // тунель уже відкрито іншим сеансом
+    var lid = 0; // номер локального порту сеансу в тунелі — закриється разом із сеансом
     if (tunnelReq != null) {
       final texe = tunnelPath;
       if (texe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-      // Тунель з цим ключем уже відкрито іншим сеансом — ще один ПК крізь нього, а не другий процес
-      // з тим самим ключем WireGuard (сервер перемикався б між ними, і сеанси обривались би).
-      final key = _sharedKey(tunnelReq['wireguard']! as Map<String, Object?>);
-      final shared = _sharedTunnels[key];
-      if (shared != null) {
-        try {
-          port = await forwardTunnel(shared, tunnelReq['target']! as String);
-          tunnel = shared;
-          reused = true;
-        } on TunnelException catch (e) {
-          if (e.error != TunnelError.failed) rethrow; // ПК не відповідає — так і скажемо
-          _sharedTunnels.remove(key); // процес тунелю саме завершився — відкриємо новий
+      final wireguard = tunnelReq['wireguard']! as Map<String, Object?>;
+      final key = _sharedKey(wireguard);
+      final target = tunnelReq['target']! as String;
+      // Тунель з цим ключем уже відкрито (цим MHRD чи іншою копією) — ще один ПК крізь нього, а не
+      // другий процес з тим самим ключем WireGuard (сервер перемикався б між ними, і сеанси
+      // обривались би). У черзі ключа: два сеанси поспіль чи сеанс і перевірка не перетнуться.
+      (tunnel, port, lid, reused) = await withTunnel(wireguard, (live) async {
+        if (live != null) {
+          try {
+            final (p, l) = await forwardTunnel(live, target);
+            return (live, p, l, true);
+          } on TunnelException catch (e) {
+            if (e.error != TunnelError.failed) rethrow; // ПК не відповідає — так і скажемо
+            _sharedTunnels.remove(key); // процес тунелю саме завершився — відкриємо новий
+          }
         }
-      }
-      if (tunnel == null) {
         final t = await _tunnelFactory(texe);
+        final int p, l;
         try {
+          final state = await _stateFile(key);
           // mhrd-tunnel сам обмежує DNS (10 с) і перевірку ПК (20 с); це — запобіжник від зависання.
-          port = await openTunnel(t, tunnelReq).timeout(const Duration(seconds: 60),
+          (p, l) = await openTunnel(t, {
+            ...tunnelReq,
+            if (state != null) ...{'stateFile': state.path, 'token': _newToken()},
+          }).timeout(const Duration(seconds: 60),
               onTimeout: () => throw const TunnelException(TunnelError.unreachable, 'timeout'));
         } catch (_) {
           t.kill();
           rethrow;
         }
-        tunnel = t;
-        _sharedTunnels[key] = t;
-        // Процес тунелю вийде сам, коли закінчиться останній його сеанс.
-        t.events.listen((_) {}, onDone: () {
-          if (identical(_sharedTunnels[key], t)) _sharedTunnels.remove(key);
-        }, onError: (Object _) {});
-      }
+        _register(key, t);
+        return (t, p, l, false);
+      });
       host = '127.0.0.1'; // тунель слухає лише локально
     }
     if (repo.connections.containsKey(c.id)) repo.markUsed(c.id);
@@ -269,7 +330,7 @@ class SessionManager extends ChangeNotifier {
       rethrow;
     }
     // Тунель живе, поки живий процес сеансу (і переживає перепідключення FreeRDP).
-    tunnel?.send({'watchPid': channel.pid});
+    tunnel?.send({'watchPid': channel.pid, 'lid': lid});
     final s = RdpSession(
       id: '${c.id}#${DateTime.now().microsecondsSinceEpoch}',
       connection: c,
