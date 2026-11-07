@@ -5,16 +5,34 @@
 бекап і власні теми. Ядро протоколу — [FreeRDP 3](https://github.com/FreeRDP/FreeRDP),
 інтерфейс — Flutter.
 
-> **Статус: публічні випуски для Windows (інсталятор і портативна версія).** Далі — Linux, потім Android.
+> **Статус:** Windows — стабільні випуски; Linux — альфа; Android — бета.
 
-## Завантажити
+## Завантажити й встановити
 
-Інсталятор для Windows 10/11 (x64) і портативна версія (zip) — у
-[**Releases**](https://github.com/SemkoArtem/mhrd/releases). Права адміністратора не потрібні.
-Програма ще не підписана сертифікатом, тож SmartScreen може попередити: «Докладніше» →
-«Однаково запустити».
+Усі файли — у [**Releases**](https://github.com/SemkoArtem/mhrd/releases). Права адміністратора не потрібні.
 
-**Портативна версія** (можна носити на флешці): розпакуйте zip куди завгодно. Усі дані — у теці
+**Windows 10/11 (x64)** — у PowerShell (встановлює або оновлює до останньої версії, перевіряє контрольну суму):
+
+```powershell
+irm https://raw.githubusercontent.com/SemkoArtem/mhrd/main/windows/install.ps1 | iex
+```
+
+Або вручну: інсталятор `mhrd-setup-…-x64.exe` чи портативна `mhrd-…-x64-portable.zip`. Програма ще не
+підписана сертифікатом, тож SmartScreen може попередити: «Докладніше» → «Однаково запустити».
+
+**Linux (x64)** — Debian 12+, Ubuntu 22.04+, Mint 21+, Fedora, openSUSE, Arch, Manjaro — у терміналі:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SemkoArtem/mhrd/linux/linux/install.sh | bash
+```
+
+Та сама команда — оновлення; видалити: `… | bash -s -- --uninstall`. Або вручну: `.deb`, `.rpm`, AppImage чи
+портативний `tar.gz` з [випуску для Linux](https://github.com/SemkoArtem/mhrd/releases?q=linux).
+
+**Android 7+ (64-біт)** — файл `.apk` з [випуску для Android](https://github.com/SemkoArtem/mhrd/releases?q=android):
+завантажте на телефоні й відкрийте.
+
+**Портативна версія Windows** (можна носити на флешці): розпакуйте zip куди завгодно. Усі дані — у теці
 `mhrd-data` поруч із `mhrd.exe`, паролі й ключі — у зашифрованому файлі під майстер-паролем
 (Argon2id + AES-256-GCM), а не в сховищі Windows. Перенести ПК з установленої MHRD: там —
 повний бекап, тут — «Відновити». Без файлу `portable.txt` поруч із `mhrd.exe` програма працює як
@@ -69,7 +87,7 @@
 
 ## У планах
 
-- **Android і Linux**, згодом macOS.
+- Linux — зі статусу альфи до стабільних випусків; Android — плавніша картинка, H.264, файли; згодом macOS.
 
 Повний перелік і критерії готовності — у [`docs/SPEC.md`](docs/SPEC.md) → «Етапи робіт».
 
@@ -154,4 +172,8 @@ pinning, auto-reconnect, H.264, a built-in WireGuard tunnel without admin rights
 SOCKS5/HTTP proxy and RD Gateway, HiDPI-exact rendering with dynamic resolution, full screen with a hideable bar,
 clipboard (text, images, files) both ways, shared folders with access modes (full /
 add-only / read-only), sound and microphone, an encrypted backup, themes, Ukrainian and
-English UI. Android and Linux ports come next. License: AGPLv3.
+English UI. Linux (alpha) and Android (beta) builds are available too. License: AGPLv3.
+
+**Install:** Windows (PowerShell): `irm https://raw.githubusercontent.com/SemkoArtem/mhrd/main/windows/install.ps1 | iex`;
+Linux: `curl -fsSL https://raw.githubusercontent.com/SemkoArtem/mhrd/linux/linux/install.sh | bash`;
+Android: the `.apk` from the [Android release](https://github.com/SemkoArtem/mhrd/releases?q=android).
