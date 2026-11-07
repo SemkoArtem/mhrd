@@ -84,6 +84,9 @@ struct MhrdClipboard
 	BYTE* response;
 	UINT32 responseLen;
 	BOOL responseOk;
+	/* Запити, на які не дочекались відповіді (тайм-аут): сервер відповідає на кожен по черзі, тож
+	 * стільки наступних відповідей — запізнілі, і їх не можна віддати новому запиту. */
+	UINT32 lateResponses;
 
 	/* Те, що ми віддали SDL у функції даних (живе до наступного запиту) — лише головний потік */
 	void* served;
@@ -785,6 +788,12 @@ static UINT on_server_format_data_response(CliprdrClientContext* c, const CLIPRD
 {
 	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
 	EnterCriticalSection(&cb->lock);
+	if (cb->lateResponses > 0)
+	{
+		cb->lateResponses--; /* відповідь на запит, якого вже не дочекались */
+		LeaveCriticalSection(&cb->lock);
+		return CHANNEL_RC_OK;
+	}
 	free(cb->response);
 	cb->response = NULL;
 	cb->responseLen = 0;
@@ -819,8 +828,18 @@ static BYTE* request_server_data(MhrdClipboard* cb, UINT32 fmt, UINT32* outLen, 
 	req.common.msgType = CB_FORMAT_DATA_REQUEST;
 	req.requestedFormatId = fmt;
 	BYTE* data = NULL;
-	if (c->ClientFormatDataRequest(c, &req) == CHANNEL_RC_OK &&
-	    WaitForSingleObject(cb->responseEvent, timeoutMs) == WAIT_OBJECT_0)
+	if (c->ClientFormatDataRequest(c, &req) != CHANNEL_RC_OK)
+	{
+		LeaveCriticalSection(&cb->reqLock);
+		return NULL;
+	}
+	if (WaitForSingleObject(cb->responseEvent, timeoutMs) != WAIT_OBJECT_0)
+	{
+		EnterCriticalSection(&cb->lock);
+		cb->lateResponses++; /* відповідь ще прийде — і її не можна віддати наступному запиту */
+		LeaveCriticalSection(&cb->lock);
+	}
+	else
 	{
 		EnterCriticalSection(&cb->lock);
 		data = cb->responseOk ? cb->response : NULL;
