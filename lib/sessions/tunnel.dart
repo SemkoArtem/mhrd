@@ -79,13 +79,19 @@ Future<int> openTunnel(TunnelChannel channel, Map<String, Object?> request) =>
 Future<int> checkTunnel(TunnelChannel channel, Map<String, Object?> request) =>
     _request(channel, request, 'ok', request['target'] != null ? 'targetMs' : 'handshakeMs');
 
-/// Затримка до ПК крізь уже відкритий тунель сеансу, мс.
-Future<int> pingTunnel(TunnelChannel channel) {
+/// Номер запиту до тунелю: кілька сеансів ділять один процес, і відповіді (pong, listening)
+/// розрізняються за ним.
+int _nextRequestId = 1;
+
+/// Затримка до ПК крізь уже відкритий тунель, мс. [target] — «host:port» ПК (тунель може вести до
+/// кількох); null — до першого ПК тунелю.
+Future<int> pingTunnel(TunnelChannel channel, {String? target}) {
+  final id = _nextRequestId++;
   final done = Completer<int>();
   late final StreamSubscription<Map<String, Object?>> sub;
   sub = channel.events.listen(
     (e) {
-      if (e['event'] != 'pong' || done.isCompleted) return;
+      if (e['event'] != 'pong' || e['id'] != id || done.isCompleted) return;
       final ms = e['ms'];
       ms is int
           ? done.complete(ms)
@@ -95,9 +101,38 @@ Future<int> pingTunnel(TunnelChannel channel) {
       if (!done.isCompleted) done.completeError(const TunnelException(TunnelError.failed));
     },
   );
-  channel.send({'ping': true});
+  channel.send({'ping': true, 'id': id, if (target != null) 'target': target});
   return done.future
       .timeout(const Duration(seconds: 25), onTimeout: () => throw const TunnelException(TunnelError.unreachable))
+      .whenComplete(sub.cancel);
+}
+
+/// Ще один ПК ([target], «host:port») крізь уже відкритий тунель — для наступного сеансу з тим самим
+/// профілем. Повертає порт на 127.0.0.1.
+Future<int> forwardTunnel(TunnelChannel channel, String target) {
+  final id = _nextRequestId++;
+  final done = Completer<int>();
+  late final StreamSubscription<Map<String, Object?>> sub;
+  sub = channel.events.listen(
+    (e) {
+      if (e['id'] != id || done.isCompleted) return;
+      switch (e['event']) {
+        case 'listening':
+          final port = e['port'];
+          port is int ? done.complete(port) : done.completeError(const TunnelException(TunnelError.failed));
+        case 'forwardError':
+          final code = e['code'] is String ? e['code'] as String : '';
+          final err = TunnelError.values.where((x) => x.name == code).firstOrNull ?? TunnelError.failed;
+          done.completeError(TunnelException(err, '${e['detail'] ?? ''}'));
+      }
+    },
+    onDone: () {
+      if (!done.isCompleted) done.completeError(const TunnelException(TunnelError.failed));
+    },
+  );
+  channel.send({'forward': target, 'id': id});
+  return done.future
+      .timeout(const Duration(seconds: 30), onTimeout: () => throw const TunnelException(TunnelError.unreachable))
       .whenComplete(sub.cancel);
 }
 

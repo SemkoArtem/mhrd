@@ -32,6 +32,7 @@ type wireGuardConf struct {
 type wgDialer struct {
 	net *netstack.Net
 	dev *device.Device
+	up  time.Time // коли піднято пристрій — з цієї миті йде перше рукостискання
 }
 
 func (d *wgDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
@@ -44,20 +45,35 @@ func (d *wgDialer) Close() error {
 }
 
 // waitHandshake чекає першого рукостискання з сервером — перевірка, що тунель живий (сам по собі
-// WireGuard мовчить, доки нема трафіку; рукостискання запускає keepalive при Up).
+// WireGuard мовчить, доки нема трафіку; рукостискання запускає keepalive при Up). Повертає, скільки
+// воно тривало: за часом, який записав сам WireGuard (last_handshake_time), а не за кроком
+// опитування — інакше будь-який швидкий сервер показував би рівно крок (100 мс).
 func (d *wgDialer) waitHandshake(timeout time.Duration) (time.Duration, error) {
-	start := time.Now()
+	start := d.up // рукостискання почалось, щойно пристрій піднято
+	if start.IsZero() {
+		start = time.Now()
+	}
 	for time.Since(start) < timeout {
 		cfg, err := d.dev.IpcGet()
 		if err != nil {
 			return 0, err
 		}
+		var sec, nsec int64
 		for _, line := range strings.Split(cfg, "\n") {
-			if v, ok := strings.CutPrefix(line, "last_handshake_time_sec="); ok && v != "0" {
-				return time.Since(start), nil
+			if v, ok := strings.CutPrefix(line, "last_handshake_time_sec="); ok {
+				sec, _ = strconv.ParseInt(v, 10, 64)
+			} else if v, ok := strings.CutPrefix(line, "last_handshake_time_nsec="); ok {
+				nsec, _ = strconv.ParseInt(v, 10, 64)
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		if sec != 0 {
+			took := time.Unix(sec, nsec).Sub(start)
+			if took <= 0 || took > time.Since(start) {
+				took = time.Since(start) // годинник стрибнув — хоча б приблизно
+			}
+			return took, nil
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	return 0, fmt.Errorf("no handshake in %s", timeout)
 }
@@ -161,9 +177,10 @@ func startWireGuard(c *wireGuardConf) (dialer, error) {
 		dev.Close()
 		return nil, bad(err)
 	}
+	up := time.Now()
 	if err := dev.Up(); err != nil {
 		dev.Close()
 		return nil, &tunnelError{"start", err}
 	}
-	return &wgDialer{net: tnet, dev: dev}, nil
+	return &wgDialer{net: tnet, dev: dev, up: up}, nil
 }

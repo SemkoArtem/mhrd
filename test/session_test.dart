@@ -49,12 +49,16 @@ class FakeTunnel implements TunnelChannel {
   @override
   Stream<Map<String, Object?>> get events => _events.stream;
 
-  /// Відповідь тунелю ([script]) — на перший запит; на заміри затримки — 42 мс.
+  /// Відповідь тунелю ([script]) — на перший запит; на заміри затримки — 42 мс (з тим самим id); на
+  /// ще один ПК крізь тунель (forward) — порт 50124.
   @override
   void send(Map<String, Object?> message) {
     sent.add(message);
+    final id = message['id'];
     if (message['ping'] == true) {
-      scheduleMicrotask(() => _events.add({'event': 'pong', 'ms': 42}));
+      scheduleMicrotask(() => _events.add({'event': 'pong', 'ms': 42, 'id': id}));
+    } else if (message['forward'] != null) {
+      scheduleMicrotask(() => _events.add({'event': 'listening', 'port': 50124, 'id': id}));
     } else if (sent.length == 1) {
       for (final e in script) {
         scheduleMicrotask(() => _events.add(e));
@@ -386,6 +390,35 @@ void main() {
         s.disconnect();
         ch.exit.complete(0);
         await s.done;
+      });
+
+      test('другий сеанс через той самий тунель — той самий процес (forward), а не другий з тим самим ключем',
+          () async {
+        var started = 0;
+        m = SessionManager(repo,
+            enginePath: 'mhrd-session.exe',
+            channelFactory: (_) async => ch,
+            tunnelPath: 'mhrd-tunnel.exe',
+            tunnelFactory: (_) async {
+              started++;
+              return tun;
+            });
+        await repo.saveTunnel(const TunnelProfile(id: 'wg', name: 'WG', type: TunnelType.wireguard));
+        tun.script = [
+          {'event': 'listening', 'port': 50123}
+        ];
+        final viaWg = pc().copyWith(route: RouteKind.tunnel, routeRefId: () => 'wg');
+        await m.start(viaWg, username: 'u', password: 'p', width: 800, height: 600);
+        await m.start(viaWg.copyWith(id: 'pc2', host: '10.0.0.6'), username: 'u', password: 'p', width: 800, height: 600);
+        expect(started, 1);
+        expect(tun.sent.where((x) => x['forward'] == '10.0.0.6:3389'), hasLength(1));
+        final second = jsonDecode(utf8.decode(ch.sent.last.sublist(5))) as Map;
+        expect([second['host'], second['port']], ['127.0.0.1', 50124]);
+        expect(tun.sent.where((x) => x['watchPid'] == 4242), hasLength(2)); // тунель стежить за обома
+        // Перевірка маршруту й «Перевірити» — крізь відкритий тунель, без нового процесу.
+        expect(m.liveTunnel('wg'), same(tun));
+        expect(await m.health.measure(viaWg), 42);
+        expect(started, 1);
       });
 
       test('тунель не відкрився — зрозуміла помилка, сеансу немає, процес тунелю прибрано', () async {

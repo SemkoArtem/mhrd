@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/netip"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -126,8 +130,13 @@ func TestWireGuardHandshakeCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer d.Close()
-	if _, err := d.(*wgDialer).waitHandshake(10 * time.Second); err != nil {
+	took, err := d.(*wgDialer).waitHandshake(10 * time.Second)
+	if err != nil {
 		t.Fatalf("handshake: %v", err)
+	}
+	// На loopback рукостискання — мілісекунди; раніше крок опитування давав рівно 100 мс.
+	if took <= 0 || took >= 100*time.Millisecond {
+		t.Fatalf("handshake took %v, want a real loopback time (< 100 ms)", took)
 	}
 
 	stranger, _ := wgKeys(t)
@@ -138,5 +147,93 @@ func TestWireGuardHandshakeCheck(t *testing.T) {
 	defer d2.Close()
 	if _, err := d2.(*wgDialer).waitHandshake(2 * time.Second); err == nil {
 		t.Fatal("handshake with unknown client key should fail")
+	}
+}
+
+// Процес mhrd-tunnel у тесті — цей самий тестовий бінарник з MHRD_TUNNEL_MAIN=1.
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("MHRD_TUNNEL_MAIN") != "1" {
+		t.Skip("лише як процес тунелю для TestSharedTunnelProcess")
+	}
+	main()
+	os.Exit(0)
+}
+
+// Один процес на профіль: перший ПК — з першого запиту, ще один — forward з id; заміри затримки
+// відповідають тим самим id; stdin закрито й сеансів немає — процес виходить.
+func TestSharedTunnelProcess(t *testing.T) {
+	cPriv, cPub := wgKeys(t)
+	sPub, port := wgServer(t, cPub)
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$")
+	cmd.Env = append(os.Environ(), "MHRD_TUNNEL_MAIN=1")
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	events := bufio.NewScanner(stdout)
+	next := func() map[string]any {
+		t.Helper()
+		if !events.Scan() {
+			t.Fatalf("tunnel exited: %v", events.Err())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(events.Bytes(), &m); err != nil {
+			t.Fatalf("bad event %q", events.Text())
+		}
+		return m
+	}
+	send := func(v any) {
+		b, _ := json.Marshal(v)
+		stdin.Write(append(b, '\n'))
+	}
+	echoVia := func(port int) {
+		t.Helper()
+		c, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 10*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		c.SetDeadline(time.Now().Add(10 * time.Second))
+		c.Write([]byte("mhrd"))
+		buf := make([]byte, 4)
+		if _, err := io.ReadFull(c, buf); err != nil || string(buf) != "mhrd" {
+			t.Fatalf("echo via tunnel port %d: %q %v", port, buf, err)
+		}
+	}
+
+	send(map[string]any{"type": "wireguard", "target": "10.9.0.1:3389", "wireguard": clientConf(cPriv, sPub, port)})
+	first := next()
+	if first["event"] != "listening" {
+		t.Fatalf("first: %v", first)
+	}
+	echoVia(int(first["port"].(float64)))
+
+	send(map[string]any{"forward": "10.9.0.1:3389", "id": 7})
+	second := next()
+	if second["event"] != "listening" || second["id"] != float64(7) || second["port"] == first["port"] {
+		t.Fatalf("forward: %v", second)
+	}
+	echoVia(int(second["port"].(float64)))
+
+	send(map[string]any{"forward": "10.9.0.1:3390", "id": 8}) // там нічого не слухає
+	if e := next(); e["event"] != "forwardError" || e["id"] != float64(8) {
+		t.Fatalf("forward to closed port: %v", e)
+	}
+
+	send(map[string]any{"ping": true, "id": 9, "target": "10.9.0.1:3389"})
+	if e := next(); e["event"] != "pong" || e["id"] != float64(9) || e["ms"] == nil {
+		t.Fatalf("ping: %v", e)
+	}
+
+	stdin.Close() // застосунок закрився, сеансів немає — тунель виходить сам
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("tunnel did not exit after stdin closed")
 	}
 }
