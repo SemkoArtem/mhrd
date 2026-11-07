@@ -588,6 +588,10 @@ class _RoutesTab extends StatelessWidget {
                   field('name', l.name, mono: false),
                   _caption(dc, '[Interface]'),
                   field('privateKey', 'PrivateKey', secret: true),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(l.wgOneDeviceHint, style: TextStyle(color: t.textMuted, fontSize: 12.5)),
+                  ),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
@@ -760,6 +764,8 @@ class _RoutesTab extends StatelessWidget {
       ),
       _caption(context, l.builtInTunnels),
       Text(l.tunnelsHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
+      const SizedBox(height: 4),
+      Text(l.wgOneDeviceHint, style: TextStyle(color: t.textMuted, fontSize: 13)),
       const SizedBox(height: 8),
       for (final tu in repo.tunnels.values) _tunnelTile(context, tu),
       Wrap(spacing: 8, children: [

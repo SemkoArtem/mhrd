@@ -43,6 +43,9 @@ struct MhrdClipboard
 	BYTE* response;
 	UINT32 responseLen;
 	BOOL responseOk;
+	/* Запити, на які не дочекались відповіді (тайм-аут): сервер відповідає на кожен по черзі, тож
+	 * стільки наступних відповідей — запізнілі, і їх не можна віддати новому запиту. */
+	UINT32 lateResponses;
 
 	/* Файли з нашого буфера на момент запиту списку сервером (індекс = listIndex) */
 	UINT fileFormat; /* id формату FileGroupDescriptorW у цій системі */
@@ -386,6 +389,12 @@ static UINT on_server_format_data_response(CliprdrClientContext* c, const CLIPRD
 {
 	MhrdClipboard* cb = (MhrdClipboard*)c->custom;
 	EnterCriticalSection(&cb->lock);
+	if (cb->lateResponses > 0)
+	{
+		cb->lateResponses--; /* відповідь на запит, якого вже не чекаємо */
+		LeaveCriticalSection(&cb->lock);
+		return CHANNEL_RC_OK;
+	}
 	free(cb->response);
 	cb->response = NULL;
 	cb->responseLen = 0;
@@ -419,7 +428,12 @@ static HGLOBAL request_server_data(MhrdClipboard* cb, UINT fmt, DWORD timeoutMs)
 	if (c->ClientFormatDataRequest(c, &req) != CHANNEL_RC_OK)
 		return NULL;
 	if (WaitForSingleObject(cb->responseEvent, timeoutMs) != WAIT_OBJECT_0)
+	{
+		EnterCriticalSection(&cb->lock);
+		cb->lateResponses++;
+		LeaveCriticalSection(&cb->lock);
 		return NULL;
+	}
 
 	HGLOBAL h = NULL;
 	EnterCriticalSection(&cb->lock);

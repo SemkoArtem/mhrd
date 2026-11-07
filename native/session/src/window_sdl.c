@@ -13,6 +13,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <unistd.h> /* getpid */
 #endif
 
 #define RESIZE_DELAY_MS 300 /* SPEC: нова роздільність — через 300 мс після останньої зміни розміру */
@@ -1008,9 +1010,14 @@ static void save_thumbnail(void)
 	W.host.unlock(W.host.ctx);
 	if (!rgb)
 		return;
-	/* Спершу в тимчасовий файл, потім заміною — застосунок ніколи не прочитає недописаний. */
+	/* Спершу в тимчасовий файл, потім заміною — застосунок ніколи не прочитає недописаний. Ім'я —
+	 * з номером процесу: два сеанси до того самого ПК (різні акаунти) пишуть одну мініатюру. */
 	char tmp[1024];
-	SDL_snprintf(tmp, sizeof(tmp), "%s.tmp", W.cfg.thumbnailPath);
+#ifdef _WIN32
+	SDL_snprintf(tmp, sizeof(tmp), "%s.%lu.tmp", W.cfg.thumbnailPath, (unsigned long)GetCurrentProcessId());
+#else
+	SDL_snprintf(tmp, sizeof(tmp), "%s.%ld.tmp", W.cfg.thumbnailPath, (long)getpid());
+#endif
 	if (SDL_SaveBMP(rgb, tmp))
 	{
 #ifdef _WIN32
