@@ -369,6 +369,8 @@
   "unlockBiometricPhone": "Відбиток пальця",
   "authNeedPinPhone": "Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні).",
   "keyboardShiftsScreen": "Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)",
+  "backgroundSessions": "Сеанси у фоні",
+  "backgroundSessionsHint": "Сповіщення «Активних сеансів» не дає Android розірвати сеанс, поки MHRD не на екрані. Вимкнено — сеанс може обірватись, щойно ви перейдете в іншу програму.",
   "@activeSessions": {"placeholders": {"count": {"type": "int"}}},
   "authEditReason": "Редагування ключів тунелю MHRD",
   "authNeedPin": "Щоб редагувати ключі, увімкніть блокування PIN-кодом (Налаштування → Загальні) або Windows Hello.",

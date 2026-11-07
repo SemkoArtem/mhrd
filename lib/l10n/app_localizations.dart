@@ -2072,6 +2072,18 @@ abstract class AppLocalizations {
   /// **'Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)'**
   String get keyboardShiftsScreen;
 
+  /// No description provided for @backgroundSessions.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сеанси у фоні'**
+  String get backgroundSessions;
+
+  /// No description provided for @backgroundSessionsHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Сповіщення «Активних сеансів» не дає Android розірвати сеанс, поки MHRD не на екрані. Вимкнено — сеанс може обірватись, щойно ви перейдете в іншу програму.'**
+  String get backgroundSessionsHint;
+
   /// No description provided for @authEditReason.
   ///
   /// In uk, this message translates to:

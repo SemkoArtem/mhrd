@@ -1129,6 +1129,13 @@ class AppLocalizationsUk extends AppLocalizations {
       'Екранна клавіатура зсуває картинку сеансу (інакше — поверх неї)';
 
   @override
+  String get backgroundSessions => 'Сеанси у фоні';
+
+  @override
+  String get backgroundSessionsHint =>
+      'Сповіщення «Активних сеансів» не дає Android розірвати сеанс, поки MHRD не на екрані. Вимкнено — сеанс може обірватись, щойно ви перейдете в іншу програму.';
+
+  @override
   String get authEditReason => 'Редагування ключів тунелю MHRD';
 
   @override

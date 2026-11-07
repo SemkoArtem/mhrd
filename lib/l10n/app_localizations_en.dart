@@ -1128,6 +1128,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'On-screen keyboard pushes the session picture up (otherwise it covers it)';
 
   @override
+  String get backgroundSessions => 'Sessions in the background';
+
+  @override
+  String get backgroundSessionsHint =>
+      'The \"Active sessions\" notification keeps Android from closing a session while MHRD is not on screen. Off: a session may drop as soon as you switch to another app.';
+
+  @override
   String get authEditReason => 'Editing MHRD tunnel keys';
 
   @override

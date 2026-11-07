@@ -55,7 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
     ShellBridge.instance.pendingConnect.addListener(_onShellConnect);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _recentSource = repo..addListener(_syncRecent);
+      _recentSource = repo
+        ..addListener(_syncRecent)
+        ..addListener(_syncService); // перемикач «Сеанси у фоні»
       _syncRecent();
       _sessionsSource = AppScope.of(context).sessions..addListener(_syncService);
       _onShellConnect(); // запустили зі списку «Недавні» — підключаємось одразу
@@ -77,9 +79,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Repository? _recentSource; // за ним стежимо для «Недавніх» (у dispose контексту вже не можна)
   SessionManager? _sessionsSource; // за ним — для служби Android
 
-  /// Android: поки є активні сеанси — служба переднього плану зі сповіщенням «Активних сеансів: N».
+  /// Android: поки є активні сеанси — служба переднього плану зі сповіщенням «Активних сеансів: N»
+  /// (якщо її не вимкнули: Налаштування → «Сеанси у фоні»).
   void _syncService() {
-    final n = _sessionsSource?.sessions.where((s) => s.isActive).length ?? 0;
+    final on = repo.settings.backgroundSessions;
+    final n = on ? _sessionsSource?.sessions.where((s) => s.isActive).length ?? 0 : 0;
     if (mounted) AndroidPaths.updateSessions(n, context.l10n.activeSessions(n));
   }
 
@@ -90,7 +94,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     ShellBridge.instance.pendingConnect.removeListener(_onShellConnect);
-    _recentSource?.removeListener(_syncRecent);
+    _recentSource
+      ?..removeListener(_syncRecent)
+      ..removeListener(_syncService);
     _sessionsSource?.removeListener(_syncService);
     _quick.dispose();
     _quickFocus.dispose();

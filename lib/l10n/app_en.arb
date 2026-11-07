@@ -337,6 +337,8 @@
   "unlockBiometricPhone": "Fingerprint",
   "authNeedPinPhone": "To edit keys, turn on the PIN lock (Settings → General).",
   "keyboardShiftsScreen": "On-screen keyboard pushes the session picture up (otherwise it covers it)",
+  "backgroundSessions": "Sessions in the background",
+  "backgroundSessionsHint": "The \"Active sessions\" notification keeps Android from closing a session while MHRD is not on screen. Off: a session may drop as soon as you switch to another app.",
   "authEditReason": "Editing MHRD tunnel keys",
   "authNeedPin": "To edit keys, turn on the PIN lock (Settings → General) or Windows Hello.",
   "sessionStartFailed": "Couldn't start the session: {detail}",

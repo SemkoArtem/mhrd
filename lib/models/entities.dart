@@ -280,6 +280,7 @@ class AppSettings {
     this.bar = const BarPlacement(),
     this.sidebarShown = true,
     this.keyboardShiftsScreen = false,
+    this.backgroundSessions = true,
     this.touchAsMouse = false,
     this.collapsedGroups = const [noGroupSection],
     this.screenTemplates = const [],
@@ -310,6 +311,10 @@ class AppSettings {
 
   /// Телефон: екранна клавіатура зсуває картинку сеансу вгору (інакше відкривається поверх неї).
   final bool keyboardShiftsScreen;
+
+  /// Телефон: поки відкрито сеанс, служба переднього плану зі сповіщенням «Активних сеансів: N» —
+  /// інакше Android може розірвати сеанс, коли MHRD не на екрані.
+  final bool backgroundSessions;
 
   /// Телефон: пальці керують курсором, як тачпад («Миша»), а не дотиками у Windows («Дотик»).
   final bool touchAsMouse;
@@ -358,6 +363,7 @@ class AppSettings {
     BarPlacement? bar,
     bool? sidebarShown,
     bool? keyboardShiftsScreen,
+    bool? backgroundSessions,
     bool? touchAsMouse,
     List<String>? collapsedGroups,
     List<ScreenTemplate>? screenTemplates,
@@ -378,6 +384,7 @@ class AppSettings {
         bar: bar ?? this.bar,
         sidebarShown: sidebarShown ?? this.sidebarShown,
         keyboardShiftsScreen: keyboardShiftsScreen ?? this.keyboardShiftsScreen,
+        backgroundSessions: backgroundSessions ?? this.backgroundSessions,
         touchAsMouse: touchAsMouse ?? this.touchAsMouse,
         collapsedGroups: collapsedGroups ?? this.collapsedGroups,
         screenTemplates: screenTemplates ?? this.screenTemplates,
@@ -399,6 +406,7 @@ class AppSettings {
         'bar': bar.toJson(),
         'sidebarShown': sidebarShown,
         'keyboardShiftsScreen': keyboardShiftsScreen,
+        'backgroundSessions': backgroundSessions,
         'touchAsMouse': touchAsMouse,
         'collapsedGroups': collapsedGroups,
         'screenTemplates': [for (final t in screenTemplates) t.toJson()],
@@ -421,6 +429,7 @@ class AppSettings {
         bar: BarPlacement.fromJson(mapOr(j['bar'])),
         sidebarShown: boolOr(j['sidebarShown'], true),
         keyboardShiftsScreen: boolOr(j['keyboardShiftsScreen'], false),
+        backgroundSessions: boolOr(j['backgroundSessions'], true),
         touchAsMouse: boolOr(j['touchAsMouse'], false),
         collapsedGroups: j.containsKey('collapsedGroups') ? stringList(j['collapsedGroups']) : const [noGroupSection],
         screenTemplates: [

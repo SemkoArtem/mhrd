@@ -195,6 +195,13 @@ class _GeneralTab extends StatelessWidget {
         title: Text(l.keepScreenAwake),
         onChanged: (v) => set(s.copyWith(keepScreenAwake: v)),
       ),
+      if (Platform.isAndroid)
+        SwitchListTile(
+          value: s.backgroundSessions,
+          title: Text(l.backgroundSessions),
+          subtitle: Text(l.backgroundSessionsHint),
+          onChanged: (v) => set(s.copyWith(backgroundSessions: v)),
+        ),
       if (mobile)
         SwitchListTile(
           value: s.keyboardShiftsScreen,
