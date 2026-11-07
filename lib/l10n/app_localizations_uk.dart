@@ -1068,6 +1068,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get wgGenerateKeys => 'Згенерувати ключі';
 
   @override
+  String get wgOneDeviceHint =>
+      'Один ключ WireGuard — на одному пристрої: той самий .conf одночасно на ПК і телефоні сервер вважає одним клієнтом, і сеанси обриваються. Для кожного пристрою — свій ключ (кнопка «Згенерувати ключі»).';
+
+  @override
   String get wgYourPublicKey =>
       'Ваш публічний ключ — додайте його на сервері WireGuard як [Peer] цього пристрою';
 

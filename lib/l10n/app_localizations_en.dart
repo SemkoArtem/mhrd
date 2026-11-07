@@ -1067,6 +1067,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get wgGenerateKeys => 'Generate keys';
 
   @override
+  String get wgOneDeviceHint =>
+      'One WireGuard key per device: the same .conf on a PC and a phone at once looks like one client to the server, and sessions drop. Give each device its own key (Generate keys).';
+
+  @override
   String get wgYourPublicKey =>
       'Your public key: add it on the WireGuard server as this device\'s [Peer]';
 

@@ -320,6 +320,7 @@
   "wgCreateManual": "Create manually",
   "wgNewTitle": "New WireGuard tunnel",
   "wgGenerateKeys": "Generate keys",
+  "wgOneDeviceHint": "One WireGuard key per device: the same .conf on a PC and a phone at once looks like one client to the server, and sessions drop. Give each device its own key (Generate keys).",
   "wgYourPublicKey": "Your public key: add it on the WireGuard server as this device's [Peer]",
   "wgKeyInvalid": "A key must be 32 bytes in Base64: 44 characters ending with “=”.",
   "wgAddressRequired": "Enter Address — this device's address inside the tunnel, e.g. 10.8.0.2/32.",

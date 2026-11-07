@@ -1970,6 +1970,12 @@ abstract class AppLocalizations {
   /// **'Згенерувати ключі'**
   String get wgGenerateKeys;
 
+  /// No description provided for @wgOneDeviceHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Один ключ WireGuard — на одному пристрої: той самий .conf одночасно на ПК і телефоні сервер вважає одним клієнтом, і сеанси обриваються. Для кожного пристрою — свій ключ (кнопка «Згенерувати ключі»).'**
+  String get wgOneDeviceHint;
+
   /// No description provided for @wgYourPublicKey.
   ///
   /// In uk, this message translates to:

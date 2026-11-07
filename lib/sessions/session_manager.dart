@@ -181,23 +181,18 @@ class SessionManager extends ChangeNotifier {
     }
   }
 
-  /// Відкриті тунелі: один процес mhrd-tunnel на профіль (з тими самими налаштуваннями) для всіх
-  /// його сеансів. Ключ — [_sharedKey].
+  /// Відкриті тунелі: один процес mhrd-tunnel на ключ WireGuard для всіх сеансів — хоч з одного
+  /// профілю, хоч з кількох з тим самим ключем (скопійований профіль). Ключ — [_sharedKey].
   final _sharedTunnels = <String, TunnelChannel>{};
-  final _sharedProfiles = <TunnelChannel, String?>{};
 
-  /// Профіль плюс його налаштування: змінили ключі чи сервер — новий процес, а не старий тунель.
-  static String _sharedKey(String? profileId, Map<String, Object?> request) =>
-      '$profileId|${jsonEncode(request['wireguard'])}';
+  /// Для сервера WireGuard клієнт — це його ключ: два процеси з тим самим ключем до того самого
+  /// сервера він вважає одним клієнтом і перемикається між ними (сеанси обриваються).
+  static String _sharedKey(Map<String, Object?> wireguard) =>
+      jsonEncode([wireguard['privateKey'], wireguard['peerPublicKey']]);
 
-  /// Уже відкритий тунель профілю [profileId] (сеанс через нього працює) або null. Перевірки маршруту
-  /// йдуть крізь нього: окремий процес з тим самим ключем перебив би з'єднання сеансу з сервером.
-  TunnelChannel? liveTunnel(String? profileId) {
-    for (final e in _sharedProfiles.entries) {
-      if (e.value == profileId) return e.key;
-    }
-    return null;
-  }
+  /// Уже відкритий тунель з ключем із [wireguard] (сеанс через нього працює) або null. Перевірки
+  /// маршруту йдуть крізь нього: окремий процес з тим самим ключем перебив би з'єднання сеансу.
+  TunnelChannel? liveTunnel(Map<String, Object?> wireguard) => _sharedTunnels[_sharedKey(wireguard)];
 
   /// Акаунт шлюзу, для якого треба спитати пароль (свій акаунт без збереженого пароля), або null.
   Credential? gatewayAccountToAsk(Connection c) {
@@ -232,9 +227,9 @@ class SessionManager extends ChangeNotifier {
     if (tunnelReq != null) {
       final texe = tunnelPath;
       if (texe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-      // Тунель цього профілю вже відкрито іншим сеансом — ще один ПК крізь нього, а не другий процес
+      // Тунель з цим ключем уже відкрито іншим сеансом — ще один ПК крізь нього, а не другий процес
       // з тим самим ключем WireGuard (сервер перемикався б між ними, і сеанси обривались би).
-      final key = _sharedKey(c.routeRefId, tunnelReq);
+      final key = _sharedKey(tunnelReq['wireguard']! as Map<String, Object?>);
       final shared = _sharedTunnels[key];
       if (shared != null) {
         try {
@@ -258,11 +253,9 @@ class SessionManager extends ChangeNotifier {
         }
         tunnel = t;
         _sharedTunnels[key] = t;
-        _sharedProfiles[t] = c.routeRefId;
         // Процес тунелю вийде сам, коли закінчиться останній його сеанс.
         t.events.listen((_) {}, onDone: () {
           if (identical(_sharedTunnels[key], t)) _sharedTunnels.remove(key);
-          _sharedProfiles.remove(t);
         }, onError: (Object _) {});
       }
       host = '127.0.0.1'; // тунель слухає лише локально

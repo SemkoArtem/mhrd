@@ -228,6 +228,18 @@ func TestSharedTunnelProcess(t *testing.T) {
 		t.Fatalf("ping: %v", e)
 	}
 
+	// ПК, що мовчить (такої адреси за сервером немає — з'єднання висить до 20 с), не затримує
+	// заміри до живого ПК.
+	send(map[string]any{"ping": true, "id": 10, "target": "10.9.0.77:3389"})
+	send(map[string]any{"ping": true, "id": 11, "target": "10.9.0.1:3389"})
+	start := time.Now()
+	if e := next(); e["id"] != float64(11) || e["ms"] == nil {
+		t.Fatalf("live PC ping should come first: %v", e)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("live PC ping waited behind the silent one: %v", time.Since(start))
+	}
+
 	stdin.Close() // застосунок закрився, сеансів немає — тунель виходить сам
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
