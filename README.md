@@ -5,7 +5,7 @@
 бекап і власні теми. Ядро протоколу — [FreeRDP 3](https://github.com/FreeRDP/FreeRDP),
 інтерфейс — Flutter.
 
-> **Статус:** Windows — стабільні випуски; Linux — альфа; Android — бета.
+> **Статус:** Windows — стабільні випуски; Linux — альфа; Android — стабільні випуски.
 
 ## Завантажити й встановити
 
@@ -87,7 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/SemkoArtem/mhrd/linux/linux/install
 
 ## У планах
 
-- Linux — зі статусу альфи до стабільних випусків; Android — плавніша картинка, H.264, файли; згодом macOS.
+- Linux — зі статусу альфи до стабільних випусків; згодом macOS.
 
 Повний перелік і критерії готовності — у [`docs/SPEC.md`](docs/SPEC.md) → «Етапи робіт».
 
@@ -172,7 +172,7 @@ pinning, auto-reconnect, H.264, a built-in WireGuard tunnel without admin rights
 SOCKS5/HTTP proxy and RD Gateway, HiDPI-exact rendering with dynamic resolution, full screen with a hideable bar,
 clipboard (text, images, files) both ways, shared folders with access modes (full /
 add-only / read-only), sound and microphone, an encrypted backup, themes, Ukrainian and
-English UI. Linux (alpha) and Android (beta) builds are available too. License: AGPLv3.
+English UI. Linux (alpha) and Android builds are available too. License: AGPLv3.
 
 **Install:** Windows (PowerShell): `irm https://raw.githubusercontent.com/SemkoArtem/mhrd/main/windows/install.ps1 | iex`;
 Linux: `curl -fsSL https://raw.githubusercontent.com/SemkoArtem/mhrd/linux/linux/install.sh | bash`;
