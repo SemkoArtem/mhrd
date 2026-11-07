@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transfer_added">Додано до файлів MHRD: %1$d. Під час сеансу вони на ПК — на диску «Phone».</string>
+    <string name="transfer_failed">Не вдалося додати файл у MHRD.</string>
+</resources>

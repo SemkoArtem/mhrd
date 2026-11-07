@@ -1135,6 +1135,41 @@ class AppLocalizationsEn extends AppLocalizations {
       'The \"Active sessions\" notification keeps Android from closing a session while MHRD is not on screen. Off: a session may drop as soon as you switch to another app.';
 
   @override
+  String get transferTitle => 'Shared files';
+
+  @override
+  String get transferHint =>
+      'During a session this folder is the \"Phone\" drive in This PC on the remote PC. Copy files there on the PC and they appear here; add them here (with + or Share → MHRD from any app) and they are on the PC.';
+
+  @override
+  String get transferEmpty => 'Nothing here yet.';
+
+  @override
+  String get transferAdd => 'Add files';
+
+  @override
+  String transferAdded(int count) {
+    return 'Files added: $count';
+  }
+
+  @override
+  String get transferOpen => 'Open';
+
+  @override
+  String get transferShare => 'Share';
+
+  @override
+  String get transferSave => 'Save to…';
+
+  @override
+  String get transferNoApp => 'No app can open this file.';
+
+  @override
+  String transferDeleteTitle(String name) {
+    return 'Delete “$name”?';
+  }
+
+  @override
   String get authEditReason => 'Editing MHRD tunnel keys';
 
   @override

@@ -16,6 +16,30 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val SAVE_REQUEST = 10
         private const val OPEN_REQUEST = 11
+        private const val IMPORT_REQUEST = 12
+    }
+
+    // «Поділитися → MHRD» з іншої програми: файли — у теку обміну (на ПК — диск «Phone»).
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) acceptShared(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        acceptShared(intent)
+    }
+
+    private fun acceptShared(intent: Intent?) {
+        val uris = Transfer.sharedUris(intent)
+        if (uris.isEmpty()) return
+        Thread {
+            val n = Transfer.importUris(applicationContext, uris)
+            runOnUiThread {
+                val text = if (n > 0) getString(R.string.transfer_added, n) else getString(R.string.transfer_failed)
+                android.widget.Toast.makeText(this, text, android.widget.Toast.LENGTH_LONG).show()
+            }
+        }.start()
     }
 
     private var askedNotifications = false
@@ -32,8 +56,64 @@ class MainActivity : FlutterFragmentActivity() {
                         "nativeLibraryDir" to applicationInfo.nativeLibraryDir,
                         "filesDir" to filesDir.absolutePath,
                         "cacheDir" to cacheDir.absolutePath,
+                        "transferDir" to Transfer.dir(this).absolutePath,
                     )
                 )
+                "transferOpen", "transferShare" -> {
+                    // Файл із теки обміну — у програму телефона (переглянути / надіслати далі).
+                    val file = call.argument<String>("path")?.let { Transfer.resolve(this, it) }
+                    if (file == null) {
+                        result.success(false)
+                    } else {
+                        val uri = Transfer.uriFor(this, file)
+                        val intent = if (call.method == "transferOpen") {
+                            Intent(Intent.ACTION_VIEW).setDataAndType(uri, Transfer.mimeOf(file))
+                        } else {
+                            Intent.createChooser(
+                                Intent(Intent.ACTION_SEND).setType(Transfer.mimeOf(file)).putExtra(Intent.EXTRA_STREAM, uri)
+                                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                                file.name,
+                            )
+                        }
+                        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        try {
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false) // немає програми для такого файлу
+                        }
+                    }
+                }
+                "transferSave" -> {
+                    // «Зберегти як» для файлу з теки обміну — потоком, без завантаження в пам'ять.
+                    val file = call.argument<String>("path")?.let { Transfer.resolve(this, it) }
+                    if (file == null || pendingSave != null) {
+                        result.success(null)
+                    } else {
+                        pendingSave = result
+                        pendingFile = file
+                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+                            .addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType(Transfer.mimeOf(file))
+                            .putExtra(Intent.EXTRA_TITLE, file.name)
+                        startActivityForResult(intent, SAVE_REQUEST)
+                    }
+                }
+                "transferImport" -> {
+                    // Додати файли в теку обміну з пам'яті телефона.
+                    if (pendingImport != null) {
+                        result.success(0)
+                    } else {
+                        pendingImport = result
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                            .addCategory(Intent.CATEGORY_OPENABLE)
+                            .setType("*/*")
+                            .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                            .putExtra("android.content.extra.SHOW_ADVANCED", true)
+                            .putExtra("android.content.extra.FANCY", true)
+                        startActivityForResult(intent, IMPORT_REQUEST)
+                    }
+                }
                 "sessions" -> {
                     val count = call.argument<Int>("count") ?: 0
                     if (count > 0) askNotifications()
@@ -98,7 +178,9 @@ class MainActivity : FlutterFragmentActivity() {
 
     private var pendingSave: MethodChannel.Result? = null
     private var pendingBytes: ByteArray? = null
+    private var pendingFile: java.io.File? = null // «Зберегти як» для файлу з теки обміну
     private var pendingOpen: MethodChannel.Result? = null
+    private var pendingImport: MethodChannel.Result? = null
 
     /** Вибрані файли → [{name, bytes}] (до 64 МБ кожен — бекап, конфіг, .rdp, картинка). */
     private fun readPicked(data: Intent?): List<Map<String, Any>> {
@@ -128,6 +210,25 @@ class MainActivity : FlutterFragmentActivity() {
     @Deprecated("startActivityForResult — найпростіше, що працює з Android 7")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == IMPORT_REQUEST) {
+            val result = pendingImport ?: return
+            pendingImport = null
+            val uris = mutableListOf<Uri>()
+            if (resultCode == RESULT_OK) {
+                data?.clipData?.let { clip -> for (i in 0 until clip.itemCount) uris.add(clip.getItemAt(i).uri) }
+                if (uris.isEmpty()) data?.data?.let { uris.add(it) }
+            }
+            if (uris.isEmpty()) {
+                result.success(0)
+                return
+            }
+            // Копіювання може бути довгим (відео) — не в головному потоці.
+            Thread {
+                val n = Transfer.importUris(applicationContext, uris)
+                runOnUiThread { result.success(n) }
+            }.start()
+            return
+        }
         if (requestCode == OPEN_REQUEST) {
             val result = pendingOpen ?: return
             pendingOpen = null
@@ -145,11 +246,26 @@ class MainActivity : FlutterFragmentActivity() {
         if (requestCode != SAVE_REQUEST) return
         val result = pendingSave ?: return
         val bytes = pendingBytes
+        val file = pendingFile
         pendingSave = null
         pendingBytes = null
+        pendingFile = null
         val uri = data?.data
-        if (resultCode != RESULT_OK || uri == null || bytes == null) {
+        if (resultCode != RESULT_OK || uri == null || (bytes == null && file == null)) {
             result.success(null) // скасовано
+            return
+        }
+        if (file != null) {
+            Thread {
+                try {
+                    contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                        file.inputStream().use { it.copyTo(out, 256 * 1024) }
+                    }
+                    runOnUiThread { result.success(uri.lastPathSegment ?: uri.toString()) }
+                } catch (e: Exception) {
+                    runOnUiThread { result.error("write", e.message, null) }
+                }
+            }.start()
             return
         }
         try {

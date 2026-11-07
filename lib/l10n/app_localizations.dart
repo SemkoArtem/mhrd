@@ -2084,6 +2084,66 @@ abstract class AppLocalizations {
   /// **'Сповіщення «Активних сеансів» не дає Android розірвати сеанс, поки MHRD не на екрані. Вимкнено — сеанс може обірватись, щойно ви перейдете в іншу програму.'**
   String get backgroundSessionsHint;
 
+  /// No description provided for @transferTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Файли обміну'**
+  String get transferTitle;
+
+  /// No description provided for @transferHint.
+  ///
+  /// In uk, this message translates to:
+  /// **'Під час сеансу ця тека — диск «Phone» у «Цей ПК» на віддаленому ПК. Скопіюйте туди файли на ПК — вони з\'являться тут; додайте тут (кнопкою «+» чи «Поділитися → MHRD» з будь-якої програми) — вони будуть на ПК.'**
+  String get transferHint;
+
+  /// No description provided for @transferEmpty.
+  ///
+  /// In uk, this message translates to:
+  /// **'Поки порожньо.'**
+  String get transferEmpty;
+
+  /// No description provided for @transferAdd.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додати файли'**
+  String get transferAdd;
+
+  /// No description provided for @transferAdded.
+  ///
+  /// In uk, this message translates to:
+  /// **'Додано файлів: {count}'**
+  String transferAdded(int count);
+
+  /// No description provided for @transferOpen.
+  ///
+  /// In uk, this message translates to:
+  /// **'Відкрити'**
+  String get transferOpen;
+
+  /// No description provided for @transferShare.
+  ///
+  /// In uk, this message translates to:
+  /// **'Поділитися'**
+  String get transferShare;
+
+  /// No description provided for @transferSave.
+  ///
+  /// In uk, this message translates to:
+  /// **'Зберегти в…'**
+  String get transferSave;
+
+  /// No description provided for @transferNoApp.
+  ///
+  /// In uk, this message translates to:
+  /// **'Немає програми, щоб відкрити цей файл.'**
+  String get transferNoApp;
+
+  /// No description provided for @transferDeleteTitle.
+  ///
+  /// In uk, this message translates to:
+  /// **'Видалити «{name}»?'**
+  String transferDeleteTitle(String name);
+
   /// No description provided for @authEditReason.
   ///
   /// In uk, this message translates to:

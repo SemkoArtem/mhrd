@@ -40,7 +40,28 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- «Поділитися → MHRD»: файли — у теку обміну (на ПК під час сеансу — диск «Phone»). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
         </activity>
+        <!-- Файли теки обміну — іншим програмам (відкрити, поділитися) лише за тимчасовим дозволом. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="ua.mhrd.mhrd.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/transfer_paths"/>
+        </provider>
         <service
             android:name=".SessionService"
             android:exported="false"

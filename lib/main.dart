@@ -40,7 +40,8 @@ Future<void> main(List<String> args) async {
       channelFactory:
           android == null ? null : (exe) => ProcessChannel.start(exe, environment: android.environment),
       log: SessionLog(Directory('${dir.path}${Platform.pathSeparator}logs')),
-      files: AppFiles(dir));
+      files: AppFiles(dir),
+      phoneFolder: android?.transferDir);
   sessions.health.start(); // тунелі й проксі — перевірка зараз і кожні 5 хв
   runApp(MhrdApp(repo: repo, sessions: sessions, autoBackup: AutoBackup(repo)));
 }

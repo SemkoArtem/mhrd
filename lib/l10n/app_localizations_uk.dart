@@ -1136,6 +1136,41 @@ class AppLocalizationsUk extends AppLocalizations {
       'Сповіщення «Активних сеансів» не дає Android розірвати сеанс, поки MHRD не на екрані. Вимкнено — сеанс може обірватись, щойно ви перейдете в іншу програму.';
 
   @override
+  String get transferTitle => 'Файли обміну';
+
+  @override
+  String get transferHint =>
+      'Під час сеансу ця тека — диск «Phone» у «Цей ПК» на віддаленому ПК. Скопіюйте туди файли на ПК — вони з\'являться тут; додайте тут (кнопкою «+» чи «Поділитися → MHRD» з будь-якої програми) — вони будуть на ПК.';
+
+  @override
+  String get transferEmpty => 'Поки порожньо.';
+
+  @override
+  String get transferAdd => 'Додати файли';
+
+  @override
+  String transferAdded(int count) {
+    return 'Додано файлів: $count';
+  }
+
+  @override
+  String get transferOpen => 'Відкрити';
+
+  @override
+  String get transferShare => 'Поділитися';
+
+  @override
+  String get transferSave => 'Зберегти в…';
+
+  @override
+  String get transferNoApp => 'Немає програми, щоб відкрити цей файл.';
+
+  @override
+  String transferDeleteTitle(String name) {
+    return 'Видалити «$name»?';
+  }
+
+  @override
   String get authEditReason => 'Редагування ключів тунелю MHRD';
 
   @override

@@ -7,9 +7,13 @@ import '../sessions/frame_buffer.dart';
 /// Android: теки застосунку з MainActivity (канал «mhrd/android»). Модуль сеансу лежить у теці
 /// бібліотек застосунку як libmhrd_session.so — лише звідти Android дозволяє його запускати.
 class AndroidPaths {
-  const AndroidPaths({required this.nativeLibraryDir, required this.filesDir, required this.cacheDir});
+  const AndroidPaths(
+      {required this.nativeLibraryDir, required this.filesDir, required this.cacheDir, required this.transferDir});
 
   final String nativeLibraryDir, filesDir, cacheDir;
+
+  /// Тека обміну файлами з ПК (під час сеансу — диск «Phone» на ПК; MainActivity → Transfer.kt).
+  final String transferDir;
 
   static const _channel = MethodChannel('mhrd/android');
 
@@ -19,7 +23,11 @@ class AndroidPaths {
     try {
       final m = await _channel.invokeMapMethod<String, String>('paths');
       if (m == null) return null;
-      return AndroidPaths(nativeLibraryDir: m['nativeLibraryDir']!, filesDir: m['filesDir']!, cacheDir: m['cacheDir']!);
+      return AndroidPaths(
+          nativeLibraryDir: m['nativeLibraryDir']!,
+          filesDir: m['filesDir']!,
+          cacheDir: m['cacheDir']!,
+          transferDir: m['transferDir']!);
     } on PlatformException {
       return null;
     } on MissingPluginException {
@@ -55,6 +63,20 @@ class AndroidPaths {
           if (m['bytes'] case final Uint8List bytes) (name, bytes),
     ];
   }
+
+  /// Файл із теки обміну — відкрити в програмі телефона. false — немає програми для такого файлу.
+  static Future<bool> transferOpen(String path) async =>
+      await _channel.invokeMethod<bool>('transferOpen', {'path': path}) ?? false;
+
+  /// Файл із теки обміну — «Поділитися» (месенджер, пошта, хмара…).
+  static Future<bool> transferShare(String path) async =>
+      await _channel.invokeMethod<bool>('transferShare', {'path': path}) ?? false;
+
+  /// Файл із теки обміну — «Зберегти як» (Завантаження тощо). Назва збереженого або null — скасовано.
+  static Future<String?> transferSave(String path) => _channel.invokeMethod<String>('transferSave', {'path': path});
+
+  /// Додати файли з пам'яті телефона в теку обміну. Повертає, скільки скопійовано.
+  static Future<int> transferImport() async => await _channel.invokeMethod<int>('transferImport') ?? 0;
 
   /// «Не вимикати екран» на час сеансу.
   static Future<void> keepScreenOn(bool on) async {

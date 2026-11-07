@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transfer_added">Added to MHRD files: %1$d. During a session they are on the "Phone" drive on the PC.</string>
+    <string name="transfer_failed">Could not add the file to MHRD.</string>
+</resources>

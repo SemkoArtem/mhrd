@@ -27,6 +27,7 @@ import 'edit_connection_screen.dart';
 import 'file_actions.dart';
 import 'session_screen.dart';
 import 'settings_screen.dart';
+import 'transfer_screen.dart';
 import 'widgets/pc_card.dart';
 
 /// Фільтр списку: усі, нещодавні, без групи («Збережені ПК») або конкретна група.
@@ -911,6 +912,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 onSubmitted: (_) => _quickConnect(),
               ),
             ),
+          ),
+        // Android: тека обміну файлами з ПК (диск «Phone» у сеансі).
+        if (AppScope.of(context).sessions.phoneFolder case final dir?)
+          IconButton(
+            tooltip: l.transferTitle,
+            icon: const Icon(Icons.folder_shared_outlined),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => TransferScreen(dir: dir))),
           ),
         SizedBox(width: narrow ? 4 : 12),
         PopupMenuButton<String>(

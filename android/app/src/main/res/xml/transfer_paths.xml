@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider: назовні видно лише теку обміну (Transfer.kt), а не решту даних MHRD. -->
+<paths>
+    <files-path name="transfer" path="transfer/" />
+</paths>
