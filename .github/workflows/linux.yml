@@ -92,5 +92,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" build/dist/* --prerelease --verify-tag \
-            --title "MHRD ${{ steps.ver.outputs.version }} для Linux" \
+            --title "MHRD ${{ steps.ver.outputs.version }} for Linux" \
             --notes-file "docs/releases/$GITHUB_REF_NAME.md"
