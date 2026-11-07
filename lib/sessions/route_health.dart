@@ -74,7 +74,7 @@ class RouteHealth extends ChangeNotifier {
     this.tunnelPath,
     TunnelFactory? tunnelFactory,
     this.interval = const Duration(minutes: 5),
-    this.liveTunnel,
+    this.withTunnel,
   }) : _tunnelFactory = tunnelFactory ?? TunnelProcess.start;
 
   final Repository repo;
@@ -82,9 +82,10 @@ class RouteHealth extends ChangeNotifier {
   final TunnelFactory _tunnelFactory;
   final Duration interval;
 
-  /// Уже відкритий сеансом тунель з тим самим ключем WireGuard (SessionManager.liveTunnel): перевірки
-  /// йдуть крізь нього — окремий процес з тим самим ключем перебив би з'єднання сеансу з сервером.
-  final TunnelChannel? Function(Map<String, Object?> wireguard)? liveTunnel;
+  /// Черга ключа WireGuard (SessionManager.withTunnel): перевірка йде крізь уже відкритий тунель з
+  /// цим ключем, а якщо його немає — рукостискання, але ніколи одночасно з відкриттям тунелю сеансу.
+  final Future<int> Function(Map<String, Object?> wireguard, Future<int> Function(TunnelChannel? live) fn)?
+      withTunnel;
 
   final _status = <String, RouteStatus>{};
   final _running = <String, Future<void>>{};
@@ -172,21 +173,31 @@ class RouteHealth extends ChangeNotifier {
 
   /// Рукостискання з сервером WireGuard за налаштуваннями [wireguard] (з ключами) — і для ще не
   /// збереженого профілю, щоб перевірити його перед збереженням. Повертає мс.
-  Future<int> checkWireGuard(Map<String, Object?> wireguard) async {
-    // Тунель з цим ключем уже працює (у ньому сеанс) — затримка крізь нього, без нового рукостискання.
-    final live = liveTunnel?.call(wireguard);
-    if (live != null) return pingTunnel(live);
+  Future<int> checkWireGuard(Map<String, Object?> wireguard) => _inQueue(wireguard, (live) async {
+        // Тунель з цим ключем уже працює (у ньому сеанс) — затримка крізь нього, без рукостискання.
+        if (live != null) return pingTunnel(live);
+        return _handshake({
+          'type': 'wireguard',
+          'check': true,
+          'wireguard': {...wireguard}..remove('extraPeersIgnored'),
+        }, const Duration(seconds: 30));
+      });
+
+  /// У черзі ключа (SessionManager.withTunnel): рукостискання перевірки й відкриття тунелю для
+  /// сеансу з тим самим ключем ніколи не йдуть одночасно.
+  Future<int> _inQueue(Map<String, Object?> wireguard, Future<int> Function(TunnelChannel? live) fn) {
+    final run = withTunnel;
+    return run != null ? run(wireguard, fn) : fn(null);
+  }
+
+  /// Окремий процес тунелю лише на час перевірки.
+  Future<int> _handshake(Map<String, Object?> request, Duration timeout) async {
     final exe = tunnelPath;
     if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-    final request = {
-      'type': 'wireguard',
-      'check': true,
-      'wireguard': {...wireguard}..remove('extraPeersIgnored'),
-    };
     final ch = await _tunnelFactory(exe);
     try {
-      return await checkTunnel(ch, request).timeout(const Duration(seconds: 30),
-          onTimeout: () => throw const TunnelException(TunnelError.handshake));
+      return await checkTunnel(ch, request)
+          .timeout(timeout, onTimeout: () => throw const TunnelException(TunnelError.handshake));
     } finally {
       ch.kill();
     }
@@ -212,21 +223,11 @@ class RouteHealth extends ChangeNotifier {
         final t = repo.tunnels[c.routeRefId];
         if (t == null) throw const RouteException(RouteError.tunnelMissing);
         final wireguard = await repo.wireGuardConfig(t);
-        final open = liveTunnel?.call(wireguard);
-        if (open != null) return pingTunnel(open, target: target);
-        final exe = tunnelPath;
-        if (exe == null) throw const RouteException(RouteError.tunnelEngineMissing);
-        final ch = await _tunnelFactory(exe);
-        try {
-          return await checkTunnel(ch, {
-            'type': 'wireguard',
-            'check': true,
-            'target': target,
-            'wireguard': wireguard,
-          }).timeout(const Duration(seconds: 45), onTimeout: () => throw const TunnelException(TunnelError.handshake));
-        } finally {
-          ch.kill();
-        }
+        return _inQueue(wireguard, (live) async {
+          if (live != null) return pingTunnel(live, target: target);
+          return _handshake({'type': 'wireguard', 'check': true, 'target': target, 'wireguard': wireguard},
+              const Duration(seconds: 45));
+        });
       case RouteKind.proxy:
         final p = repo.proxies[c.routeRefId];
         if (p == null) throw const RouteException(RouteError.proxyMissing);

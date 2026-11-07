@@ -29,6 +29,13 @@ try {
   if (-not $expected -or $expected -ne $actual) { throw 'Контрольна сума не збіглась — файл пошкоджено.' }
 
   if ($env:MHRD_INSTALL_DRYRUN) { Write-Host "==> Перевірено: $exe (без встановлення)"; return }
+  # Інсталятор закриває MHRD разом із вікнами сеансів (вони — частина програми).
+  $open = @(Get-Process mhrd-session -ErrorAction SilentlyContinue).Count
+  if ($open -gt 0) {
+    Write-Host "Відкрито сеансів: $open. Оновлення закриє їх — незбережене на віддалених ПК може загубитись." -ForegroundColor Yellow
+    $answer = Read-Host 'Продовжити? (т/N)'
+    if ($answer -notmatch '^(т|так|y|yes)$') { Write-Host 'Скасовано. Запустіть команду ще раз, коли закриєте сеанси.'; return }
+  }
   Write-Host '==> Встановлюю'
   $p = Start-Process $exe -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES', '/CLOSEAPPLICATIONS', '/NORESTART' -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "Інсталятор завершився з кодом $($p.ExitCode)." }
