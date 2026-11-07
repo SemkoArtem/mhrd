@@ -334,12 +334,20 @@ class _TouchSurfaceState extends State<TouchSurface> {
             rect: r,
             child: RawImage(image: widget.image, fit: BoxFit.fill, filterQuality: FilterQuality.medium),
           ),
-          // Тачпад: курсор ПК малюємо самі (сервер його в картинку не кладе).
+          // Тачпад: курсор ПК малюємо самі (сервер його в картинку не кладе) — розміром, як у Windows
+          // (~20 пікселів ПК заввишки × масштаб ПК), тобто в пропорції до картинки: зі збільшенням
+          // щипком росте разом з нею; не менше 10 точок, щоб не губився, і не більше 26.
           if (!widget.direct && !r.isEmpty)
             Positioned(
               left: _screen(_cursorOrCenter).dx,
               top: _screen(_cursorOrCenter).dy,
-              child: const IgnorePointer(child: CustomPaint(size: Size(18, 26), painter: _ArrowCursor())),
+              child: IgnorePointer(
+                child: CustomPaint(
+                  size: Size.square(
+                      (20 * s.connection.display.scalePercent / 100 * r.height / s.height).clamp(10.0, 26.0)),
+                  painter: const _ArrowCursor(),
+                ),
+              ),
             ),
         ]),
       );
@@ -353,6 +361,7 @@ class _ArrowCursor extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.scale(size.height / 26); // стрілка намальована у висоті 26
     final path = Path()
       ..moveTo(0, 0)
       ..lineTo(0, 22)

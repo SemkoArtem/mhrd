@@ -1357,7 +1357,9 @@ class _DragPc extends StatefulWidget {
 }
 
 class _DragPcState extends State<_DragPc> {
-  static bool _touch = false; // останній пристрій — палець (спільне для всіх карток)
+  // Останній пристрій — палець (спільне для всіх карток). Телефон — одразу палець: перемикання вже
+  // під час дотику перебудовує картку, і цей дотик до нового обробника не доходить (тягнулось через раз).
+  static bool _touch = Platform.isAndroid || Platform.isIOS;
 
   @override
   Widget build(BuildContext context) {
@@ -1389,6 +1391,10 @@ class _DragPcState extends State<_DragPc> {
       },
       child: _touch
           ? LongPressDraggable<List<String>>(
+              // Трохи раніше, ніж довге натискання самої картки (500 мс, «позначити»): інакше обидва
+              // спрацьовували одночасно й вигравав то один, то інший. Позначає ПК тепер саме цей
+              // (onTouchDrag) — і відпустили без руху, і потягли.
+              delay: const Duration(milliseconds: 400),
               data: widget.ids,
               feedback: feedback,
               childWhenDragging: faded,
